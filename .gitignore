@@ -2,6 +2,7 @@ node_modules/
 dist/
 logs/
 coverage/
+*.tsbuildinfo
 .dev*.log
 *.log
 uploads/
