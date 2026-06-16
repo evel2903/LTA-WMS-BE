@@ -1,4 +1,4 @@
-import { InMemoryCacheService } from '../../../src/Modules/Cache/Infrastructure/InMemoryCacheService';
+import { InMemoryCacheService } from '@modules/Cache/Infrastructure/InMemoryCacheService';
 
 describe('InMemoryCacheService', () => {
   beforeEach(() => {

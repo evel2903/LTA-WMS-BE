@@ -1,8 +1,8 @@
-import { CreateUserUseCase } from '../../../src/Modules/Users/Application/UseCases/CreateUserUseCase';
-import { ConflictException } from '../../../src/Common/Exceptions/AppException';
-import { IUserRepository } from '../../../src/Modules/Users/Domain/Interfaces/IUserRepository';
-import { UserEntity } from '../../../src/Modules/Users/Domain/Entities/UserEntity';
-import { EmailAddress } from '../../../src/Modules/Users/Domain/ValueObjects/EmailAddress';
+import { CreateUserUseCase } from '@modules/Users/Application/UseCases/CreateUserUseCase';
+import { ConflictException } from '@common/Exceptions/AppException';
+import { IUserRepository } from '@modules/Users/Application/Interfaces/IUserRepository';
+import { UserEntity } from '@modules/Users/Domain/Entities/UserEntity';
+import { EmailAddress } from '@modules/Users/Domain/ValueObjects/EmailAddress';
 
 class FakeUserRepository implements IUserRepository {
   public FindById = jest.fn<Promise<UserEntity | null>, [string]>();

@@ -1,6 +1,6 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { EnqueueExampleJobUseCase } from '../../Application/UseCases/EnqueueExampleJobUseCase';
-import { EnqueueExampleRequest } from '../Requests/EnqueueExampleRequest';
+import { EnqueueExampleJobUseCase } from '@modules/Jobs/Application/UseCases/EnqueueExampleJobUseCase';
+import { EnqueueExampleRequest } from '@modules/Jobs/Presentation/Requests/EnqueueExampleRequest';
 
 @Controller('jobs')
 export class JobsController {

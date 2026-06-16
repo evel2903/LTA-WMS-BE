@@ -1,4 +1,4 @@
-import { IHealthService, ReadyReport } from '../../Domain/Interfaces/IHealthService';
+import { IHealthService, ReadyReport } from '@modules/Health/Application/Interfaces/IHealthService';
 
 export class GetReadyUseCase {
   constructor(private readonly healthService: IHealthService) {}

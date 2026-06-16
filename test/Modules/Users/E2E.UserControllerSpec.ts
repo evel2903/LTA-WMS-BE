@@ -1,12 +1,12 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import * as request from 'supertest';
-import { UserController } from '../../../src/Modules/Users/Presentation/Controllers/UserController';
-import { CreateUserUseCase } from '../../../src/Modules/Users/Application/UseCases/CreateUserUseCase';
-import { DeleteUserUseCase } from '../../../src/Modules/Users/Application/UseCases/DeleteUserUseCase';
-import { GetUserByIdUseCase } from '../../../src/Modules/Users/Application/UseCases/GetUserByIdUseCase';
-import { ListUsersUseCase } from '../../../src/Modules/Users/Application/UseCases/ListUsersUseCase';
-import { UpdateUserUseCase } from '../../../src/Modules/Users/Application/UseCases/UpdateUserUseCase';
+import request from 'supertest';
+import { UserController } from '@modules/Users/Presentation/Controllers/UserController';
+import { CreateUserUseCase } from '@modules/Users/Application/UseCases/CreateUserUseCase';
+import { DeleteUserUseCase } from '@modules/Users/Application/UseCases/DeleteUserUseCase';
+import { GetUserByIdUseCase } from '@modules/Users/Application/UseCases/GetUserByIdUseCase';
+import { ListUsersUseCase } from '@modules/Users/Application/UseCases/ListUsersUseCase';
+import { UpdateUserUseCase } from '@modules/Users/Application/UseCases/UpdateUserUseCase';
 
 describe('E2E UserController (no DB)', () => {
   let app: INestApplication;

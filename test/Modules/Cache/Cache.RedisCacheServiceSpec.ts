@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
-import { RedisCacheService } from '../../../src/Modules/Cache/Infrastructure/RedisCacheService';
+import { RedisCacheService } from '@modules/Cache/Infrastructure/RedisCacheService';
 
 type RedisInstance = {
   connect: () => Promise<void>;

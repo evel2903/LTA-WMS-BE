@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
-import { LocalFileStorage } from '../../../src/Modules/FileUpload/Infrastructure/Storage/LocalFileStorage';
+import { LocalFileStorage } from '@modules/FileUpload/Infrastructure/Storage/LocalFileStorage';
 
 describe('LocalFileStorage', () => {
   const tmpRoot = path.join(__dirname, '.tmp', 'uploads');

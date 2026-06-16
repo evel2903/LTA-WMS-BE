@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Role } from '../Constants/Role';
-import { ROLES_KEY } from './Roles';
+import { Role } from '@common/Constants/Role';
+import { ROLES_KEY } from '@common/Security/Roles';
 
 type JwtUser = { Role?: Role };
 

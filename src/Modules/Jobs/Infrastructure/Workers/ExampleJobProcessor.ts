@@ -1,6 +1,6 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { LoggingService } from '../../../../Common/Logging/LoggingService';
+import { LoggingService } from '@common/Logging/LoggingService';
 
 @Processor('example')
 export class ExampleJobProcessor extends WorkerHost {

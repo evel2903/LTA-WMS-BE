@@ -1,5 +1,5 @@
-import { FileUploadController } from '../../../src/Modules/FileUpload/Presentation/Controllers/FileUploadController';
-import { UploadFileUseCase } from '../../../src/Modules/FileUpload/Application/UseCases/UploadFileUseCase';
+import { FileUploadController } from '@modules/FileUpload/Presentation/Controllers/FileUploadController';
+import { UploadFileUseCase } from '@modules/FileUpload/Application/UseCases/UploadFileUseCase';
 
 describe('FileUploadController', () => {
   it('maps multer file + query to use case dto', async () => {

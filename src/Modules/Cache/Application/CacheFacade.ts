@@ -1,4 +1,4 @@
-import { ICacheService } from '../Domain/Interfaces/ICacheService';
+import { ICacheService } from '@modules/Cache/Application/Interfaces/ICacheService';
 
 export class CacheFacade {
   constructor(private readonly cacheService: ICacheService) {}

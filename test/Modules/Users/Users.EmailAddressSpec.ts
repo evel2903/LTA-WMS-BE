@@ -1,4 +1,4 @@
-import { EmailAddress } from '../../../src/Modules/Users/Domain/ValueObjects/EmailAddress';
+import { EmailAddress } from '@modules/Users/Domain/ValueObjects/EmailAddress';
 
 describe('EmailAddress', () => {
   it('normalizes email (trim + lowercase)', () => {

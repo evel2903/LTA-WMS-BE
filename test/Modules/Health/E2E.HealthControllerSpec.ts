@@ -1,9 +1,9 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import * as request from 'supertest';
-import { HealthController } from '../../../src/Modules/Health/Presentation/Controllers/HealthController';
-import { GetLiveUseCase } from '../../../src/Modules/Health/Application/UseCases/GetLiveUseCase';
-import { GetReadyUseCase } from '../../../src/Modules/Health/Application/UseCases/GetReadyUseCase';
+import request from 'supertest';
+import { HealthController } from '@modules/Health/Presentation/Controllers/HealthController';
+import { GetLiveUseCase } from '@modules/Health/Application/UseCases/GetLiveUseCase';
+import { GetReadyUseCase } from '@modules/Health/Application/UseCases/GetReadyUseCase';
 
 describe('E2E HealthController (no DB)', () => {
   let app: INestApplication;

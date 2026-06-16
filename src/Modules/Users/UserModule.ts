@@ -1,14 +1,14 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { CreateUserUseCase } from './Application/UseCases/CreateUserUseCase';
-import { DeleteUserUseCase } from './Application/UseCases/DeleteUserUseCase';
-import { GetUserByIdUseCase } from './Application/UseCases/GetUserByIdUseCase';
-import { ListUsersUseCase } from './Application/UseCases/ListUsersUseCase';
-import { UpdateUserUseCase } from './Application/UseCases/UpdateUserUseCase';
-import { IUserRepository, USER_REPOSITORY } from './Domain/Interfaces/IUserRepository';
-import { UserRepository } from './Infrastructure/Persistence/Repositories/UserRepository';
-import { UserOrmEntity } from './Infrastructure/Persistence/Entities/UserOrmEntity';
-import { UserController } from './Presentation/Controllers/UserController';
+import { CreateUserUseCase } from '@modules/Users/Application/UseCases/CreateUserUseCase';
+import { DeleteUserUseCase } from '@modules/Users/Application/UseCases/DeleteUserUseCase';
+import { GetUserByIdUseCase } from '@modules/Users/Application/UseCases/GetUserByIdUseCase';
+import { ListUsersUseCase } from '@modules/Users/Application/UseCases/ListUsersUseCase';
+import { UpdateUserUseCase } from '@modules/Users/Application/UseCases/UpdateUserUseCase';
+import { IUserRepository, USER_REPOSITORY } from '@modules/Users/Application/Interfaces/IUserRepository';
+import { UserRepository } from '@modules/Users/Infrastructure/Persistence/Repositories/UserRepository';
+import { UserOrmEntity } from '@modules/Users/Infrastructure/Persistence/Entities/UserOrmEntity';
+import { UserController } from '@modules/Users/Presentation/Controllers/UserController';
 
 @Module({
   imports: [TypeOrmModule.forFeature([UserOrmEntity])],

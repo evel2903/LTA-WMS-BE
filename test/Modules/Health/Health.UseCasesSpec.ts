@@ -1,6 +1,6 @@
-import { GetLiveUseCase } from '../../../src/Modules/Health/Application/UseCases/GetLiveUseCase';
-import { GetReadyUseCase } from '../../../src/Modules/Health/Application/UseCases/GetReadyUseCase';
-import { IHealthService, ReadyReport } from '../../../src/Modules/Health/Domain/Interfaces/IHealthService';
+import { GetLiveUseCase } from '@modules/Health/Application/UseCases/GetLiveUseCase';
+import { GetReadyUseCase } from '@modules/Health/Application/UseCases/GetReadyUseCase';
+import { IHealthService, ReadyReport } from '@modules/Health/Application/Interfaces/IHealthService';
 
 class FakeHealthService implements IHealthService {
   public Live = jest.fn<Promise<{ Status: 'OK' }>, []>();

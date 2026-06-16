@@ -1,9 +1,9 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { ErrorCode } from '../Constants/ErrorCode';
-import { AppException } from '../Exceptions/AppException';
-import { LoggingService } from '../Logging/LoggingService';
-import { ApiError, ErrorResponse } from '../Responses/ApiResponse';
+import { ErrorCode } from '@common/Constants/ErrorCode';
+import { AppException } from '@common/Exceptions/AppException';
+import { LoggingService } from '@common/Logging/LoggingService';
+import { ApiError, ErrorResponse } from '@common/Responses/ApiResponse';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {

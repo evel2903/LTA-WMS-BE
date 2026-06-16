@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { EMAIL_SERVICE, IEmailService } from './Domain/Interfaces/IEmailService';
-import { SmtpEmailService } from './Infrastructure/SmtpEmailService';
-import { SendEmailUseCase } from './Application/UseCases/SendEmailUseCase';
+import { EMAIL_SERVICE, IEmailService } from '@modules/Email/Application/Interfaces/IEmailService';
+import { SmtpEmailService } from '@modules/Email/Infrastructure/SmtpEmailService';
+import { SendEmailUseCase } from '@modules/Email/Application/UseCases/SendEmailUseCase';
 
 @Module({
   providers: [

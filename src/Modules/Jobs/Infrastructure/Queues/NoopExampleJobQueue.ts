@@ -3,7 +3,7 @@ import {
   EnqueueExampleJobRequest,
   EnqueueExampleJobResult,
   IExampleJobQueue,
-} from '../../Domain/Interfaces/IExampleJobQueue';
+} from '@modules/Jobs/Application/Interfaces/IExampleJobQueue';
 
 @Injectable()
 export class NoopExampleJobQueue implements IExampleJobQueue {

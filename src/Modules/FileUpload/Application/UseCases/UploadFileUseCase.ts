@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
-import { IFileStorage } from '../../Domain/Interfaces/IFileStorage';
-import { UploadFileDto } from '../DTOs/UploadFileDto';
-import { UploadFileResultDto } from '../DTOs/UploadFileResultDto';
+import { IFileStorage } from '@modules/FileUpload/Application/Interfaces/IFileStorage';
+import { UploadFileDto } from '@modules/FileUpload/Application/DTOs/UploadFileDto';
+import { UploadFileResultDto } from '@modules/FileUpload/Application/DTOs/UploadFileResultDto';
 
 const SafeFolder = (folder: string | undefined): string => {
   if (!folder) return '';

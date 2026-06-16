@@ -1,9 +1,9 @@
-import { ConflictException, NotFoundException } from '../../../../Common/Exceptions/AppException';
-import { EmailAddress } from '../../Domain/ValueObjects/EmailAddress';
-import { IUserRepository } from '../../Domain/Interfaces/IUserRepository';
-import { UpdateUserDto } from '../DTOs/UpdateUserDto';
-import { UserDto } from '../DTOs/UserDto';
-import { UserDtoMapper } from '../Mappers/UserDtoMapper';
+import { ConflictException, NotFoundException } from '@common/Exceptions/AppException';
+import { EmailAddress } from '@modules/Users/Domain/ValueObjects/EmailAddress';
+import { IUserRepository } from '@modules/Users/Application/Interfaces/IUserRepository';
+import { UpdateUserDto } from '@modules/Users/Application/DTOs/UpdateUserDto';
+import { UserDto } from '@modules/Users/Application/DTOs/UserDto';
+import { UserDtoMapper } from '@modules/Users/Application/Mappers/UserDtoMapper';
 
 export class UpdateUserUseCase {
   constructor(private readonly userRepository: IUserRepository) {}

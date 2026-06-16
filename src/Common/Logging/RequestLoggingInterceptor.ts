@@ -1,6 +1,6 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
 import { Observable, catchError, tap } from 'rxjs';
-import { LoggingService } from './LoggingService';
+import { LoggingService } from '@common/Logging/LoggingService';
 
 type RequestLike = { method?: string; originalUrl?: string; url?: string; user?: { UserId?: string } };
 type ResponseLike = { statusCode?: number };

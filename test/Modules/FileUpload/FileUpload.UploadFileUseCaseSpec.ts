@@ -1,9 +1,5 @@
-import { UploadFileUseCase } from '../../../src/Modules/FileUpload/Application/UseCases/UploadFileUseCase';
-import {
-  IFileStorage,
-  SaveFileRequest,
-  SaveFileResult,
-} from '../../../src/Modules/FileUpload/Domain/Interfaces/IFileStorage';
+import { UploadFileUseCase } from '@modules/FileUpload/Application/UseCases/UploadFileUseCase';
+import { IFileStorage, SaveFileRequest, SaveFileResult } from '@modules/FileUpload/Application/Interfaces/IFileStorage';
 
 class FakeFileStorage implements IFileStorage {
   public Save = jest.fn<Promise<SaveFileResult>, [SaveFileRequest]>();

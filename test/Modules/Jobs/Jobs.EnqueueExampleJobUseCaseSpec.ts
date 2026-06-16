@@ -1,9 +1,9 @@
-import { EnqueueExampleJobUseCase } from '../../../src/Modules/Jobs/Application/UseCases/EnqueueExampleJobUseCase';
+import { EnqueueExampleJobUseCase } from '@modules/Jobs/Application/UseCases/EnqueueExampleJobUseCase';
 import {
   EnqueueExampleJobRequest,
   EnqueueExampleJobResult,
   IExampleJobQueue,
-} from '../../../src/Modules/Jobs/Domain/Interfaces/IExampleJobQueue';
+} from '@modules/Jobs/Application/Interfaces/IExampleJobQueue';
 
 class FakeQueue implements IExampleJobQueue {
   public Enqueue = jest.fn<Promise<EnqueueExampleJobResult>, [EnqueueExampleJobRequest]>();

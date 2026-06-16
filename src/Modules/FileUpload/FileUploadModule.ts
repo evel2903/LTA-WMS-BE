@@ -3,11 +3,11 @@ import { ConfigModule } from '@nestjs/config';
 import { MulterModule } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { ConfigService } from '@nestjs/config';
-import { FILE_STORAGE, IFileStorage } from './Domain/Interfaces/IFileStorage';
-import { UploadFileUseCase } from './Application/UseCases/UploadFileUseCase';
-import { LocalFileStorage } from './Infrastructure/Storage/LocalFileStorage';
-import { UploadConfig } from './Infrastructure/Config/UploadConfig';
-import { FileUploadController } from './Presentation/Controllers/FileUploadController';
+import { FILE_STORAGE, IFileStorage } from '@modules/FileUpload/Application/Interfaces/IFileStorage';
+import { UploadFileUseCase } from '@modules/FileUpload/Application/UseCases/UploadFileUseCase';
+import { LocalFileStorage } from '@modules/FileUpload/Infrastructure/Storage/LocalFileStorage';
+import { UploadConfig } from '@modules/FileUpload/Infrastructure/Config/UploadConfig';
+import { FileUploadController } from '@modules/FileUpload/Presentation/Controllers/FileUploadController';
 
 @Module({
   imports: [

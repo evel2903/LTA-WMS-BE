@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
-import { IFileStorage, SaveFileRequest, SaveFileResult } from '../../Domain/Interfaces/IFileStorage';
+import { IFileStorage, SaveFileRequest, SaveFileResult } from '@modules/FileUpload/Application/Interfaces/IFileStorage';
 
 @Injectable()
 export class LocalFileStorage implements IFileStorage {

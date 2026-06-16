@@ -1,11 +1,11 @@
 import { randomUUID } from 'crypto';
-import { ConflictException } from '../../../../Common/Exceptions/AppException';
-import { EmailAddress } from '../../Domain/ValueObjects/EmailAddress';
-import { UserEntity } from '../../Domain/Entities/UserEntity';
-import { IUserRepository } from '../../Domain/Interfaces/IUserRepository';
-import { CreateUserDto } from '../DTOs/CreateUserDto';
-import { UserDto } from '../DTOs/UserDto';
-import { UserDtoMapper } from '../Mappers/UserDtoMapper';
+import { ConflictException } from '@common/Exceptions/AppException';
+import { EmailAddress } from '@modules/Users/Domain/ValueObjects/EmailAddress';
+import { UserEntity } from '@modules/Users/Domain/Entities/UserEntity';
+import { IUserRepository } from '@modules/Users/Application/Interfaces/IUserRepository';
+import { CreateUserDto } from '@modules/Users/Application/DTOs/CreateUserDto';
+import { UserDto } from '@modules/Users/Application/DTOs/UserDto';
+import { UserDtoMapper } from '@modules/Users/Application/Mappers/UserDtoMapper';
 
 export class CreateUserUseCase {
   constructor(private readonly userRepository: IUserRepository) {}

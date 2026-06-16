@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CACHE_SERVICE, ICacheService } from './Domain/Interfaces/ICacheService';
-import { InMemoryCacheService } from './Infrastructure/InMemoryCacheService';
-import { RedisCacheService } from './Infrastructure/RedisCacheService';
-import { CacheFacade } from './Application/CacheFacade';
+import { CACHE_SERVICE, ICacheService } from '@modules/Cache/Application/Interfaces/ICacheService';
+import { InMemoryCacheService } from '@modules/Cache/Infrastructure/InMemoryCacheService';
+import { RedisCacheService } from '@modules/Cache/Infrastructure/RedisCacheService';
+import { CacheFacade } from '@modules/Cache/Application/CacheFacade';
 
 @Module({
   providers: [

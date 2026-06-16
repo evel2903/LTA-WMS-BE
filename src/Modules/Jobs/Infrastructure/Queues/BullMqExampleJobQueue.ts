@@ -5,7 +5,7 @@ import {
   EnqueueExampleJobRequest,
   EnqueueExampleJobResult,
   IExampleJobQueue,
-} from '../../Domain/Interfaces/IExampleJobQueue';
+} from '@modules/Jobs/Application/Interfaces/IExampleJobQueue';
 
 @Injectable()
 export class BullMqExampleJobQueue implements IExampleJobQueue {

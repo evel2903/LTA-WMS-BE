@@ -1,7 +1,7 @@
-import { EmailAddress } from '../../Domain/ValueObjects/EmailAddress';
-import { UserEntity } from '../../Domain/Entities/UserEntity';
-import { UserOrmEntity } from '../Persistence/Entities/UserOrmEntity';
-import { Role } from '../../../../Common/Constants/Role';
+import { EmailAddress } from '@modules/Users/Domain/ValueObjects/EmailAddress';
+import { UserEntity } from '@modules/Users/Domain/Entities/UserEntity';
+import { UserOrmEntity } from '@modules/Users/Infrastructure/Persistence/Entities/UserOrmEntity';
+import { Role } from '@common/Constants/Role';
 
 export class UserOrmMapper {
   public static ToDomain(entity: UserOrmEntity): UserEntity {

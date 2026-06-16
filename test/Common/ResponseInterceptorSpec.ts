@@ -1,8 +1,8 @@
 import { of } from 'rxjs';
 import { lastValueFrom } from 'rxjs';
 import type { CallHandler, ExecutionContext } from '@nestjs/common';
-import { ResponseInterceptor } from '../../src/Common/Interceptors/ResponseInterceptor';
-import { OkResponse } from '../../src/Common/Responses/ApiResponse';
+import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
+import { OkResponse } from '@common/Responses/ApiResponse';
 
 describe('ResponseInterceptor', () => {
   it('wraps plain data in OkResponse', async () => {

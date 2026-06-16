@@ -1,7 +1,7 @@
 import { Controller, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { UploadFileUseCase } from '../../Application/UseCases/UploadFileUseCase';
-import { UploadQuery } from '../Requests/UploadQuery';
+import { UploadFileUseCase } from '@modules/FileUpload/Application/UseCases/UploadFileUseCase';
+import { UploadQuery } from '@modules/FileUpload/Presentation/Requests/UploadQuery';
 
 @Controller('files')
 export class FileUploadController {

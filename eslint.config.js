@@ -24,6 +24,19 @@ module.exports = [
       ...tsPlugin.configs.recommended.rules,
       ...prettierConfig.rules,
       'prettier/prettier': 'error',
+      // Enforce path aliases: relative imports are not allowed.
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['./*', '../*'],
+              message:
+                'Use path aliases (@modules, @common, @shared, @core, @app) instead of relative imports.',
+            },
+          ],
+        },
+      ],
     },
   },
 ];

@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { HEALTH_SERVICE, IHealthService } from './Domain/Interfaces/IHealthService';
-import { GetLiveUseCase } from './Application/UseCases/GetLiveUseCase';
-import { GetReadyUseCase } from './Application/UseCases/GetReadyUseCase';
-import { HealthService } from './Infrastructure/Services/HealthService';
-import { HealthController } from './Presentation/Controllers/HealthController';
+import { HEALTH_SERVICE, IHealthService } from '@modules/Health/Application/Interfaces/IHealthService';
+import { GetLiveUseCase } from '@modules/Health/Application/UseCases/GetLiveUseCase';
+import { GetReadyUseCase } from '@modules/Health/Application/UseCases/GetReadyUseCase';
+import { HealthService } from '@modules/Health/Infrastructure/Services/HealthService';
+import { HealthController } from '@modules/Health/Presentation/Controllers/HealthController';
 
 @Module({
   controllers: [HealthController],

@@ -1,8 +1,8 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import * as request from 'supertest';
-import { JobsController } from '../../../src/Modules/Jobs/Presentation/Controllers/JobsController';
-import { EnqueueExampleJobUseCase } from '../../../src/Modules/Jobs/Application/UseCases/EnqueueExampleJobUseCase';
+import request from 'supertest';
+import { JobsController } from '@modules/Jobs/Presentation/Controllers/JobsController';
+import { EnqueueExampleJobUseCase } from '@modules/Jobs/Application/UseCases/EnqueueExampleJobUseCase';
 
 describe('E2E JobsController (no Redis)', () => {
   let app: INestApplication;

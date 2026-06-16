@@ -2,7 +2,7 @@ import {
   EnqueueExampleJobRequest,
   EnqueueExampleJobResult,
   IExampleJobQueue,
-} from '../../Domain/Interfaces/IExampleJobQueue';
+} from '@modules/Jobs/Application/Interfaces/IExampleJobQueue';
 
 export class EnqueueExampleJobUseCase {
   constructor(private readonly queue: IExampleJobQueue) {}

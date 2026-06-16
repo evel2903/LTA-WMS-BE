@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ICacheService } from '../Domain/Interfaces/ICacheService';
+import { ICacheService } from '@modules/Cache/Application/Interfaces/ICacheService';
 
 type CacheItem = { Value: string; ExpiresAt?: number };
 

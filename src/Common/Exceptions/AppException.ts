@@ -1,5 +1,5 @@
 import { HttpStatus } from '@nestjs/common';
-import { ErrorCode } from '../Constants/ErrorCode';
+import { ErrorCode } from '@common/Constants/ErrorCode';
 
 export class AppException extends Error {
   public readonly StatusCode: number;

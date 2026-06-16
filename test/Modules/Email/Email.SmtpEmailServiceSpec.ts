@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import nodemailer from 'nodemailer';
-import { SmtpEmailService } from '../../../src/Modules/Email/Infrastructure/SmtpEmailService';
+import { SmtpEmailService } from '@modules/Email/Infrastructure/SmtpEmailService';
 
 type Transporter = { sendMail: (args: unknown) => Promise<unknown> };
 

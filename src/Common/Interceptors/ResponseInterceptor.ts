@@ -1,7 +1,7 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { ApiResponse, OkResponse } from '../Responses/ApiResponse';
+import { ApiResponse, OkResponse } from '@common/Responses/ApiResponse';
 
 type AnyRecord = Record<string, unknown>;
 

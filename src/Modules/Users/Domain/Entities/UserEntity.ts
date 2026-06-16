@@ -1,5 +1,5 @@
-import { EmailAddress } from '../ValueObjects/EmailAddress';
-import { Role } from '../../../../Common/Constants/Role';
+import { EmailAddress } from '@modules/Users/Domain/ValueObjects/EmailAddress';
+import { Role } from '@common/Constants/Role';
 
 export class UserEntity {
   public readonly Id: string;

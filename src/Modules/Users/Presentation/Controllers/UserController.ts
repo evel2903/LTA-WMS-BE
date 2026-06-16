@@ -1,12 +1,12 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { CreateUserUseCase } from '../../Application/UseCases/CreateUserUseCase';
-import { DeleteUserUseCase } from '../../Application/UseCases/DeleteUserUseCase';
-import { GetUserByIdUseCase } from '../../Application/UseCases/GetUserByIdUseCase';
-import { ListUsersUseCase } from '../../Application/UseCases/ListUsersUseCase';
-import { UpdateUserUseCase } from '../../Application/UseCases/UpdateUserUseCase';
-import { CreateUserRequest } from '../Requests/CreateUserRequest';
-import { ListUsersQuery } from '../Requests/ListUsersQuery';
-import { UpdateUserRequest } from '../Requests/UpdateUserRequest';
+import { CreateUserUseCase } from '@modules/Users/Application/UseCases/CreateUserUseCase';
+import { DeleteUserUseCase } from '@modules/Users/Application/UseCases/DeleteUserUseCase';
+import { GetUserByIdUseCase } from '@modules/Users/Application/UseCases/GetUserByIdUseCase';
+import { ListUsersUseCase } from '@modules/Users/Application/UseCases/ListUsersUseCase';
+import { UpdateUserUseCase } from '@modules/Users/Application/UseCases/UpdateUserUseCase';
+import { CreateUserRequest } from '@modules/Users/Presentation/Requests/CreateUserRequest';
+import { ListUsersQuery } from '@modules/Users/Presentation/Requests/ListUsersQuery';
+import { UpdateUserRequest } from '@modules/Users/Presentation/Requests/UpdateUserRequest';
 
 @Controller('users')
 export class UserController {

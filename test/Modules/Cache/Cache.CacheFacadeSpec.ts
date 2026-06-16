@@ -1,5 +1,5 @@
-import { CacheFacade } from '../../../src/Modules/Cache/Application/CacheFacade';
-import { ICacheService } from '../../../src/Modules/Cache/Domain/Interfaces/ICacheService';
+import { CacheFacade } from '@modules/Cache/Application/CacheFacade';
+import { ICacheService } from '@modules/Cache/Application/Interfaces/ICacheService';
 
 class FakeCacheService implements ICacheService {
   public Get = jest.fn<Promise<string | null>, [string]>();

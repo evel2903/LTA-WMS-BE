@@ -1,7 +1,7 @@
-import { GetPagination, ToPagedResult } from '../../../../Common/Helpers/Pagination';
-import { IUserRepository } from '../../Domain/Interfaces/IUserRepository';
-import { UserDto } from '../DTOs/UserDto';
-import { UserDtoMapper } from '../Mappers/UserDtoMapper';
+import { GetPagination, ToPagedResult } from '@common/Helpers/Pagination';
+import { IUserRepository } from '@modules/Users/Application/Interfaces/IUserRepository';
+import { UserDto } from '@modules/Users/Application/DTOs/UserDto';
+import { UserDtoMapper } from '@modules/Users/Application/Mappers/UserDtoMapper';
 
 export class ListUsersUseCase {
   constructor(private readonly userRepository: IUserRepository) {}

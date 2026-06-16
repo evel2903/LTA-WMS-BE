@@ -1,4 +1,4 @@
-import { IEmailService, SendEmailRequest } from '../../Domain/Interfaces/IEmailService';
+import { IEmailService, SendEmailRequest } from '@modules/Email/Application/Interfaces/IEmailService';
 
 export class SendEmailUseCase {
   constructor(private readonly emailService: IEmailService) {}

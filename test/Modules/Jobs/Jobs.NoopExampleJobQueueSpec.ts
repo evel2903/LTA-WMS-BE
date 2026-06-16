@@ -1,4 +1,4 @@
-import { NoopExampleJobQueue } from '../../../src/Modules/Jobs/Infrastructure/Queues/NoopExampleJobQueue';
+import { NoopExampleJobQueue } from '@modules/Jobs/Infrastructure/Queues/NoopExampleJobQueue';
 
 describe('NoopExampleJobQueue', () => {
   it('returns disabled job id', async () => {

@@ -1,22 +1,22 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ValidateProcessEnv } from './Shared/Config/Env/Env';
+import { ValidateProcessEnv } from '@shared/Config/Env/Env';
 import { ConfigService } from '@nestjs/config';
-import { AppConfig, DatabaseAppConfig, EmailAppConfig, JwtAppConfig, RedisAppConfig } from './Shared/Config/AppConfig';
-import { CreateDatabaseConfig } from './Shared/Database/Config/DatabaseConfig';
-import { AppController } from './AppController';
-import { UserModule } from './Modules/Users/UserModule';
-import { AuthenticationModule } from './Modules/Authentication/AuthenticationModule';
-import { CommonModule } from './Common/CommonModule';
+import { AppConfig, DatabaseAppConfig, EmailAppConfig, JwtAppConfig, RedisAppConfig } from '@shared/Config/AppConfig';
+import { CreateDatabaseConfig } from '@shared/Database/Config/DatabaseConfig';
+import { AppController } from '@app/AppController';
+import { UserModule } from '@modules/Users/UserModule';
+import { AuthenticationModule } from '@modules/Authentication/AuthenticationModule';
+import { CommonModule } from '@common/CommonModule';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { FileUploadModule } from './Modules/FileUpload/FileUploadModule';
+import { FileUploadModule } from '@modules/FileUpload/FileUploadModule';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { CacheModule } from './Modules/Cache/CacheModule';
-import { EmailModule } from './Modules/Email/EmailModule';
-import { HealthModule } from './Modules/Health/HealthModule';
-import { JobsModule } from './Modules/Jobs/JobsModule';
+import { CacheModule } from '@modules/Cache/CacheModule';
+import { EmailModule } from '@modules/Email/EmailModule';
+import { HealthModule } from '@modules/Health/HealthModule';
+import { JobsModule } from '@modules/Jobs/JobsModule';
 
 @Module({
   imports: [

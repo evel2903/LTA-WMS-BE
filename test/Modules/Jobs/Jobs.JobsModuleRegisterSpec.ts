@@ -1,7 +1,7 @@
-import { JobsModule } from '../../../src/Modules/Jobs/JobsModule';
-import { EXAMPLE_JOB_QUEUE } from '../../../src/Modules/Jobs/Domain/Interfaces/IExampleJobQueue';
-import { NoopExampleJobQueue } from '../../../src/Modules/Jobs/Infrastructure/Queues/NoopExampleJobQueue';
-import { JobsController } from '../../../src/Modules/Jobs/Presentation/Controllers/JobsController';
+import { JobsModule } from '@modules/Jobs/JobsModule';
+import { EXAMPLE_JOB_QUEUE } from '@modules/Jobs/Application/Interfaces/IExampleJobQueue';
+import { NoopExampleJobQueue } from '@modules/Jobs/Infrastructure/Queues/NoopExampleJobQueue';
+import { JobsController } from '@modules/Jobs/Presentation/Controllers/JobsController';
 
 describe('JobsModule.Register', () => {
   const originalRedisUrl = process.env.REDIS_URL;

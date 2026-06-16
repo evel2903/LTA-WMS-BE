@@ -1,13 +1,13 @@
 import { Module, type DynamicModule } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
-import { CommonModule } from '../../Common/CommonModule';
-import { EXAMPLE_JOB_QUEUE, IExampleJobQueue } from './Domain/Interfaces/IExampleJobQueue';
-import { EnqueueExampleJobUseCase } from './Application/UseCases/EnqueueExampleJobUseCase';
-import { BullMqExampleJobQueue } from './Infrastructure/Queues/BullMqExampleJobQueue';
-import { NoopExampleJobQueue } from './Infrastructure/Queues/NoopExampleJobQueue';
-import { ExampleJobProcessor } from './Infrastructure/Workers/ExampleJobProcessor';
-import { JobsController } from './Presentation/Controllers/JobsController';
+import { CommonModule } from '@common/CommonModule';
+import { EXAMPLE_JOB_QUEUE, IExampleJobQueue } from '@modules/Jobs/Application/Interfaces/IExampleJobQueue';
+import { EnqueueExampleJobUseCase } from '@modules/Jobs/Application/UseCases/EnqueueExampleJobUseCase';
+import { BullMqExampleJobQueue } from '@modules/Jobs/Infrastructure/Queues/BullMqExampleJobQueue';
+import { NoopExampleJobQueue } from '@modules/Jobs/Infrastructure/Queues/NoopExampleJobQueue';
+import { ExampleJobProcessor } from '@modules/Jobs/Infrastructure/Workers/ExampleJobProcessor';
+import { JobsController } from '@modules/Jobs/Presentation/Controllers/JobsController';
 
 @Module({})
 export class JobsModule {

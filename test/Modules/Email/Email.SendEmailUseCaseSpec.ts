@@ -1,5 +1,5 @@
-import { SendEmailUseCase } from '../../../src/Modules/Email/Application/UseCases/SendEmailUseCase';
-import { IEmailService, SendEmailRequest } from '../../../src/Modules/Email/Domain/Interfaces/IEmailService';
+import { SendEmailUseCase } from '@modules/Email/Application/UseCases/SendEmailUseCase';
+import { IEmailService, SendEmailRequest } from '@modules/Email/Application/Interfaces/IEmailService';
 
 class FakeEmailService implements IEmailService {
   public Send = jest.fn<Promise<void>, [SendEmailRequest]>();

@@ -1,4 +1,4 @@
-import { UserEntity } from '../Entities/UserEntity';
+import { UserEntity } from '@modules/Users/Domain/Entities/UserEntity';
 
 export const USER_REPOSITORY = Symbol('IUserRepository');
 
