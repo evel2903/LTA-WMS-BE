@@ -3,14 +3,17 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AppModule } from './App.module';
-import { GlobalExceptionFilter } from './Common/Filters/GlobalExceptionFilter';
-import { ResponseInterceptor } from './Common/Interceptors/ResponseInterceptor';
-import { RequestLoggingInterceptor } from './Common/Logging/RequestLoggingInterceptor';
+import { AppModule } from '@app/App.module';
+import { GlobalExceptionFilter } from '@common/Filters/GlobalExceptionFilter';
+import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
+import { RequestLoggingInterceptor } from '@common/Logging/RequestLoggingInterceptor';
+import cookieParser from 'cookie-parser';
 
 async function Bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
+
+  app.use(cookieParser());
 
   app.useGlobalFilters(app.get(GlobalExceptionFilter));
   app.useGlobalInterceptors(app.get(RequestLoggingInterceptor), app.get(ResponseInterceptor));
@@ -23,7 +26,8 @@ async function Bootstrap() {
     }),
   );
 
-  app.enableCors();
+  // Reflect request origin and allow credentials so HttpOnly auth cookies work cross-origin.
+  app.enableCors({ origin: true, credentials: true });
 
   // Make version header optional for clients: default to v1 when not provided.
   app.use((req: { headers: Record<string, unknown> }, _res: unknown, next: () => void) => {

@@ -1,19 +1,22 @@
 import { randomUUID } from 'crypto';
-import { Role } from '../../../../Common/Constants/Role';
-import { ConflictException } from '../../../../Common/Exceptions/AppException';
-import { EmailAddress } from '../../../Users/Domain/ValueObjects/EmailAddress';
-import { UserEntity } from '../../../Users/Domain/Entities/UserEntity';
-import { IUserRepository } from '../../../Users/Domain/Interfaces/IUserRepository';
-import { IPasswordHasher } from '../../Domain/Interfaces/IPasswordHasher';
-import { ITokenService } from '../../Domain/Interfaces/ITokenService';
-import { RegisterDto } from '../DTOs/RegisterDto';
-import { AuthResultDto } from '../DTOs/AuthResultDto';
+import { Role } from '@common/Constants/Role';
+import { ConflictException } from '@common/Exceptions/AppException';
+import { EmailAddress } from '@modules/Users/Domain/ValueObjects/EmailAddress';
+import { UserEntity } from '@modules/Users/Domain/Entities/UserEntity';
+import { IUserRepository } from '@modules/Users/Application/Interfaces/IUserRepository';
+import { IPasswordHasher } from '@modules/Authentication/Application/Interfaces/IPasswordHasher';
+import { ITokenService } from '@modules/Authentication/Application/Interfaces/ITokenService';
+import { IRefreshTokenRepository } from '@modules/Authentication/Application/Interfaces/IRefreshTokenRepository';
+import { RegisterDto } from '@modules/Authentication/Application/DTOs/RegisterDto';
+import { AuthResultDto } from '@modules/Authentication/Application/DTOs/AuthResultDto';
+import { IssueAuthTokens } from '@modules/Authentication/Application/Helpers/IssueAuthTokens';
 
 export class RegisterUseCase {
   constructor(
     private readonly userRepository: IUserRepository,
     private readonly passwordHasher: IPasswordHasher,
     private readonly tokenService: ITokenService,
+    private readonly refreshTokenRepository: IRefreshTokenRepository,
   ) {}
 
   public async Execute(request: RegisterDto): Promise<AuthResultDto> {
@@ -36,16 +39,11 @@ export class RegisterUseCase {
     });
 
     const created = await this.userRepository.Create(user);
-    const token = await this.tokenService.SignAccessToken({
-      Sub: created.Id,
+
+    return IssueAuthTokens(this.tokenService, this.refreshTokenRepository, {
+      Id: created.Id,
       EmailAddress: created.EmailAddress.Value,
       Role: created.Role,
     });
-
-    return {
-      AccessToken: token.AccessToken,
-      ExpiresIn: token.ExpiresIn,
-      User: { Id: created.Id, EmailAddress: created.EmailAddress.Value, Role: created.Role },
-    };
   }
 }

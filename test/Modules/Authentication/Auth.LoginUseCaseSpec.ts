@@ -1,15 +1,20 @@
-import { LoginUseCase } from '../../../src/Modules/Authentication/Application/UseCases/LoginUseCase';
-import { UnauthorizedAppException } from '../../../src/Common/Exceptions/AppException';
-import { IUserRepository } from '../../../src/Modules/Users/Domain/Interfaces/IUserRepository';
-import { UserEntity } from '../../../src/Modules/Users/Domain/Entities/UserEntity';
-import { IPasswordHasher } from '../../../src/Modules/Authentication/Domain/Interfaces/IPasswordHasher';
+import { LoginUseCase } from '@modules/Authentication/Application/UseCases/LoginUseCase';
+import { UnauthorizedAppException } from '@common/Exceptions/AppException';
+import { IUserRepository } from '@modules/Users/Application/Interfaces/IUserRepository';
+import { UserEntity } from '@modules/Users/Domain/Entities/UserEntity';
+import { IPasswordHasher } from '@modules/Authentication/Application/Interfaces/IPasswordHasher';
 import {
   AccessTokenPayload,
   ITokenService,
-  TokenPair,
-} from '../../../src/Modules/Authentication/Domain/Interfaces/ITokenService';
-import { Role } from '../../../src/Common/Constants/Role';
-import { EmailAddress } from '../../../src/Modules/Users/Domain/ValueObjects/EmailAddress';
+  SignedToken,
+} from '@modules/Authentication/Application/Interfaces/ITokenService';
+import {
+  CreateRefreshTokenInput,
+  IRefreshTokenRepository,
+  RefreshTokenRecord,
+} from '@modules/Authentication/Application/Interfaces/IRefreshTokenRepository';
+import { Role } from '@common/Constants/Role';
+import { EmailAddress } from '@modules/Users/Domain/ValueObjects/EmailAddress';
 
 class FakeUserRepository implements IUserRepository {
   public FindById = jest.fn<Promise<UserEntity | null>, [string]>();
@@ -26,7 +31,16 @@ class FakePasswordHasher implements IPasswordHasher {
 }
 
 class FakeTokenService implements ITokenService {
-  public SignAccessToken = jest.fn<Promise<TokenPair>, [AccessTokenPayload]>();
+  public SignAccessToken = jest.fn<Promise<SignedToken>, [AccessTokenPayload]>();
+  public SignRefreshToken = jest.fn<Promise<SignedToken>, [AccessTokenPayload]>();
+  public VerifyRefreshToken = jest.fn<Promise<AccessTokenPayload>, [string]>();
+}
+
+class FakeRefreshTokenRepository implements IRefreshTokenRepository {
+  public Save = jest.fn<Promise<void>, [CreateRefreshTokenInput]>();
+  public FindByHash = jest.fn<Promise<RefreshTokenRecord | null>, [string]>();
+  public RevokeByHash = jest.fn<Promise<void>, [string]>();
+  public RevokeAllForUser = jest.fn<Promise<void>, [string]>();
 }
 
 describe('LoginUseCase', () => {
@@ -47,14 +61,17 @@ describe('LoginUseCase', () => {
       }),
     );
     hasher.Verify.mockResolvedValue(true);
-    tokenService.SignAccessToken.mockResolvedValue({ AccessToken: 'token', ExpiresIn: '1h' });
+    tokenService.SignAccessToken.mockResolvedValue({ Token: 'access', ExpiresInMs: 900000 });
+    tokenService.SignRefreshToken.mockResolvedValue({ Token: 'refresh', ExpiresInMs: 604800000 });
 
-    const useCase = new LoginUseCase(repo, hasher, tokenService);
+    const useCase = new LoginUseCase(repo, hasher, tokenService, new FakeRefreshTokenRepository());
     const result = await useCase.Execute({ EmailAddress: 'TEST@EXAMPLE.COM', Password: 'pw' });
 
     expect(repo.FindByEmail).toHaveBeenCalledWith('test@example.com');
     expect(hasher.Verify).toHaveBeenCalledWith('pw', 'hashed');
-    expect(result.AccessToken).toBe('token');
+    expect(result.Tokens.AccessToken).toBe('access');
+    expect(result.Tokens.RefreshToken).toBe('refresh');
+    expect(result.User.EmailAddress).toBe('test@example.com');
   });
 
   it('throws UnauthorizedAppException when user does not exist', async () => {
@@ -63,7 +80,7 @@ describe('LoginUseCase', () => {
     const tokenService = new FakeTokenService();
 
     repo.FindByEmail.mockResolvedValue(null);
-    const useCase = new LoginUseCase(repo, hasher, tokenService);
+    const useCase = new LoginUseCase(repo, hasher, tokenService, new FakeRefreshTokenRepository());
 
     await expect(useCase.Execute({ EmailAddress: 'test@example.com', Password: 'pw' })).rejects.toBeInstanceOf(
       UnauthorizedAppException,
@@ -87,7 +104,7 @@ describe('LoginUseCase', () => {
       }),
     );
     hasher.Verify.mockResolvedValue(false);
-    const useCase = new LoginUseCase(repo, hasher, tokenService);
+    const useCase = new LoginUseCase(repo, hasher, tokenService, new FakeRefreshTokenRepository());
 
     await expect(useCase.Execute({ EmailAddress: 'test@example.com', Password: 'wrong' })).rejects.toBeInstanceOf(
       UnauthorizedAppException,
