@@ -1,0 +1,46 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: backend_seed
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    depends_on:
+      - mysql
+      - redis
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      DB_DATABASE: backend_seed
+      JWT_SECRET: change_me
+      JWT_EXPIRATION: "1h"
+      REDIS_URL: "redis://redis:6379"
+      REDIS_KEY_PREFIX: "appseed:"
+      THROTTLE_TTL_MS: 60000
+      THROTTLE_LIMIT: 60
+      UPLOAD_DIR: uploads
+      UPLOAD_MAX_FILE_SIZE: 5242880
+      SEED_ADMIN_EMAIL: admin@example.com
+      SEED_ADMIN_PASSWORD: change_me
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./uploads:/app/uploads
+
+volumes:
+  mysql_data:
