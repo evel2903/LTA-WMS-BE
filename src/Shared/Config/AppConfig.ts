@@ -1,5 +1,5 @@
 import { registerAs } from '@nestjs/config';
-import { GetEnv } from './Env/Env';
+import { GetEnv } from '@shared/Config/Env/Env';
 
 export type AppConfigValues = {
   NodeEnv: string;
@@ -17,6 +17,8 @@ export type DatabaseConfigValues = {
 export type JwtConfigValues = {
   Secret: string;
   Expiration: string;
+  RefreshSecret: string;
+  RefreshExpiration: string;
 };
 
 export type RedisConfigValues = {
@@ -51,7 +53,12 @@ export const DatabaseAppConfig = registerAs('Database', (): DatabaseConfigValues
 
 export const JwtAppConfig = registerAs('Jwt', (): JwtConfigValues => {
   const env = GetEnv();
-  return { Secret: env.JwtSecret, Expiration: env.JwtExpiration };
+  return {
+    Secret: env.JwtSecret,
+    Expiration: env.JwtExpiration,
+    RefreshSecret: env.JwtRefreshSecret,
+    RefreshExpiration: env.JwtRefreshExpiration,
+  };
 });
 
 export const RedisAppConfig = registerAs('Redis', (): RedisConfigValues => {

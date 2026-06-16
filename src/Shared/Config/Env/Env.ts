@@ -10,6 +10,8 @@ export type AppEnv = {
   DbDatabase: string;
   JwtSecret: string;
   JwtExpiration: string;
+  JwtRefreshSecret: string;
+  JwtRefreshExpiration: string;
 };
 
 type EnvSource = Record<string, string | undefined>;
@@ -44,12 +46,14 @@ export const GetEnv = (source: EnvSource = process.env): AppEnv => {
     NodeEnv: ParseNodeEnv(source.NODE_ENV),
     Port: ParseNumber('PORT', source.PORT, 3000),
     DbHost: GetRequired('DB_HOST', source.DB_HOST),
-    DbPort: ParseNumber('DB_PORT', source.DB_PORT, 3306),
+    DbPort: ParseNumber('DB_PORT', source.DB_PORT, 5432),
     DbUsername: GetRequired('DB_USERNAME', source.DB_USERNAME),
     DbPassword: GetRequired('DB_PASSWORD', source.DB_PASSWORD),
     DbDatabase: GetRequired('DB_DATABASE', source.DB_DATABASE),
     JwtSecret: GetRequired('JWT_SECRET', source.JWT_SECRET),
     JwtExpiration: GetRequired('JWT_EXPIRATION', source.JWT_EXPIRATION),
+    JwtRefreshSecret: GetRequired('JWT_REFRESH_SECRET', source.JWT_REFRESH_SECRET),
+    JwtRefreshExpiration: source.JWT_REFRESH_EXPIRATION?.trim() || '7d',
   };
 };
 

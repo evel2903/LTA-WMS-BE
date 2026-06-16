@@ -1,8 +1,8 @@
 import 'dotenv/config';
 import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcryptjs';
-import dataSource from '../TypeOrmDataSource';
-import { UserOrmEntity } from '../../../Modules/Users/Infrastructure/Persistence/Entities/UserOrmEntity';
+import dataSource from '@shared/Database/TypeOrmDataSource';
+import { UserOrmEntity } from '@modules/Users/Infrastructure/Persistence/Entities/UserOrmEntity';
 
 const GetRequired = (key: string, value: string | undefined): string => {
   if (!value || value.trim().length === 0) {

@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectDataSource } from '@nestjs/typeorm';
 import Redis from 'ioredis';
 import { DataSource } from 'typeorm';
-import { HealthCheckResult, IHealthService, ReadyReport } from '../../Domain/Interfaces/IHealthService';
+import { HealthCheckResult, IHealthService, ReadyReport } from '@modules/Health/Application/Interfaces/IHealthService';
 
 @Injectable()
 export class HealthService implements IHealthService {
@@ -18,7 +18,7 @@ export class HealthService implements IHealthService {
 
   public async Ready(): Promise<ReadyReport> {
     const checks: Record<string, () => Promise<HealthCheckResult>> = {
-      mysql: async () => {
+      postgres: async () => {
         try {
           await this.dataSource.query('SELECT 1');
           return { Status: 'up' };
