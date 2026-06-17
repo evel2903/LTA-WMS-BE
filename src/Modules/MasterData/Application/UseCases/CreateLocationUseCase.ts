@@ -49,8 +49,13 @@ export class CreateLocationUseCase {
       throw new ConflictException('Location code already exists in warehouse');
     }
 
-    if (request.ParentLocationId) {
-      const parent = await this.locationRepository.FindById(request.ParentLocationId);
+    const parentLocationId = request.ParentLocationId ?? null;
+    if (parentLocationId !== null) {
+      if (parentLocationId.trim().length === 0) {
+        throw new BusinessRuleException('Parent location id cannot be empty');
+      }
+
+      const parent = await this.locationRepository.FindById(parentLocationId);
       if (!parent) {
         throw new NotFoundException('Parent location not found');
       }
@@ -62,7 +67,7 @@ export class CreateLocationUseCase {
       Id: randomUUID(),
       WarehouseId: request.WarehouseId,
       ZoneId: request.ZoneId,
-      ParentLocationId: request.ParentLocationId ?? null,
+      ParentLocationId: parentLocationId,
       LocationCode: request.LocationCode,
       LocationName: request.LocationName,
       LocationType: request.LocationType,

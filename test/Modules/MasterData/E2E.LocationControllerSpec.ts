@@ -95,6 +95,24 @@ describe('E2E LocationController (no DB)', () => {
     });
   });
 
+  it('POST /locations rejects empty ParentLocationId', async () => {
+    await request(app.getHttpServer())
+      .post('/locations')
+      .send({
+        WarehouseId: 'warehouse-1',
+        ZoneId: 'zone-1',
+        LocationProfileId: 'profile-1',
+        ParentLocationId: '',
+        LocationCode: 'BIN-001',
+        LocationName: 'Bin 001',
+        LocationType: 'BIN',
+        LocationStatus: LocationStatus.Active,
+      })
+      .expect(400);
+
+    expect(createExecute).not.toHaveBeenCalled();
+  });
+
   it('GET /locations/tree calls tree use case instead of :id route', async () => {
     treeExecute.mockResolvedValue([]);
 
@@ -102,5 +120,13 @@ describe('E2E LocationController (no DB)', () => {
 
     expect(treeExecute).toHaveBeenCalledWith({ WarehouseId: 'warehouse-1', ZoneId: 'zone-1' });
     expect(getExecute).not.toHaveBeenCalled();
+  });
+
+  it('PATCH /locations/:id rejects empty required business fields', async () => {
+    await request(app.getHttpServer()).patch('/locations/location-1').send({ LocationCode: '' }).expect(400);
+    await request(app.getHttpServer()).patch('/locations/location-1').send({ LocationName: '' }).expect(400);
+    await request(app.getHttpServer()).patch('/locations/location-1').send({ ParentLocationId: '' }).expect(400);
+
+    expect(updateExecute).not.toHaveBeenCalled();
   });
 });

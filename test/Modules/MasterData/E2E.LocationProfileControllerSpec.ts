@@ -96,4 +96,11 @@ describe('E2E LocationProfileController (no DB)', () => {
       OperationPolicy: {},
     });
   });
+
+  it('PATCH /location-profiles/:id rejects empty required business fields', async () => {
+    await request(app.getHttpServer()).patch('/location-profiles/profile-1').send({ ProfileCode: '' }).expect(400);
+    await request(app.getHttpServer()).patch('/location-profiles/profile-1').send({ ProfileName: '' }).expect(400);
+
+    expect(updateExecute).not.toHaveBeenCalled();
+  });
 });

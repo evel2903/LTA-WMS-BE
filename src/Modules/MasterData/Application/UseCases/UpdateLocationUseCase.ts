@@ -28,6 +28,8 @@ export class UpdateLocationUseCase {
     const targetZoneId = request.ZoneId ?? location.ZoneId;
     const targetProfileId = request.LocationProfileId ?? location.LocationProfileId;
     const targetLocationCode = request.LocationCode ?? location.LocationCode;
+    const targetParentLocationId =
+      request.ParentLocationId !== undefined ? request.ParentLocationId : location.ParentLocationId;
 
     const warehouse = await this.warehouseRepository.FindById(targetWarehouseId);
     if (!warehouse) {
@@ -55,8 +57,12 @@ export class UpdateLocationUseCase {
       }
     }
 
-    if (request.ParentLocationId !== undefined) {
-      await this.ValidateParent(request.Id, request.ParentLocationId, targetWarehouseId, targetZoneId);
+    if (
+      request.ParentLocationId !== undefined ||
+      targetWarehouseId !== location.WarehouseId ||
+      targetZoneId !== location.ZoneId
+    ) {
+      await this.ValidateParent(request.Id, targetParentLocationId, targetWarehouseId, targetZoneId);
     }
 
     const profile = await this.locationProfileRepository.FindById(targetProfileId);
@@ -66,8 +72,7 @@ export class UpdateLocationUseCase {
 
     location.WarehouseId = targetWarehouseId;
     location.ZoneId = targetZoneId;
-    location.ParentLocationId =
-      request.ParentLocationId !== undefined ? request.ParentLocationId : location.ParentLocationId;
+    location.ParentLocationId = targetParentLocationId;
     location.LocationCode = targetLocationCode;
     location.LocationName = request.LocationName ?? location.LocationName;
     location.LocationType = request.LocationType ?? location.LocationType;
@@ -107,8 +112,11 @@ export class UpdateLocationUseCase {
     warehouseId: string,
     zoneId: string,
   ): Promise<void> {
-    if (!parentLocationId) {
+    if (parentLocationId === null) {
       return;
+    }
+    if (parentLocationId.trim().length === 0) {
+      throw new BusinessRuleException('Parent location id cannot be empty');
     }
     if (parentLocationId === currentLocationId) {
       throw new BusinessRuleException('Location cannot be its own parent');

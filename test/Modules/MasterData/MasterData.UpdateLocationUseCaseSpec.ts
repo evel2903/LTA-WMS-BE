@@ -180,6 +180,16 @@ describe('UpdateLocationUseCase', () => {
     );
   });
 
+  it('throws BusinessRuleException when parent id is an empty string', async () => {
+    const { locations, useCase } = buildUseCase();
+    locations.FindById.mockResolvedValue(Location({ Id: 'location-1' }));
+
+    await expect(useCase.Execute({ Id: 'location-1', ParentLocationId: '' })).rejects.toBeInstanceOf(
+      BusinessRuleException,
+    );
+    expect(locations.Update).not.toHaveBeenCalled();
+  });
+
   it('throws BusinessRuleException when parent belongs to another warehouse or zone', async () => {
     const { locations, useCase } = buildUseCase();
     const current = Location({ Id: 'location-1', WarehouseId: 'warehouse-1', ZoneId: 'zone-1' });
@@ -214,6 +224,36 @@ describe('UpdateLocationUseCase', () => {
     await expect(useCase.Execute({ Id: 'location-1', ParentLocationId: 'parent-2' })).rejects.toBeInstanceOf(
       BusinessRuleException,
     );
+  });
+
+  it('throws BusinessRuleException when warehouse or zone changes would leave the existing parent out of scope', async () => {
+    const { warehouses, zones, locations, useCase } = buildUseCase();
+    warehouses.FindById.mockImplementation(async (id) => Warehouse(id));
+    zones.FindById.mockImplementation(async (id) => Zone(id, id === 'zone-2' ? 'warehouse-1' : 'warehouse-2'));
+
+    const current = Location({
+      Id: 'location-1',
+      WarehouseId: 'warehouse-1',
+      ZoneId: 'zone-1',
+      ParentLocationId: 'parent-1',
+    });
+    const parent = Location({
+      Id: 'parent-1',
+      WarehouseId: 'warehouse-1',
+      ZoneId: 'zone-1',
+      ParentLocationId: null,
+    });
+    locations.FindById.mockImplementation(async (id) => {
+      if (id === 'location-1') return current;
+      if (id === 'parent-1') return parent;
+      return null;
+    });
+
+    await expect(useCase.Execute({ Id: 'location-1', ZoneId: 'zone-2' })).rejects.toBeInstanceOf(BusinessRuleException);
+
+    await expect(
+      useCase.Execute({ Id: 'location-1', WarehouseId: 'warehouse-2', ZoneId: 'zone-3' }),
+    ).rejects.toBeInstanceOf(BusinessRuleException);
   });
 
   it('throws BusinessRuleException when parent is a descendant of the current location', async () => {

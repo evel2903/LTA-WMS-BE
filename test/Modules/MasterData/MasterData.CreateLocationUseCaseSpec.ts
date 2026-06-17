@@ -216,6 +216,29 @@ describe('CreateLocationUseCase', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('throws BusinessRuleException when parent id is an empty string', async () => {
+    const { warehouses, zones, profiles, locations, useCase } = buildUseCase();
+    warehouses.FindById.mockResolvedValue(Warehouse());
+    zones.FindById.mockResolvedValue(Zone());
+    profiles.FindById.mockResolvedValue(Profile());
+    locations.FindByWarehouseAndCode.mockResolvedValue(null);
+
+    await expect(
+      useCase.Execute({
+        WarehouseId: 'warehouse-1',
+        ZoneId: 'zone-1',
+        ParentLocationId: '',
+        LocationProfileId: 'profile-1',
+        LocationCode: 'BIN-001',
+        LocationName: 'Bin 001',
+        LocationType: 'BIN',
+        LocationStatus: LocationStatus.Active,
+      }),
+    ).rejects.toBeInstanceOf(BusinessRuleException);
+
+    expect(locations.Create).not.toHaveBeenCalled();
+  });
+
   it('throws BusinessRuleException when profile is inactive or type does not match location', async () => {
     const { warehouses, zones, profiles, useCase } = buildUseCase();
     warehouses.FindById.mockResolvedValue(Warehouse());

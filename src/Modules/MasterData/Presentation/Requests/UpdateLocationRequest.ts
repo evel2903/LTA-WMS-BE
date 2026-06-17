@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { LocationStatus } from '@modules/MasterData/Domain/Enums/LocationStatus';
 
 export class UpdateLocationRequest {
@@ -15,16 +15,19 @@ export class UpdateLocationRequest {
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(36)
   public ParentLocationId?: string | null;
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(80)
   public LocationCode?: string;
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(255)
   public LocationName?: string;
 

@@ -15,6 +15,7 @@ export class CreateLocationRequest {
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(36)
   public ParentLocationId?: string | null;
 
