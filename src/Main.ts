@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from '@app/App.module';
 import { GlobalExceptionFilter } from '@common/Filters/GlobalExceptionFilter';
@@ -10,7 +11,14 @@ import { RequestLoggingInterceptor } from '@common/Logging/RequestLoggingInterce
 import cookieParser from 'cookie-parser';
 
 async function Bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // Disable the default body parser so we can register a lenient JSON parser:
+  // strict:false accepts an empty/`null` body (e.g. body-less POSTs like
+  // /auth/logout and /auth/refresh) instead of failing with a 400 before the
+  // request reaches the controller.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
+  app.useBodyParser('json', { strict: false });
+  app.useBodyParser('urlencoded', { extended: true });
+
   const configService = app.get(ConfigService);
 
   app.use(cookieParser());
