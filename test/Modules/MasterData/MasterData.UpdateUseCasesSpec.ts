@@ -120,6 +120,20 @@ describe('MasterData update use cases', () => {
     );
   });
 
+  it('validates provided Warehouse SiteId even when it is unchanged', async () => {
+    const sites = new FakeSiteRepository();
+    const warehouses = new FakeWarehouseRepository();
+    warehouses.FindById.mockResolvedValue(Warehouse('warehouse-1', 'site-1', 'WH-HCM'));
+    sites.FindById.mockResolvedValue(Site('site-1', 'SITE-HCM', MasterDataStatus.Inactive));
+
+    const useCase = new UpdateWarehouseUseCase(warehouses, sites);
+
+    await expect(useCase.Execute({ Id: 'warehouse-1', SiteId: 'site-1' })).rejects.toBeInstanceOf(
+      BusinessRuleException,
+    );
+    expect(warehouses.Update).not.toHaveBeenCalled();
+  });
+
   it('throws ConflictException when updating WarehouseCode to another Warehouse code', async () => {
     const sites = new FakeSiteRepository();
     const warehouses = new FakeWarehouseRepository();
@@ -154,5 +168,19 @@ describe('MasterData update use cases', () => {
     const useCase = new UpdateZoneUseCase(zones, warehouses);
 
     await expect(useCase.Execute({ Id: 'zone-1', ZoneCode: 'PACK' })).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('validates provided Zone WarehouseId even when it is unchanged', async () => {
+    const zones = new FakeZoneRepository();
+    const warehouses = new FakeWarehouseRepository();
+    zones.FindById.mockResolvedValue(Zone('zone-1', 'warehouse-1', 'PICK'));
+    warehouses.FindById.mockResolvedValue(Warehouse('warehouse-1', 'site-1', 'WH-HCM', MasterDataStatus.Inactive));
+
+    const useCase = new UpdateZoneUseCase(zones, warehouses);
+
+    await expect(useCase.Execute({ Id: 'zone-1', WarehouseId: 'warehouse-1' })).rejects.toBeInstanceOf(
+      BusinessRuleException,
+    );
+    expect(zones.Update).not.toHaveBeenCalled();
   });
 });

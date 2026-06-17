@@ -1,25 +1,29 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsObject, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsEnum, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
 export class UpdateZoneRequest {
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(36)
   public WarehouseId?: string;
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(50)
   public ZoneCode?: string;
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(255)
   public ZoneName?: string;
 
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(50)
   public ZoneType?: string;
 

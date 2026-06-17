@@ -18,7 +18,7 @@ export class UpdateWarehouseUseCase {
       throw new NotFoundException('Warehouse not found');
     }
 
-    if (request.SiteId && request.SiteId !== warehouse.SiteId) {
+    if (request.SiteId !== undefined) {
       const site = await this.siteRepository.FindById(request.SiteId);
       if (!site) {
         throw new NotFoundException('Site not found');
@@ -26,7 +26,9 @@ export class UpdateWarehouseUseCase {
       if (site.Status !== MasterDataStatus.Active) {
         throw new BusinessRuleException('Site must be active');
       }
-      warehouse.SiteId = request.SiteId;
+      if (request.SiteId !== warehouse.SiteId) {
+        warehouse.SiteId = request.SiteId;
+      }
     }
 
     if (request.WarehouseCode && request.WarehouseCode !== warehouse.WarehouseCode) {

@@ -109,4 +109,10 @@ describe('E2E SiteController (no DB)', () => {
     expect(getByIdExecute).toHaveBeenCalledWith('site-1');
     expect(updateExecute).toHaveBeenCalledWith({ Id: 'site-1', SiteName: 'Updated' });
   });
+
+  it('PATCH /sites/:id rejects empty required fields when provided', async () => {
+    await request(app.getHttpServer()).patch('/sites/site-1').send({ SiteName: '' }).expect(400);
+
+    expect(updateExecute).not.toHaveBeenCalled();
+  });
 });

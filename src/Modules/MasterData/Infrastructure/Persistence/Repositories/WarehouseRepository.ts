@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, Repository } from 'typeorm';
+import { ConflictException } from '@common/Exceptions/AppException';
 import {
   IWarehouseRepository,
   WarehouseListFilter,
@@ -27,13 +28,23 @@ export class WarehouseRepository implements IWarehouseRepository {
   }
 
   public async Create(warehouse: WarehouseEntity): Promise<WarehouseEntity> {
-    const created = await this.warehouses.save(WarehouseOrmMapper.ToOrm(warehouse));
-    return WarehouseOrmMapper.ToDomain(created);
+    try {
+      const created = await this.warehouses.save(WarehouseOrmMapper.ToOrm(warehouse));
+      return WarehouseOrmMapper.ToDomain(created);
+    } catch (error) {
+      this.HandleUniqueViolation(error);
+      throw error;
+    }
   }
 
   public async Update(warehouse: WarehouseEntity): Promise<WarehouseEntity> {
-    const updated = await this.warehouses.save(WarehouseOrmMapper.ToOrm(warehouse));
-    return WarehouseOrmMapper.ToDomain(updated);
+    try {
+      const updated = await this.warehouses.save(WarehouseOrmMapper.ToOrm(warehouse));
+      return WarehouseOrmMapper.ToDomain(updated);
+    } catch (error) {
+      this.HandleUniqueViolation(error);
+      throw error;
+    }
   }
 
   public async List(
@@ -57,5 +68,11 @@ export class WarehouseRepository implements IWarehouseRepository {
       Items: items.map(WarehouseOrmMapper.ToDomain),
       TotalItems: total,
     };
+  }
+
+  private HandleUniqueViolation(error: unknown): void {
+    if ((error as { code?: string }).code === '23505') {
+      throw new ConflictException('Warehouse code already exists');
+    }
   }
 }

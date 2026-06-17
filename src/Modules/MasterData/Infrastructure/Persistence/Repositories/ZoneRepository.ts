@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, Repository } from 'typeorm';
+import { ConflictException } from '@common/Exceptions/AppException';
 import { IZoneRepository, ZoneListFilter } from '@modules/MasterData/Application/Interfaces/IZoneRepository';
 import { ZoneEntity } from '@modules/MasterData/Domain/Entities/ZoneEntity';
 import { ZoneOrmMapper } from '@modules/MasterData/Infrastructure/Mappers/ZoneOrmMapper';
@@ -24,13 +25,23 @@ export class ZoneRepository implements IZoneRepository {
   }
 
   public async Create(zone: ZoneEntity): Promise<ZoneEntity> {
-    const created = await this.zones.save(ZoneOrmMapper.ToOrm(zone));
-    return ZoneOrmMapper.ToDomain(created);
+    try {
+      const created = await this.zones.save(ZoneOrmMapper.ToOrm(zone));
+      return ZoneOrmMapper.ToDomain(created);
+    } catch (error) {
+      this.HandleUniqueViolation(error);
+      throw error;
+    }
   }
 
   public async Update(zone: ZoneEntity): Promise<ZoneEntity> {
-    const updated = await this.zones.save(ZoneOrmMapper.ToOrm(zone));
-    return ZoneOrmMapper.ToDomain(updated);
+    try {
+      const updated = await this.zones.save(ZoneOrmMapper.ToOrm(zone));
+      return ZoneOrmMapper.ToDomain(updated);
+    } catch (error) {
+      this.HandleUniqueViolation(error);
+      throw error;
+    }
   }
 
   public async List(
@@ -54,5 +65,11 @@ export class ZoneRepository implements IZoneRepository {
       Items: items.map(ZoneOrmMapper.ToDomain),
       TotalItems: total,
     };
+  }
+
+  private HandleUniqueViolation(error: unknown): void {
+    if ((error as { code?: string }).code === '23505') {
+      throw new ConflictException('Zone code already exists in warehouse');
+    }
   }
 }

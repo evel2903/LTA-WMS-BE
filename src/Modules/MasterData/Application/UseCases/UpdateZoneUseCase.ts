@@ -19,7 +19,7 @@ export class UpdateZoneUseCase {
     }
 
     const targetWarehouseId = request.WarehouseId ?? zone.WarehouseId;
-    if (request.WarehouseId && request.WarehouseId !== zone.WarehouseId) {
+    if (request.WarehouseId !== undefined) {
       const warehouse = await this.warehouseRepository.FindById(request.WarehouseId);
       if (!warehouse) {
         throw new NotFoundException('Warehouse not found');

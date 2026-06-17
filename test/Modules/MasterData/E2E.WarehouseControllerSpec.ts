@@ -112,4 +112,10 @@ describe('E2E WarehouseController (no DB)', () => {
     expect(getByIdExecute).toHaveBeenCalledWith('warehouse-1');
     expect(updateExecute).toHaveBeenCalledWith({ Id: 'warehouse-1', WarehouseName: 'Updated' });
   });
+
+  it('PATCH /warehouses/:id rejects empty required fields when provided', async () => {
+    await request(app.getHttpServer()).patch('/warehouses/warehouse-1').send({ WarehouseName: '' }).expect(400);
+
+    expect(updateExecute).not.toHaveBeenCalled();
+  });
 });

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, Repository } from 'typeorm';
+import { ConflictException } from '@common/Exceptions/AppException';
 import { ISiteRepository, SiteListFilter } from '@modules/MasterData/Application/Interfaces/ISiteRepository';
 import { SiteEntity } from '@modules/MasterData/Domain/Entities/SiteEntity';
 import { SiteOrmMapper } from '@modules/MasterData/Infrastructure/Mappers/SiteOrmMapper';
@@ -24,13 +25,23 @@ export class SiteRepository implements ISiteRepository {
   }
 
   public async Create(site: SiteEntity): Promise<SiteEntity> {
-    const created = await this.sites.save(SiteOrmMapper.ToOrm(site));
-    return SiteOrmMapper.ToDomain(created);
+    try {
+      const created = await this.sites.save(SiteOrmMapper.ToOrm(site));
+      return SiteOrmMapper.ToDomain(created);
+    } catch (error) {
+      this.HandleUniqueViolation(error);
+      throw error;
+    }
   }
 
   public async Update(site: SiteEntity): Promise<SiteEntity> {
-    const updated = await this.sites.save(SiteOrmMapper.ToOrm(site));
-    return SiteOrmMapper.ToDomain(updated);
+    try {
+      const updated = await this.sites.save(SiteOrmMapper.ToOrm(site));
+      return SiteOrmMapper.ToDomain(updated);
+    } catch (error) {
+      this.HandleUniqueViolation(error);
+      throw error;
+    }
   }
 
   public async List(
@@ -53,5 +64,11 @@ export class SiteRepository implements ISiteRepository {
       Items: items.map(SiteOrmMapper.ToDomain),
       TotalItems: total,
     };
+  }
+
+  private HandleUniqueViolation(error: unknown): void {
+    if ((error as { code?: string }).code === '23505') {
+      throw new ConflictException('Site code already exists');
+    }
   }
 }

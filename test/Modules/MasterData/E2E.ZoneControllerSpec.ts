@@ -114,4 +114,10 @@ describe('E2E ZoneController (no DB)', () => {
     expect(getByIdExecute).toHaveBeenCalledWith('zone-1');
     expect(updateExecute).toHaveBeenCalledWith({ Id: 'zone-1', ZoneName: 'Updated' });
   });
+
+  it('PATCH /zones/:id rejects empty required fields when provided', async () => {
+    await request(app.getHttpServer()).patch('/zones/zone-1').send({ ZoneName: '' }).expect(400);
+
+    expect(updateExecute).not.toHaveBeenCalled();
+  });
 });
