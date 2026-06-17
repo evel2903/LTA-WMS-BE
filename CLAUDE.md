@@ -96,6 +96,10 @@ End-to-end for a new endpoint: Presentation `Request` (class-validator) → cont
 - **Schema changes need a migration**: edit the entity → `yarn migration:generate` → review → `yarn migration:run`. The DataSource for the CLI is `src/Shared/Database/TypeOrmDataSource.ts`; **new ORM entities must be added to its `entities` array** (the running app uses `autoLoadEntities`, but the migration CLI does not).
 - When restarting the app during verification on Windows, kill stale listeners on port 3000 first or you may hit an old build.
 
+## Git / commits
+
+**Never commit or push automatically.** Only run `git commit`/`git push` when the user explicitly asks in that message — finishing or verifying a task is NOT permission to commit. Make and verify the change, report it, and let the user decide when to commit.
+
 ## Before you finish
 
 Run `yarn build && yarn lint && yarn test` — all must be green. For DB-affecting changes also run `yarn migration:run && yarn seed:run` against a live Postgres and verify the schema/behavior with `psql`.

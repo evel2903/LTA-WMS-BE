@@ -2,6 +2,10 @@
 
 Execution rules for agents modifying this repository. These are mandatory, not advisory. If a rule blocks the task, stop and report — do not work around it.
 
+## Version control
+
+- **Never run `git commit`, `git push`, `git reset`, or any history-changing git command unless the user explicitly asks in that message.** Finishing a task does not imply permission to commit. Make the changes, report what changed, and stop — let the user decide when to commit.
+
 ## Environment
 
 - Use **yarn** for every command. Never run `npm`.
