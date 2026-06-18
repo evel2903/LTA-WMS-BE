@@ -51,6 +51,15 @@ import { CreateItemCoverageUseCase } from '@modules/MasterData/Application/UseCa
 import { GetItemCoverageUseCase } from '@modules/MasterData/Application/UseCases/GetItemCoverageUseCase';
 import { ListItemCoveragesUseCase } from '@modules/MasterData/Application/UseCases/ListItemCoveragesUseCase';
 import { UpdateItemCoverageUseCase } from '@modules/MasterData/Application/UseCases/UpdateItemCoverageUseCase';
+import { GetInventoryStatusUseCase } from '@modules/MasterData/Application/UseCases/GetInventoryStatusUseCase';
+import { ListInventoryStatusesUseCase } from '@modules/MasterData/Application/UseCases/ListInventoryStatusesUseCase';
+import { CreateInventoryDimensionUseCase } from '@modules/MasterData/Application/UseCases/CreateInventoryDimensionUseCase';
+import { GetInventoryDimensionUseCase } from '@modules/MasterData/Application/UseCases/GetInventoryDimensionUseCase';
+import { ListInventoryDimensionsUseCase } from '@modules/MasterData/Application/UseCases/ListInventoryDimensionsUseCase';
+import { InitializeInventoryBalanceUseCase } from '@modules/MasterData/Application/UseCases/InitializeInventoryBalanceUseCase';
+import { GetInventoryBalanceUseCase } from '@modules/MasterData/Application/UseCases/GetInventoryBalanceUseCase';
+import { ListInventoryBalancesUseCase } from '@modules/MasterData/Application/UseCases/ListInventoryBalancesUseCase';
+import { InventoryDimensionKeyService } from '@modules/MasterData/Application/Services/InventoryDimensionKeyService';
 import { ISiteRepository, SITE_REPOSITORY } from '@modules/MasterData/Application/Interfaces/ISiteRepository';
 import {
   IWarehouseRepository,
@@ -84,6 +93,18 @@ import {
   IItemCoverageRepository,
   ITEM_COVERAGE_REPOSITORY,
 } from '@modules/MasterData/Application/Interfaces/IItemCoverageRepository';
+import {
+  IInventoryStatusRepository,
+  INVENTORY_STATUS_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IInventoryStatusRepository';
+import {
+  IInventoryDimensionRepository,
+  INVENTORY_DIMENSION_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IInventoryDimensionRepository';
+import {
+  IInventoryBalanceRepository,
+  INVENTORY_BALANCE_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IInventoryBalanceRepository';
 import { SiteOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/SiteOrmEntity';
 import { WarehouseOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/WarehouseOrmEntity';
 import { ZoneOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ZoneOrmEntity';
@@ -96,6 +117,9 @@ import { PackDefinitionOrmEntity } from '@modules/MasterData/Infrastructure/Pers
 import { UomConversionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/UomConversionOrmEntity';
 import { SkuBarcodeOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/SkuBarcodeOrmEntity';
 import { ItemCoverageOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ItemCoverageOrmEntity';
+import { InventoryStatusOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryStatusOrmEntity';
+import { InventoryDimensionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryDimensionOrmEntity';
+import { InventoryBalanceOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryBalanceOrmEntity';
 import { SiteRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/SiteRepository';
 import { WarehouseRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/WarehouseRepository';
 import { ZoneRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/ZoneRepository';
@@ -108,6 +132,9 @@ import { PackDefinitionRepository } from '@modules/MasterData/Infrastructure/Per
 import { UomConversionRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/UomConversionRepository';
 import { SkuBarcodeRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/SkuBarcodeRepository';
 import { ItemCoverageRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/ItemCoverageRepository';
+import { InventoryStatusRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/InventoryStatusRepository';
+import { InventoryDimensionRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/InventoryDimensionRepository';
+import { InventoryBalanceRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/InventoryBalanceRepository';
 import { SiteController } from '@modules/MasterData/Presentation/Controllers/SiteController';
 import { WarehouseController } from '@modules/MasterData/Presentation/Controllers/WarehouseController';
 import { ZoneController } from '@modules/MasterData/Presentation/Controllers/ZoneController';
@@ -136,6 +163,9 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
       UomConversionOrmEntity,
       SkuBarcodeOrmEntity,
       ItemCoverageOrmEntity,
+      InventoryStatusOrmEntity,
+      InventoryDimensionOrmEntity,
+      InventoryBalanceOrmEntity,
     ]),
   ],
   controllers: [
@@ -165,6 +195,10 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     { provide: UOM_CONVERSION_REPOSITORY, useClass: UomConversionRepository },
     { provide: SKU_BARCODE_REPOSITORY, useClass: SkuBarcodeRepository },
     { provide: ITEM_COVERAGE_REPOSITORY, useClass: ItemCoverageRepository },
+    { provide: INVENTORY_STATUS_REPOSITORY, useClass: InventoryStatusRepository },
+    { provide: INVENTORY_DIMENSION_REPOSITORY, useClass: InventoryDimensionRepository },
+    { provide: INVENTORY_BALANCE_REPOSITORY, useClass: InventoryBalanceRepository },
+    InventoryDimensionKeyService,
     {
       provide: CreateSiteUseCase,
       useFactory: (sites: ISiteRepository) => new CreateSiteUseCase(sites),
@@ -462,6 +496,81 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
       ) => new UpdateItemCoverageUseCase(itemCoverages, skus, warehouses, owners),
       inject: [ITEM_COVERAGE_REPOSITORY, SKU_REPOSITORY, WAREHOUSE_REPOSITORY, OWNER_REPOSITORY],
     },
+    {
+      provide: GetInventoryStatusUseCase,
+      useFactory: (inventoryStatuses: IInventoryStatusRepository) => new GetInventoryStatusUseCase(inventoryStatuses),
+      inject: [INVENTORY_STATUS_REPOSITORY],
+    },
+    {
+      provide: ListInventoryStatusesUseCase,
+      useFactory: (inventoryStatuses: IInventoryStatusRepository) =>
+        new ListInventoryStatusesUseCase(inventoryStatuses),
+      inject: [INVENTORY_STATUS_REPOSITORY],
+    },
+    {
+      provide: CreateInventoryDimensionUseCase,
+      useFactory: (
+        inventoryDimensions: IInventoryDimensionRepository,
+        owners: IOwnerRepository,
+        skus: ISkuRepository,
+        warehouses: IWarehouseRepository,
+        locations: ILocationRepository,
+        inventoryStatuses: IInventoryStatusRepository,
+        uoms: IUomRepository,
+        keyService: InventoryDimensionKeyService,
+      ) =>
+        new CreateInventoryDimensionUseCase(
+          inventoryDimensions,
+          owners,
+          skus,
+          warehouses,
+          locations,
+          inventoryStatuses,
+          uoms,
+          keyService,
+        ),
+      inject: [
+        INVENTORY_DIMENSION_REPOSITORY,
+        OWNER_REPOSITORY,
+        SKU_REPOSITORY,
+        WAREHOUSE_REPOSITORY,
+        LOCATION_REPOSITORY,
+        INVENTORY_STATUS_REPOSITORY,
+        UOM_REPOSITORY,
+        InventoryDimensionKeyService,
+      ],
+    },
+    {
+      provide: GetInventoryDimensionUseCase,
+      useFactory: (inventoryDimensions: IInventoryDimensionRepository) =>
+        new GetInventoryDimensionUseCase(inventoryDimensions),
+      inject: [INVENTORY_DIMENSION_REPOSITORY],
+    },
+    {
+      provide: ListInventoryDimensionsUseCase,
+      useFactory: (inventoryDimensions: IInventoryDimensionRepository) =>
+        new ListInventoryDimensionsUseCase(inventoryDimensions),
+      inject: [INVENTORY_DIMENSION_REPOSITORY],
+    },
+    {
+      provide: InitializeInventoryBalanceUseCase,
+      useFactory: (
+        inventoryBalances: IInventoryBalanceRepository,
+        inventoryDimensions: IInventoryDimensionRepository,
+      ) => new InitializeInventoryBalanceUseCase(inventoryBalances, inventoryDimensions),
+      inject: [INVENTORY_BALANCE_REPOSITORY, INVENTORY_DIMENSION_REPOSITORY],
+    },
+    {
+      provide: GetInventoryBalanceUseCase,
+      useFactory: (inventoryBalances: IInventoryBalanceRepository) => new GetInventoryBalanceUseCase(inventoryBalances),
+      inject: [INVENTORY_BALANCE_REPOSITORY],
+    },
+    {
+      provide: ListInventoryBalancesUseCase,
+      useFactory: (inventoryBalances: IInventoryBalanceRepository) =>
+        new ListInventoryBalancesUseCase(inventoryBalances),
+      inject: [INVENTORY_BALANCE_REPOSITORY],
+    },
   ],
   exports: [
     SITE_REPOSITORY,
@@ -476,6 +585,9 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     UOM_CONVERSION_REPOSITORY,
     SKU_BARCODE_REPOSITORY,
     ITEM_COVERAGE_REPOSITORY,
+    INVENTORY_STATUS_REPOSITORY,
+    INVENTORY_DIMENSION_REPOSITORY,
+    INVENTORY_BALANCE_REPOSITORY,
   ],
 })
 export class MasterDataModule {}

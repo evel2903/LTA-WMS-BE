@@ -16,7 +16,8 @@
       "@common/*": ["./src/Common/*"],
       "@shared/*": ["./src/Shared/*"],
       "@core/*": ["./src/Core/*"],
-      "@app/*": ["./src/*"]
+      "@app/*": ["./src/*"],
+      "@test/*": ["./test/*"]
     },
     "incremental": true,
     "tsBuildInfoFile": "./dist/.tsbuildinfo",

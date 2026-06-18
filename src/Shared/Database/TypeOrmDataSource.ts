@@ -16,6 +16,9 @@ import { PackDefinitionOrmEntity } from '@modules/MasterData/Infrastructure/Pers
 import { UomConversionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/UomConversionOrmEntity';
 import { SkuBarcodeOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/SkuBarcodeOrmEntity';
 import { ItemCoverageOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ItemCoverageOrmEntity';
+import { InventoryStatusOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryStatusOrmEntity';
+import { InventoryDimensionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryDimensionOrmEntity';
+import { InventoryBalanceOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryBalanceOrmEntity';
 
 const env = GetEnv();
 
@@ -42,6 +45,9 @@ export default new DataSource({
     UomConversionOrmEntity,
     SkuBarcodeOrmEntity,
     ItemCoverageOrmEntity,
+    InventoryStatusOrmEntity,
+    InventoryDimensionOrmEntity,
+    InventoryBalanceOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

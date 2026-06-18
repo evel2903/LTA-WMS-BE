@@ -14,6 +14,7 @@ module.exports = {
     '^@shared/(.*)$': '<rootDir>/src/Shared/$1',
     '^@core/(.*)$': '<rootDir>/src/Core/$1',
     '^@app/(.*)$': '<rootDir>/src/$1',
+    '^@test/(.*)$': '<rootDir>/test/$1',
   },
   collectCoverageFrom: ['<rootDir>/src/**/*.{ts,js}', '!<rootDir>/dist/**', '!<rootDir>/test/**'],
   coveragePathIgnorePatterns: ['/node_modules/', '/dist/', '/test/'],

@@ -13,11 +13,15 @@ import { SkuBarcodeOrmEntity } from '@modules/MasterData/Infrastructure/Persiste
 import { PackDefinitionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/PackDefinitionOrmEntity';
 import { UomConversionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/UomConversionOrmEntity';
 import { ItemCoverageOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ItemCoverageOrmEntity';
+import { InventoryStatusOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryStatusOrmEntity';
+import { InventoryDimensionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryDimensionOrmEntity';
+import { InventoryBalanceOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryBalanceOrmEntity';
 import { CreateMasterDataSiteWarehouseZone1781622000000 } from '@shared/Database/Migrations/1781622000000-CreateMasterDataSiteWarehouseZone';
 import { CreateLocationProfileAndLocation1781623000000 } from '@shared/Database/Migrations/1781623000000-CreateLocationProfileAndLocation';
 import { CreateOwnerUomSku1781624000000 } from '@shared/Database/Migrations/1781624000000-CreateOwnerUomSku';
 import { CreateSkuSupportTables1781625000000 } from '@shared/Database/Migrations/1781625000000-CreateSkuSupportTables';
 import { AddUomConversionOverlapExclusion1781625100000 } from '@shared/Database/Migrations/1781625100000-AddUomConversionOverlapExclusion';
+import { CreateInventoryStatusDimensionBalance1781626000000 } from '@shared/Database/Migrations/1781626000000-CreateInventoryStatusDimensionBalance';
 import { getMetadataArgsStorage } from 'typeorm';
 
 describe('MasterData module and schema registration', () => {
@@ -55,12 +59,27 @@ describe('MasterData module and schema registration', () => {
     );
   });
 
+  it('registers inventory status, dimension and balance ORM entities in TypeOrmDataSource', () => {
+    expect(TypeOrmDataSource.options.entities).toEqual(
+      expect.arrayContaining([InventoryStatusOrmEntity, InventoryDimensionOrmEntity, InventoryBalanceOrmEntity]),
+    );
+  });
+
   it('defines Location ORM relations for warehouse, zone, profile and parent location', () => {
     const relationNames = getMetadataArgsStorage()
       .relations.filter((relation) => relation.target === LocationOrmEntity)
       .map((relation) => relation.propertyName);
 
     expect(relationNames).toEqual(expect.arrayContaining(['Warehouse', 'Zone', 'LocationProfile', 'ParentLocation']));
+  });
+
+  it('does not expose public mutation controllers for inventory dimensions or balances in A5', () => {
+    const controllers = (Reflect.getMetadata('controllers', MasterDataModule) as Array<{ name: string }>) ?? [];
+    const controllerNames = controllers.map((controller) => controller.name);
+
+    expect(controllerNames).not.toEqual(
+      expect.arrayContaining(['InventoryDimensionController', 'InventoryBalanceController']),
+    );
   });
 
   it('provides a migration for sites, warehouses, zones, FKs and unique constraints', async () => {
@@ -176,5 +195,38 @@ describe('MasterData module and schema registration', () => {
       'tstzrange("effective_from", coalesce("effective_to", \'infinity\'::timestamptz), \'[]\') with &&',
     );
     expect(sql).toContain("where (status = 'active')");
+  });
+
+  it('provides a migration for inventory statuses, dimensions, balances, FKs and unique constraints', async () => {
+    const migration = new CreateInventoryStatusDimensionBalance1781626000000();
+    const queries: string[] = [];
+    const queryRunner = {
+      query: jest.fn(async (sql: string) => {
+        queries.push(sql);
+      }),
+    };
+
+    await migration.up(queryRunner as never);
+
+    const sql = queries.join('\n').toLowerCase();
+    expect(sql).toContain('create table "inventory_statuses"');
+    expect(sql).toContain('create table "inventory_dimensions"');
+    expect(sql).toContain('create table "inventory_balances"');
+    expect(sql).toContain('unique ("status_code")');
+    expect(sql).toContain('unique ("dimension_key_hash")');
+    expect(sql).toContain('unique ("dimension_id")');
+    expect(sql).toContain('foreign key ("owner_id") references "owners"("id")');
+    expect(sql).toContain('foreign key ("sku_id") references "skus"("id")');
+    expect(sql).toContain('foreign key ("warehouse_id") references "warehouses"("id")');
+    expect(sql).toContain('foreign key ("location_id") references "locations"("id")');
+    expect(sql).toContain('foreign key ("inventory_status_id") references "inventory_statuses"("id")');
+    expect(sql).toContain('foreign key ("uom_id") references "uoms"("id")');
+    expect(sql).toContain('foreign key ("dimension_id") references "inventory_dimensions"("id")');
+    expect(sql).toContain('check ("qty_on_hand" >= 0)');
+    expect(sql).toContain('check ("qty_reserved" >= 0)');
+    expect(sql).toContain('check ("qty_available" >= 0)');
+    expect(sql).toContain('check ("qty_reserved" <= "qty_on_hand")');
+    expect(sql).toContain('check ("qty_available" = "qty_on_hand" - "qty_reserved")');
+    expect(sql).toContain('available');
   });
 });

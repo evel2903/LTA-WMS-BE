@@ -1,0 +1,94 @@
+import { randomUUID } from 'crypto';
+import { ConflictException } from '@common/Exceptions/AppException';
+import { CreateInventoryDimensionDto } from '@modules/MasterData/Application/DTOs/CreateInventoryDimensionDto';
+import { InventoryDimensionDto } from '@modules/MasterData/Application/DTOs/InventoryDimensionDto';
+import { IInventoryDimensionRepository } from '@modules/MasterData/Application/Interfaces/IInventoryDimensionRepository';
+import { IInventoryStatusRepository } from '@modules/MasterData/Application/Interfaces/IInventoryStatusRepository';
+import { ILocationRepository } from '@modules/MasterData/Application/Interfaces/ILocationRepository';
+import { IOwnerRepository } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
+import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
+import { IUomRepository } from '@modules/MasterData/Application/Interfaces/IUomRepository';
+import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
+import { InventoryDimensionMapper } from '@modules/MasterData/Application/Mappers/InventoryDimensionMapper';
+import { InventoryDimensionKeyService } from '@modules/MasterData/Application/Services/InventoryDimensionKeyService';
+import { InventoryIdentityPolicyValidator } from '@modules/MasterData/Application/Services/InventoryIdentityPolicyValidator';
+import { InventoryDimensionEntity } from '@modules/MasterData/Domain/Entities/InventoryDimensionEntity';
+
+export class CreateInventoryDimensionUseCase {
+  constructor(
+    private readonly inventoryDimensions: IInventoryDimensionRepository,
+    private readonly owners: IOwnerRepository,
+    private readonly skus: ISkuRepository,
+    private readonly warehouses: IWarehouseRepository,
+    private readonly locations: ILocationRepository,
+    private readonly inventoryStatuses: IInventoryStatusRepository,
+    private readonly uoms: IUomRepository,
+    private readonly keyService: InventoryDimensionKeyService,
+  ) {}
+
+  public async Execute(request: CreateInventoryDimensionDto): Promise<InventoryDimensionDto> {
+    const normalized = {
+      OwnerId: request.OwnerId,
+      SkuId: request.SkuId,
+      WarehouseId: request.WarehouseId,
+      LocationId: request.LocationId,
+      InventoryStatusId: request.InventoryStatusId,
+      UomId: this.keyService.NormalizeOptionalString(request.UomId, 'UomId'),
+      LpnCode: this.keyService.NormalizeOptionalString(request.LpnCode, 'LpnCode'),
+      LotNumber: this.keyService.NormalizeOptionalString(request.LotNumber, 'LotNumber'),
+      ExpiryDate: this.keyService.NormalizeOptionalDate(request.ExpiryDate, 'ExpiryDate'),
+      SerialNumber: this.keyService.NormalizeOptionalString(request.SerialNumber, 'SerialNumber'),
+      ProductionDate: this.keyService.NormalizeOptionalDate(request.ProductionDate, 'ProductionDate'),
+      CountryOfOrigin: this.keyService.NormalizeOptionalString(request.CountryOfOrigin, 'CountryOfOrigin'),
+      CustomsStatus: this.keyService.NormalizeOptionalString(request.CustomsStatus, 'CustomsStatus'),
+    };
+    const dimensionKeyHash = this.keyService.BuildHash(normalized);
+    const duplicate = await this.inventoryDimensions.FindByHash(dimensionKeyHash);
+    if (duplicate) {
+      throw new ConflictException('Inventory dimension already exists for identity');
+    }
+
+    await this.ValidateReferences(normalized);
+
+    const now = new Date();
+    const dimension = new InventoryDimensionEntity({
+      Id: randomUUID(),
+      ...normalized,
+      DimensionKeyHash: dimensionKeyHash,
+      SourceSystem: request.SourceSystem ?? null,
+      ReferenceId: request.ReferenceId ?? null,
+      CreatedAt: now,
+      UpdatedAt: now,
+    });
+
+    const created = await this.inventoryDimensions.Create(dimension);
+    return InventoryDimensionMapper.ToDto(created);
+  }
+
+  private async ValidateReferences(input: {
+    OwnerId: string;
+    SkuId: string;
+    WarehouseId: string;
+    LocationId: string;
+    InventoryStatusId: string;
+    UomId: string | null;
+  }): Promise<void> {
+    const [owner, sku, warehouse, location, inventoryStatus, uom] = await Promise.all([
+      this.owners.FindById(input.OwnerId),
+      this.skus.FindById(input.SkuId),
+      this.warehouses.FindById(input.WarehouseId),
+      this.locations.FindById(input.LocationId),
+      this.inventoryStatuses.FindById(input.InventoryStatusId),
+      input.UomId ? this.uoms.FindById(input.UomId) : Promise.resolve(null),
+    ]);
+
+    InventoryIdentityPolicyValidator.EnsureActiveOwner(owner);
+    InventoryIdentityPolicyValidator.EnsureActiveSku(sku);
+    InventoryIdentityPolicyValidator.EnsureActiveWarehouse(warehouse);
+    InventoryIdentityPolicyValidator.EnsureActiveLocation(location, input.WarehouseId);
+    InventoryIdentityPolicyValidator.EnsureActiveInventoryStatus(inventoryStatus);
+    if (input.UomId) {
+      InventoryIdentityPolicyValidator.EnsureActiveUom(uom);
+    }
+  }
+}
