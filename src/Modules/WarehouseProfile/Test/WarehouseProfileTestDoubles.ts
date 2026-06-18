@@ -70,6 +70,29 @@ export class InMemoryWarehouseProfileRepository implements IWarehouseProfileRepo
       )
       .sort((a, b) => b.Version - a.Version || b.EffectiveFrom.getTime() - a.EffectiveFrom.getTime());
   }
+
+  public async FindActiveOverlapping(
+    scopeKey: string,
+    effectiveFrom: Date,
+    effectiveTo: Date | null,
+    excludeProfileId: string,
+  ): Promise<WarehouseProfileEntity[]> {
+    const toMs = (effectiveTo ?? null) === null ? Number.POSITIVE_INFINITY : effectiveTo!.getTime();
+    return [...this.profiles.values()].filter((profile) => {
+      if (profile.Status !== WarehouseProfileStatus.Active) return false;
+      if (profile.ScopeKey !== scopeKey) return false;
+      if (profile.Id === excludeProfileId) return false;
+      const candidateToMs = profile.EffectiveTo === null ? Number.POSITIVE_INFINITY : profile.EffectiveTo.getTime();
+      // Half-open overlap: candidate.from < to AND candidate.to > from.
+      return profile.EffectiveFrom.getTime() < toMs && candidateToMs > effectiveFrom.getTime();
+    });
+  }
+
+  // Single-threaded in-memory double: the same store is the "transaction-scoped" repository, so the
+  // unit of work simply runs against `this`. Subclasses may override to observe the boundary.
+  public async RunInTransaction<T>(work: (txRepository: IWarehouseProfileRepository) => Promise<T>): Promise<T> {
+    return work(this);
+  }
 }
 
 export class InMemoryWarehouseProfileAssignmentRepository implements IWarehouseProfileAssignmentRepository {

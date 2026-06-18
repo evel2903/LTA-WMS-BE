@@ -8,9 +8,27 @@ import {
   RuleDefinitionListFilter,
 } from '@modules/WarehouseProfile/Application/Interfaces/IRuleDefinitionRepository';
 import { IWarehouseProfileRuleRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRuleRepository';
+import { IRuleResolver } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
 import { RuleGroupEntity } from '@modules/WarehouseProfile/Domain/Entities/RuleGroupEntity';
 import { RuleDefinitionEntity } from '@modules/WarehouseProfile/Domain/Entities/RuleDefinitionEntity';
 import { WarehouseProfileRuleEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileRuleEntity';
+import { RuleDecision } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleDecision';
+import { RuleEvaluationContext } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleEvaluationContext';
+
+/**
+ * Deterministic IRuleResolver double: returns a fixed RuleDecision and records the last context it
+ * was asked to resolve. Used by B4/B5 specs to drive the preview without a DB or a real resolver.
+ */
+export class StubRuleResolver implements IRuleResolver {
+  public LastContext: RuleEvaluationContext | null = null;
+
+  constructor(private readonly decision: RuleDecision) {}
+
+  public async Resolve(context: RuleEvaluationContext): Promise<RuleDecision> {
+    this.LastContext = context;
+    return this.decision;
+  }
+}
 
 export class InMemoryRuleGroupRepository implements IRuleGroupRepository {
   private readonly groups = new Map<string, RuleGroupEntity>();

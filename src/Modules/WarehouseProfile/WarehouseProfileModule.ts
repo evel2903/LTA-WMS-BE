@@ -39,6 +39,9 @@ import { CreateWarehouseProfileUseCase } from '@modules/WarehouseProfile/Applica
 import { GetWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/GetWarehouseProfileUseCase';
 import { ListWarehouseProfilesUseCase } from '@modules/WarehouseProfile/Application/UseCases/ListWarehouseProfilesUseCase';
 import { UpdateWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/UpdateWarehouseProfileUseCase';
+import { ActivateWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/ActivateWarehouseProfileUseCase';
+import { DeactivateWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/DeactivateWarehouseProfileUseCase';
+import { ProfileActivationGuard } from '@modules/WarehouseProfile/Application/Services/ProfileActivationGuard';
 import { CreateWarehouseProfileAssignmentUseCase } from '@modules/WarehouseProfile/Application/UseCases/CreateWarehouseProfileAssignmentUseCase';
 import { ListWarehouseProfileAssignmentsUseCase } from '@modules/WarehouseProfile/Application/UseCases/ListWarehouseProfileAssignmentsUseCase';
 import { CreateRuleGroupUseCase } from '@modules/WarehouseProfile/Application/UseCases/CreateRuleGroupUseCase';
@@ -168,6 +171,26 @@ import { RulePreviewController } from '@modules/WarehouseProfile/Presentation/Co
         ScopeKeyService,
         WarehouseProfilePolicyValidator,
       ],
+    },
+    {
+      provide: ProfileActivationGuard,
+      useFactory: (profiles: IWarehouseProfileRepository, preview: PreviewRuleResolutionUseCase) =>
+        new ProfileActivationGuard(profiles, preview),
+      inject: [WAREHOUSE_PROFILE_REPOSITORY, PreviewRuleResolutionUseCase],
+    },
+    {
+      provide: ActivateWarehouseProfileUseCase,
+      useFactory: (
+        profiles: IWarehouseProfileRepository,
+        policyValidator: WarehouseProfilePolicyValidator,
+        activationGuard: ProfileActivationGuard,
+      ) => new ActivateWarehouseProfileUseCase(profiles, policyValidator, activationGuard),
+      inject: [WAREHOUSE_PROFILE_REPOSITORY, WarehouseProfilePolicyValidator, ProfileActivationGuard],
+    },
+    {
+      provide: DeactivateWarehouseProfileUseCase,
+      useFactory: (profiles: IWarehouseProfileRepository) => new DeactivateWarehouseProfileUseCase(profiles),
+      inject: [WAREHOUSE_PROFILE_REPOSITORY],
     },
     {
       provide: CreateWarehouseProfileAssignmentUseCase,
