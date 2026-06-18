@@ -24,6 +24,16 @@ export interface RuleEvaluationContext {
   CustomerId?: string | null;
   SupplierId?: string | null;
 
+  /**
+   * Optional explicit profile target (B5 activation self-check / what-if). When set, the resolver
+   * resolves THIS profile by id in step 2 regardless of its status (DRAFT included) instead of the
+   * most-specific ACTIVE profile by scope. This lets the activation gate (AC2) evaluate the rules of
+   * the candidate profile being activated; the candidate is still DRAFT at gate time and would be
+   * invisible to the ACTIVE-only ListActiveByScope path. The profile must still match the context
+   * scope axes; null/undefined keeps the default scope-based selection.
+   */
+  ProfileId?: string | null;
+
   // Actor/action/object context (stored for B4/B5/Epic C; B3 does not enforce).
   ActorUserId?: string | null;
   Action?: string | null;

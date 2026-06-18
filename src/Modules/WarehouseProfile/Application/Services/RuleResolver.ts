@@ -70,6 +70,18 @@ export class RuleResolver implements IRuleResolver {
     context: RuleEvaluationContext,
     evaluatedAt: Date,
   ): Promise<WarehouseProfileEntity | null> {
+    // Explicit profile target (B5 activation self-check): resolve THIS profile by id regardless of
+    // status (the candidate is DRAFT at activation time and absent from ListActiveByScope). Scope
+    // matching still applies so a mismatched context yields no profile, but no most-specific
+    // selection is needed — the caller already named the single profile to evaluate.
+    if (context.ProfileId != null) {
+      const targeted = await this.profileRepository.FindById(context.ProfileId);
+      if (!targeted || !this.ProfileMatchesScope(targeted, context)) {
+        return null;
+      }
+      return targeted;
+    }
+
     const active = await this.profileRepository.ListActiveByScope(evaluatedAt);
     const matching = active.filter((profile) => this.ProfileMatchesScope(profile, context));
     if (matching.length === 0) {

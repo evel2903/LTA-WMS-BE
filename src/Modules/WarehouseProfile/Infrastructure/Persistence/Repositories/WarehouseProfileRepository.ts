@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, IsNull, LessThanOrEqual, MoreThan, Repository } from 'typeorm';
+import { FindOptionsWhere, IsNull, LessThan, LessThanOrEqual, MoreThan, Not, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   IWarehouseProfileRepository,
@@ -86,6 +86,45 @@ export class WarehouseProfileRepository implements IWarehouseProfileRepository {
     });
 
     return items.map(WarehouseProfileOrmMapper.ToDomain);
+  }
+
+  public async FindActiveOverlapping(
+    scopeKey: string,
+    effectiveFrom: Date,
+    effectiveTo: Date | null,
+    excludeProfileId: string,
+  ): Promise<WarehouseProfileEntity[]> {
+    // Overlap of half-open windows [from, to): candidate.from < (to ?? +inf) AND (candidate.to ?? +inf) > from.
+    // candidate.from < to is only constrained when `to` is finite (null = +inf = no upper bound).
+    const base: FindOptionsWhere<WarehouseProfileOrmEntity> = {
+      Status: WarehouseProfileStatus.Active,
+      ScopeKey: scopeKey,
+      Id: Not(excludeProfileId),
+    };
+    if (effectiveTo !== null) {
+      base.EffectiveFrom = LessThan(effectiveTo);
+    }
+
+    const items = await this.profiles.find({
+      where: [
+        // candidate.to = null -> +inf, always satisfies (.to > from).
+        { ...base, EffectiveTo: IsNull() },
+        // candidate.to finite -> must be strictly greater than from.
+        { ...base, EffectiveTo: MoreThan(effectiveFrom) },
+      ],
+    });
+
+    return items.map(WarehouseProfileOrmMapper.ToDomain);
+  }
+
+  public async RunInTransaction<T>(work: (txRepository: IWarehouseProfileRepository) => Promise<T>): Promise<T> {
+    // architecture 5.2 / 4.7: open a real DB transaction (DataSource.transaction) and hand the unit
+    // of work a repository bound to that transaction's EntityManager, so the activation overlap
+    // re-check and the status write are atomic against concurrent activations at the same scope.
+    return this.profiles.manager.transaction(async (manager) => {
+      const txRepository = new WarehouseProfileRepository(manager.getRepository(WarehouseProfileOrmEntity));
+      return work(txRepository);
+    });
   }
 
   private HandleUniqueViolation(error: unknown): void {

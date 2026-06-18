@@ -24,6 +24,13 @@ export interface PreviewRuleResolutionInput {
   CustomerId?: string | null;
   SupplierId?: string | null;
 
+  /**
+   * Optional explicit profile target (B5 activation self-check). When set, the resolver evaluates
+   * THIS profile's rules (by id, any status) instead of the most-specific ACTIVE profile by scope,
+   * so the activation gate can preview the still-DRAFT candidate being activated.
+   */
+  ProfileId?: string | null;
+
   // Actor/action/object metadata, echoed back for B5/Epic C; B4 does NOT enforce.
   ActorUserId?: string | null;
   Action?: string | null;

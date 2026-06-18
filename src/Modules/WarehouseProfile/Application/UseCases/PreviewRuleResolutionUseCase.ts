@@ -42,6 +42,7 @@ export class PreviewRuleResolutionUseCase {
   private ToContext(input: PreviewRuleResolutionInput): RuleEvaluationContext {
     return {
       WarehouseTypeCode: input.WarehouseTypeCode,
+      ProfileId: input.ProfileId ?? null,
       WarehouseId: input.WarehouseId ?? null,
       ZoneId: input.ZoneId ?? null,
       LocationType: input.LocationType ?? null,

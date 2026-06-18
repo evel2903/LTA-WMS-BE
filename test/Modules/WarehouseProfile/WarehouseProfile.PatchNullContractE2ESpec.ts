@@ -9,6 +9,8 @@ import { CreateWarehouseProfileUseCase } from '@modules/WarehouseProfile/Applica
 import { GetWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/GetWarehouseProfileUseCase';
 import { ListWarehouseProfilesUseCase } from '@modules/WarehouseProfile/Application/UseCases/ListWarehouseProfilesUseCase';
 import { UpdateWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/UpdateWarehouseProfileUseCase';
+import { ActivateWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/ActivateWarehouseProfileUseCase';
+import { DeactivateWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/DeactivateWarehouseProfileUseCase';
 import { ScopeKeyService } from '@modules/WarehouseProfile/Application/Services/ScopeKeyService';
 import { WarehouseProfilePolicyValidator } from '@modules/WarehouseProfile/Application/Services/WarehouseProfilePolicyValidator';
 import { WarehouseProfileController } from '@modules/WarehouseProfile/Presentation/Controllers/WarehouseProfileController';
@@ -59,6 +61,10 @@ describe('E2E WarehouseProfile PATCH null contract (real use cases, no DB)', () 
         { provide: GetWarehouseProfileUseCase, useValue: new GetWarehouseProfileUseCase(profiles) },
         { provide: ListWarehouseProfilesUseCase, useValue: new ListWarehouseProfilesUseCase(profiles) },
         { provide: UpdateWarehouseProfileUseCase, useValue: updateUseCase },
+        // This spec exercises only create/get/list/patch; the activate/deactivate use cases are
+        // required by the controller constructor, so provide inert stubs to satisfy DI.
+        { provide: ActivateWarehouseProfileUseCase, useValue: {} as ActivateWarehouseProfileUseCase },
+        { provide: DeactivateWarehouseProfileUseCase, useValue: {} as DeactivateWarehouseProfileUseCase },
       ],
     }).compile();
 
