@@ -54,6 +54,8 @@ import { AddWarehouseProfileRuleUseCase } from '@modules/WarehouseProfile/Applic
 import { ListWarehouseProfileRulesUseCase } from '@modules/WarehouseProfile/Application/UseCases/ListWarehouseProfileRulesUseCase';
 import { RemoveWarehouseProfileRuleUseCase } from '@modules/WarehouseProfile/Application/UseCases/RemoveWarehouseProfileRuleUseCase';
 import { PreviewRuleResolutionUseCase } from '@modules/WarehouseProfile/Application/UseCases/PreviewRuleResolutionUseCase';
+import { WarehouseProfileChecklistService } from '@modules/WarehouseProfile/Application/Services/WarehouseProfileChecklistService';
+import { VerifyWarehouseProfileChecklistUseCase } from '@modules/WarehouseProfile/Application/UseCases/VerifyWarehouseProfileChecklistUseCase';
 import { WarehouseProfileOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileOrmEntity';
 import { WarehouseProfileAssignmentOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileAssignmentOrmEntity';
 import { RuleGroupOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/RuleGroupOrmEntity';
@@ -70,6 +72,7 @@ import { RuleGroupController } from '@modules/WarehouseProfile/Presentation/Cont
 import { RuleDefinitionController } from '@modules/WarehouseProfile/Presentation/Controllers/RuleDefinitionController';
 import { WarehouseProfileRuleController } from '@modules/WarehouseProfile/Presentation/Controllers/WarehouseProfileRuleController';
 import { RulePreviewController } from '@modules/WarehouseProfile/Presentation/Controllers/RulePreviewController';
+import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/Presentation/Controllers/WarehouseProfileChecklistController';
 
 @Module({
   imports: [
@@ -89,6 +92,7 @@ import { RulePreviewController } from '@modules/WarehouseProfile/Presentation/Co
     RuleDefinitionController,
     WarehouseProfileRuleController,
     RulePreviewController,
+    WarehouseProfileChecklistController,
   ],
   providers: [
     { provide: WAREHOUSE_PROFILE_REPOSITORY, useClass: WarehouseProfileRepository },
@@ -298,6 +302,32 @@ import { RulePreviewController } from '@modules/WarehouseProfile/Presentation/Co
         new PreviewRuleResolutionUseCase(resolver, conflictDetector),
       inject: [RULE_RESOLVER, RuleConflictDetector],
     },
+    {
+      provide: WarehouseProfileChecklistService,
+      useFactory: (
+        profiles: IWarehouseProfileRepository,
+        groups: IRuleGroupRepository,
+        definitions: IRuleDefinitionRepository,
+        bindings: IWarehouseProfileRuleRepository,
+        preview: PreviewRuleResolutionUseCase,
+      ) => new WarehouseProfileChecklistService(profiles, groups, definitions, bindings, preview),
+      inject: [
+        WAREHOUSE_PROFILE_REPOSITORY,
+        RULE_GROUP_REPOSITORY,
+        RULE_DEFINITION_REPOSITORY,
+        WAREHOUSE_PROFILE_RULE_REPOSITORY,
+        PreviewRuleResolutionUseCase,
+      ],
+    },
+    {
+      provide: VerifyWarehouseProfileChecklistUseCase,
+      useFactory: (
+        profiles: IWarehouseProfileRepository,
+        resolver: IRuleResolver,
+        checklistService: WarehouseProfileChecklistService,
+      ) => new VerifyWarehouseProfileChecklistUseCase(profiles, resolver, checklistService),
+      inject: [WAREHOUSE_PROFILE_REPOSITORY, RULE_RESOLVER, WarehouseProfileChecklistService],
+    },
   ],
   exports: [
     WAREHOUSE_PROFILE_REPOSITORY,
@@ -306,6 +336,7 @@ import { RulePreviewController } from '@modules/WarehouseProfile/Presentation/Co
     RULE_DEFINITION_REPOSITORY,
     WAREHOUSE_PROFILE_RULE_REPOSITORY,
     RULE_RESOLVER,
+    VerifyWarehouseProfileChecklistUseCase,
   ],
 })
 export class WarehouseProfileModule {}
