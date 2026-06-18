@@ -106,4 +106,13 @@ describe('E2E OwnerController (no DB)', () => {
     expect(getExecute).toHaveBeenCalledWith('owner-1');
     expect(updateExecute).toHaveBeenCalledWith({ Id: 'owner-1', OwnerName: 'Updated' });
   });
+
+  it('PATCH /owners/:id rejects empty required business fields', async () => {
+    await request(app.getHttpServer()).patch('/owners/owner-1').send({ OwnerCode: '' }).expect(400);
+    await request(app.getHttpServer()).patch('/owners/owner-1').send({ OwnerName: '' }).expect(400);
+    await request(app.getHttpServer()).patch('/owners/owner-1').send({ OwnerCode: null }).expect(400);
+    await request(app.getHttpServer()).patch('/owners/owner-1').send({ OwnerName: null }).expect(400);
+
+    expect(updateExecute).not.toHaveBeenCalled();
+  });
 });

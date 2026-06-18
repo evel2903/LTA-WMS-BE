@@ -1,15 +1,27 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+  ValidateIf,
+} from 'class-validator';
 import { SkuStatus } from '@modules/MasterData/Domain/Enums/SkuStatus';
 
 export class UpdateSkuRequest {
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsString()
+  @IsNotEmpty()
   @MaxLength(80)
   public SkuCode?: string;
 
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsString()
+  @IsNotEmpty()
   @MaxLength(255)
   public SkuName?: string;
 
@@ -19,8 +31,9 @@ export class UpdateSkuRequest {
   @MaxLength(36)
   public DefaultOwnerId?: string | null;
 
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsString()
+  @IsNotEmpty()
   @MaxLength(50)
   public ItemClass?: string;
 

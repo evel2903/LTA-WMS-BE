@@ -106,4 +106,13 @@ describe('E2E UomController (no DB)', () => {
     expect(getExecute).toHaveBeenCalledWith('uom-1');
     expect(updateExecute).toHaveBeenCalledWith({ Id: 'uom-1', UomName: 'Updated' });
   });
+
+  it('PATCH /uoms/:id rejects empty required business fields', async () => {
+    await request(app.getHttpServer()).patch('/uoms/uom-1').send({ UomCode: '' }).expect(400);
+    await request(app.getHttpServer()).patch('/uoms/uom-1').send({ UomName: '' }).expect(400);
+    await request(app.getHttpServer()).patch('/uoms/uom-1').send({ UomCode: null }).expect(400);
+    await request(app.getHttpServer()).patch('/uoms/uom-1').send({ UomName: null }).expect(400);
+
+    expect(updateExecute).not.toHaveBeenCalled();
+  });
 });
