@@ -5,6 +5,7 @@ import { ITokenService } from '@modules/Authentication/Application/Interfaces/IT
 import { IRefreshTokenRepository } from '@modules/Authentication/Application/Interfaces/IRefreshTokenRepository';
 import { AuthResultDto } from '@modules/Authentication/Application/DTOs/AuthResultDto';
 import { IssueAuthTokens } from '@modules/Authentication/Application/Helpers/IssueAuthTokens';
+import { REFRESH_TOKEN_ROTATION_GRACE_MS } from '@modules/Authentication/AuthConstants';
 
 export class RefreshTokenUseCase {
   constructor(
@@ -24,11 +25,19 @@ export class RefreshTokenUseCase {
       throw new UnauthorizedAppException('Refresh token is not recognized');
     }
 
-    // 3. Reuse detection: a token that was already rotated/revoked is being replayed.
-    //    Treat as theft and revoke every active token for that user.
+    // 3. Replay of an already-rotated token. Two cases:
+    //    a) BENIGN race (multiple tabs, or a reload that aborts an in-flight
+    //       refresh) replays the just-rotated token within the grace window. The
+    //       winning request already issued a fresh pair, so reject this loser
+    //       WITHOUT revoking the family — that would log the surviving session out.
+    //    b) Real reuse/theft: a replay long after rotation. Revoke everything.
     if (stored.RevokedAt) {
-      await this.refreshTokenRepository.RevokeAllForUser(stored.UserId);
-      throw new UnauthorizedAppException('Refresh token reuse detected');
+      const elapsedSinceRevoke = Date.now() - stored.RevokedAt.getTime();
+      if (elapsedSinceRevoke > REFRESH_TOKEN_ROTATION_GRACE_MS) {
+        await this.refreshTokenRepository.RevokeAllForUser(stored.UserId);
+        throw new UnauthorizedAppException('Refresh token reuse detected');
+      }
+      throw new UnauthorizedAppException('Refresh token already rotated');
     }
 
     if (stored.ExpiresAt.getTime() <= Date.now()) {

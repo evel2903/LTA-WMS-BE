@@ -15,6 +15,7 @@ import {
 } from '@modules/Authentication/Application/Interfaces/IRefreshTokenRepository';
 import { Role } from '@common/Constants/Role';
 import { EmailAddress } from '@modules/Users/Domain/ValueObjects/EmailAddress';
+import { REFRESH_TOKEN_ROTATION_GRACE_MS } from '@modules/Authentication/AuthConstants';
 
 class FakeUserRepository implements IUserRepository {
   public FindById = jest.fn<Promise<UserEntity | null>, [string]>();
@@ -86,12 +87,27 @@ describe('RefreshTokenUseCase', () => {
     expect(result.Tokens.RefreshToken).toBe('new-refresh');
   });
 
-  it('detects reuse: revoked token replay revokes ALL user tokens and throws', async () => {
+  it('detects reuse: a token revoked LONG ago (beyond grace) revokes ALL user tokens and throws', async () => {
     const { repo, refreshRepo, useCase } = setup();
-    refreshRepo.FindByHash.mockResolvedValue({ ...activeRecord(), RevokedAt: new Date() });
+    const longAgo = new Date(Date.now() - REFRESH_TOKEN_ROTATION_GRACE_MS - 60_000);
+    refreshRepo.FindByHash.mockResolvedValue({ ...activeRecord(), RevokedAt: longAgo });
 
     await expect(useCase.Execute(INCOMING)).rejects.toBeInstanceOf(UnauthorizedAppException);
     expect(refreshRepo.RevokeAllForUser).toHaveBeenCalledWith('u1');
+    expect(refreshRepo.RevokeByHash).not.toHaveBeenCalled();
+    expect(repo.FindById).not.toHaveBeenCalled();
+  });
+
+  it('tolerates rotation race: a token revoked WITHIN the grace window throws WITHOUT nuking the family', async () => {
+    const { repo, refreshRepo, useCase } = setup();
+    // The losing request of a benign race (e.g. two tabs / reload during an in-flight
+    // refresh) replays a token that was just rotated. The winner already issued a fresh
+    // pair, so we must NOT revoke every token — that would log the surviving tab out.
+    const justNow = new Date(Date.now() - 1_000);
+    refreshRepo.FindByHash.mockResolvedValue({ ...activeRecord(), RevokedAt: justNow });
+
+    await expect(useCase.Execute(INCOMING)).rejects.toBeInstanceOf(UnauthorizedAppException);
+    expect(refreshRepo.RevokeAllForUser).not.toHaveBeenCalled();
     expect(refreshRepo.RevokeByHash).not.toHaveBeenCalled();
     expect(repo.FindById).not.toHaveBeenCalled();
   });
