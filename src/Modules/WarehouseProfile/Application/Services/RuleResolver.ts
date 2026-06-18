@@ -23,6 +23,7 @@ const EmptyDecision: RuleDecision = {
   Allowed: true,
   ApprovalRequired: false,
   OrderedCandidates: [],
+  EffectivePriorities: {},
   ReasonReadiness: null,
 };
 
@@ -62,7 +63,7 @@ export class RuleResolver implements IRuleResolver {
     const sorted = [...filtered].sort(ByPrecedenceThenSpecificityThenPriority);
 
     // Step 6: produce the decision.
-    return this.ToDecision(sorted.map((candidate) => candidate.Rule));
+    return this.ToDecision(sorted);
   }
 
   private async ResolveActiveProfile(
@@ -228,9 +229,18 @@ export class RuleResolver implements IRuleResolver {
     } as RuleDefinitionEntity);
   }
 
-  private ToDecision(ordered: RuleDefinitionEntity[]): RuleDecision {
-    if (ordered.length === 0) {
-      return { ...EmptyDecision, OrderedCandidates: [] };
+  private ToDecision(sorted: ResolvedCandidate[]): RuleDecision {
+    if (sorted.length === 0) {
+      return { ...EmptyDecision, OrderedCandidates: [], EffectivePriorities: {} };
+    }
+
+    const ordered = sorted.map((candidate) => candidate.Rule);
+
+    // Surface the effective priority (binding override ?? raw priority) that actually drove the sort
+    // so B4 can explain the tie-break without re-reading bindings or contradicting this sort.
+    const effectivePriorities: Record<string, number> = {};
+    for (const candidate of sorted) {
+      effectivePriorities[candidate.Rule.Id] = candidate.EffectivePriority;
     }
 
     // Invariant (architecture 5.5 / handoff rule 11): a Compliance hard block can never be
@@ -248,6 +258,7 @@ export class RuleResolver implements IRuleResolver {
       Allowed: winner.ControlMode !== RuleControlMode.HardBlock,
       ApprovalRequired: winner.ControlMode === RuleControlMode.ApprovalRequired,
       OrderedCandidates: ordered,
+      EffectivePriorities: effectivePriorities,
       ReasonReadiness: {
         RequiresReason: winner.RequiresReason,
         RequiresEvidence: winner.RequiresEvidence,

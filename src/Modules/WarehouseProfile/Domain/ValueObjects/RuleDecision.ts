@@ -26,5 +26,14 @@ export interface RuleDecision {
   Warning?: { Message: string; RuleCode: string };
   Suggestion?: { Message: string; RuleCode: string };
   OrderedCandidates: RuleDefinitionEntity[];
+  /**
+   * The EFFECTIVE priority (binding OverridePriority ?? RuleDefinition.Priority) that actually drove
+   * the sort, keyed by rule Id. B4 reads this so the displayed skipped reason is computed from the
+   * SAME tie-break signal the resolver used and can never contradict the B3 sort (raw Priority alone
+   * is insufficient — a binding override can invert it). Keyed by Id rather than reshaping
+   * OrderedCandidates so the B3 contract (RuleDefinitionEntity[]) stays intact. Empty when there are
+   * no candidates.
+   */
+  EffectivePriorities: Record<string, number>;
   ReasonReadiness: ReasonReadiness | null;
 }
