@@ -22,6 +22,9 @@ import { InventoryBalanceOrmEntity } from '@modules/MasterData/Infrastructure/Pe
 import { MasterDataOwnershipPolicyOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/MasterDataOwnershipPolicyOrmEntity';
 import { WarehouseProfileOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileOrmEntity';
 import { WarehouseProfileAssignmentOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileAssignmentOrmEntity';
+import { RuleGroupOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/RuleGroupOrmEntity';
+import { RuleDefinitionOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/RuleDefinitionOrmEntity';
+import { WarehouseProfileRuleOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileRuleOrmEntity';
 
 const env = GetEnv();
 
@@ -54,6 +57,9 @@ export default new DataSource({
     MasterDataOwnershipPolicyOrmEntity,
     WarehouseProfileOrmEntity,
     WarehouseProfileAssignmentOrmEntity,
+    RuleGroupOrmEntity,
+    RuleDefinitionOrmEntity,
+    WarehouseProfileRuleOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

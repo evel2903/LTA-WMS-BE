@@ -1,0 +1,126 @@
+import { ConflictException } from '@common/Exceptions/AppException';
+import {
+  IRuleGroupRepository,
+  RuleGroupListFilter,
+} from '@modules/WarehouseProfile/Application/Interfaces/IRuleGroupRepository';
+import {
+  IRuleDefinitionRepository,
+  RuleDefinitionListFilter,
+} from '@modules/WarehouseProfile/Application/Interfaces/IRuleDefinitionRepository';
+import { IWarehouseProfileRuleRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRuleRepository';
+import { RuleGroupEntity } from '@modules/WarehouseProfile/Domain/Entities/RuleGroupEntity';
+import { RuleDefinitionEntity } from '@modules/WarehouseProfile/Domain/Entities/RuleDefinitionEntity';
+import { WarehouseProfileRuleEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileRuleEntity';
+
+export class InMemoryRuleGroupRepository implements IRuleGroupRepository {
+  private readonly groups = new Map<string, RuleGroupEntity>();
+
+  public async FindById(id: string): Promise<RuleGroupEntity | null> {
+    return this.groups.get(id) ?? null;
+  }
+
+  public async FindByCode(groupCode: string): Promise<RuleGroupEntity | null> {
+    return [...this.groups.values()].find((group) => group.GroupCode === groupCode) ?? null;
+  }
+
+  public async Create(group: RuleGroupEntity): Promise<RuleGroupEntity> {
+    if ([...this.groups.values()].some((existing) => existing.GroupCode === group.GroupCode)) {
+      throw new ConflictException('Rule group code already exists');
+    }
+    this.groups.set(group.Id, group);
+    return group;
+  }
+
+  public async List(
+    skip: number,
+    take: number,
+    filter: RuleGroupListFilter = {},
+  ): Promise<{ Items: RuleGroupEntity[]; TotalItems: number }> {
+    let items = [...this.groups.values()];
+    if (filter.CatalogState) items = items.filter((group) => group.CatalogState === filter.CatalogState);
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+}
+
+export class InMemoryRuleDefinitionRepository implements IRuleDefinitionRepository {
+  private readonly definitions = new Map<string, RuleDefinitionEntity>();
+
+  public async FindById(id: string): Promise<RuleDefinitionEntity | null> {
+    return this.definitions.get(id) ?? null;
+  }
+
+  public async FindByCode(ruleCode: string): Promise<RuleDefinitionEntity | null> {
+    return [...this.definitions.values()].find((definition) => definition.RuleCode === ruleCode) ?? null;
+  }
+
+  public async Create(definition: RuleDefinitionEntity): Promise<RuleDefinitionEntity> {
+    if ([...this.definitions.values()].some((existing) => existing.RuleCode === definition.RuleCode)) {
+      throw new ConflictException('Rule code already exists');
+    }
+    this.definitions.set(definition.Id, definition);
+    return definition;
+  }
+
+  public async List(
+    skip: number,
+    take: number,
+    filter: RuleDefinitionListFilter = {},
+  ): Promise<{ Items: RuleDefinitionEntity[]; TotalItems: number }> {
+    let items = [...this.definitions.values()];
+    if (filter.RuleGroupId) items = items.filter((definition) => definition.RuleGroupId === filter.RuleGroupId);
+    if (filter.PrecedenceTier)
+      items = items.filter((definition) => definition.PrecedenceTier === filter.PrecedenceTier);
+    if (filter.ControlMode) items = items.filter((definition) => definition.ControlMode === filter.ControlMode);
+    if (filter.Status) items = items.filter((definition) => definition.Status === filter.Status);
+    if (filter.WarehouseTypeCode)
+      items = items.filter((definition) => definition.WarehouseTypeCode === filter.WarehouseTypeCode);
+    if (filter.WarehouseId) items = items.filter((definition) => definition.WarehouseId === filter.WarehouseId);
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+}
+
+export class InMemoryWarehouseProfileRuleRepository implements IWarehouseProfileRuleRepository {
+  private readonly bindings = new Map<string, WarehouseProfileRuleEntity>();
+
+  public async FindById(id: string): Promise<WarehouseProfileRuleEntity | null> {
+    return this.bindings.get(id) ?? null;
+  }
+
+  public async FindByProfileAndRule(
+    warehouseProfileId: string,
+    ruleDefinitionId: string,
+  ): Promise<WarehouseProfileRuleEntity | null> {
+    return (
+      [...this.bindings.values()].find(
+        (binding) => binding.WarehouseProfileId === warehouseProfileId && binding.RuleDefinitionId === ruleDefinitionId,
+      ) ?? null
+    );
+  }
+
+  public async Create(binding: WarehouseProfileRuleEntity): Promise<WarehouseProfileRuleEntity> {
+    if (
+      [...this.bindings.values()].some(
+        (existing) =>
+          existing.WarehouseProfileId === binding.WarehouseProfileId &&
+          existing.RuleDefinitionId === binding.RuleDefinitionId,
+      )
+    ) {
+      throw new ConflictException('Rule is already bound to this profile');
+    }
+    this.bindings.set(binding.Id, binding);
+    return binding;
+  }
+
+  public async Delete(id: string): Promise<void> {
+    this.bindings.delete(id);
+  }
+
+  public async ListByProfile(
+    warehouseProfileId: string,
+    skip: number,
+    take: number,
+  ): Promise<{ Items: WarehouseProfileRuleEntity[]; TotalItems: number }> {
+    const items = [...this.bindings.values()].filter((binding) => binding.WarehouseProfileId === warehouseProfileId);
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+}
