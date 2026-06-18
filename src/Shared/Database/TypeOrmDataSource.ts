@@ -19,6 +19,7 @@ import { ItemCoverageOrmEntity } from '@modules/MasterData/Infrastructure/Persis
 import { InventoryStatusOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryStatusOrmEntity';
 import { InventoryDimensionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryDimensionOrmEntity';
 import { InventoryBalanceOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryBalanceOrmEntity';
+import { MasterDataOwnershipPolicyOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/MasterDataOwnershipPolicyOrmEntity';
 
 const env = GetEnv();
 
@@ -48,6 +49,7 @@ export default new DataSource({
     InventoryStatusOrmEntity,
     InventoryDimensionOrmEntity,
     InventoryBalanceOrmEntity,
+    MasterDataOwnershipPolicyOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

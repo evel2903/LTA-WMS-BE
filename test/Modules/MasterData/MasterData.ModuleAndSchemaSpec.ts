@@ -16,12 +16,14 @@ import { ItemCoverageOrmEntity } from '@modules/MasterData/Infrastructure/Persis
 import { InventoryStatusOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryStatusOrmEntity';
 import { InventoryDimensionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryDimensionOrmEntity';
 import { InventoryBalanceOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryBalanceOrmEntity';
+import { MasterDataOwnershipPolicyOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/MasterDataOwnershipPolicyOrmEntity';
 import { CreateMasterDataSiteWarehouseZone1781622000000 } from '@shared/Database/Migrations/1781622000000-CreateMasterDataSiteWarehouseZone';
 import { CreateLocationProfileAndLocation1781623000000 } from '@shared/Database/Migrations/1781623000000-CreateLocationProfileAndLocation';
 import { CreateOwnerUomSku1781624000000 } from '@shared/Database/Migrations/1781624000000-CreateOwnerUomSku';
 import { CreateSkuSupportTables1781625000000 } from '@shared/Database/Migrations/1781625000000-CreateSkuSupportTables';
 import { AddUomConversionOverlapExclusion1781625100000 } from '@shared/Database/Migrations/1781625100000-AddUomConversionOverlapExclusion';
 import { CreateInventoryStatusDimensionBalance1781626000000 } from '@shared/Database/Migrations/1781626000000-CreateInventoryStatusDimensionBalance';
+import { CreateMasterDataOwnershipPolicy1781627000000 } from '@shared/Database/Migrations/1781627000000-CreateMasterDataOwnershipPolicy';
 import { getMetadataArgsStorage } from 'typeorm';
 
 describe('MasterData module and schema registration', () => {
@@ -65,6 +67,10 @@ describe('MasterData module and schema registration', () => {
     );
   });
 
+  it('registers master data ownership policy ORM entity in TypeOrmDataSource', () => {
+    expect(TypeOrmDataSource.options.entities).toEqual(expect.arrayContaining([MasterDataOwnershipPolicyOrmEntity]));
+  });
+
   it('defines Location ORM relations for warehouse, zone, profile and parent location', () => {
     const relationNames = getMetadataArgsStorage()
       .relations.filter((relation) => relation.target === LocationOrmEntity)
@@ -79,6 +85,15 @@ describe('MasterData module and schema registration', () => {
 
     expect(controllerNames).not.toEqual(
       expect.arrayContaining(['InventoryDimensionController', 'InventoryBalanceController']),
+    );
+  });
+
+  it('does not expose public mutation controllers for A6 ownership policy or Tier 1 checklist', () => {
+    const controllers = (Reflect.getMetadata('controllers', MasterDataModule) as Array<{ name: string }>) ?? [];
+    const controllerNames = controllers.map((controller) => controller.name);
+
+    expect(controllerNames).not.toEqual(
+      expect.arrayContaining(['MasterDataOwnershipPolicyMutationController', 'Tier1MasterDataFixtureController']),
     );
   });
 
@@ -228,5 +243,31 @@ describe('MasterData module and schema registration', () => {
     expect(sql).toContain('check ("qty_reserved" <= "qty_on_hand")');
     expect(sql).toContain('check ("qty_available" = "qty_on_hand" - "qty_reserved")');
     expect(sql).toContain('available');
+  });
+
+  it('provides a migration for master data ownership policy catalog and FR-8 seed rows', async () => {
+    const migration = new CreateMasterDataOwnershipPolicy1781627000000();
+    const queries: string[] = [];
+    const queryRunner = {
+      query: jest.fn(async (sql: string) => {
+        queries.push(sql);
+      }),
+    };
+
+    await migration.up(queryRunner as never);
+
+    const sql = queries.join('\n').toLowerCase();
+    expect(sql).toContain('create table "master_data_ownership_policies"');
+    expect(sql).toContain('unique ("object_group")');
+    expect(sql).toContain('source_of_truth_type');
+    expect(sql).toContain('ownership_mode');
+    expect(sql).toContain('requires_audit');
+    expect(sql).toContain('requires_reason');
+    expect(sql).toContain('requires_source_system');
+    expect(sql).toContain('requires_reference_id');
+    expect(sql).toContain('implementation_status');
+    expect(sql).toContain('reasoncode');
+    expect(sql).toContain('lpnsscc');
+    expect(sql).toContain('doc04#14');
   });
 });

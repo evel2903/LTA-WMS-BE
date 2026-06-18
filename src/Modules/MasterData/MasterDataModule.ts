@@ -59,7 +59,10 @@ import { ListInventoryDimensionsUseCase } from '@modules/MasterData/Application/
 import { InitializeInventoryBalanceUseCase } from '@modules/MasterData/Application/UseCases/InitializeInventoryBalanceUseCase';
 import { GetInventoryBalanceUseCase } from '@modules/MasterData/Application/UseCases/GetInventoryBalanceUseCase';
 import { ListInventoryBalancesUseCase } from '@modules/MasterData/Application/UseCases/ListInventoryBalancesUseCase';
+import { ListMasterDataOwnershipPoliciesUseCase } from '@modules/MasterData/Application/UseCases/ListMasterDataOwnershipPoliciesUseCase';
+import { VerifyTier1MasterDataChecklistUseCase } from '@modules/MasterData/Application/UseCases/VerifyTier1MasterDataChecklistUseCase';
 import { InventoryDimensionKeyService } from '@modules/MasterData/Application/Services/InventoryDimensionKeyService';
+import { Tier1MasterDataChecklistService } from '@modules/MasterData/Application/Services/Tier1MasterDataChecklistService';
 import { ISiteRepository, SITE_REPOSITORY } from '@modules/MasterData/Application/Interfaces/ISiteRepository';
 import {
   IWarehouseRepository,
@@ -105,6 +108,10 @@ import {
   IInventoryBalanceRepository,
   INVENTORY_BALANCE_REPOSITORY,
 } from '@modules/MasterData/Application/Interfaces/IInventoryBalanceRepository';
+import {
+  IMasterDataOwnershipPolicyRepository,
+  MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IMasterDataOwnershipPolicyRepository';
 import { SiteOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/SiteOrmEntity';
 import { WarehouseOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/WarehouseOrmEntity';
 import { ZoneOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ZoneOrmEntity';
@@ -120,6 +127,7 @@ import { ItemCoverageOrmEntity } from '@modules/MasterData/Infrastructure/Persis
 import { InventoryStatusOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryStatusOrmEntity';
 import { InventoryDimensionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryDimensionOrmEntity';
 import { InventoryBalanceOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryBalanceOrmEntity';
+import { MasterDataOwnershipPolicyOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/MasterDataOwnershipPolicyOrmEntity';
 import { SiteRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/SiteRepository';
 import { WarehouseRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/WarehouseRepository';
 import { ZoneRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/ZoneRepository';
@@ -135,6 +143,7 @@ import { ItemCoverageRepository } from '@modules/MasterData/Infrastructure/Persi
 import { InventoryStatusRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/InventoryStatusRepository';
 import { InventoryDimensionRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/InventoryDimensionRepository';
 import { InventoryBalanceRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/InventoryBalanceRepository';
+import { MasterDataOwnershipPolicyRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/MasterDataOwnershipPolicyRepository';
 import { SiteController } from '@modules/MasterData/Presentation/Controllers/SiteController';
 import { WarehouseController } from '@modules/MasterData/Presentation/Controllers/WarehouseController';
 import { ZoneController } from '@modules/MasterData/Presentation/Controllers/ZoneController';
@@ -166,6 +175,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
       InventoryStatusOrmEntity,
       InventoryDimensionOrmEntity,
       InventoryBalanceOrmEntity,
+      MasterDataOwnershipPolicyOrmEntity,
     ]),
   ],
   controllers: [
@@ -198,7 +208,9 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     { provide: INVENTORY_STATUS_REPOSITORY, useClass: InventoryStatusRepository },
     { provide: INVENTORY_DIMENSION_REPOSITORY, useClass: InventoryDimensionRepository },
     { provide: INVENTORY_BALANCE_REPOSITORY, useClass: InventoryBalanceRepository },
+    { provide: MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY, useClass: MasterDataOwnershipPolicyRepository },
     InventoryDimensionKeyService,
+    Tier1MasterDataChecklistService,
     {
       provide: CreateSiteUseCase,
       useFactory: (sites: ISiteRepository) => new CreateSiteUseCase(sites),
@@ -571,6 +583,18 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
         new ListInventoryBalancesUseCase(inventoryBalances),
       inject: [INVENTORY_BALANCE_REPOSITORY],
     },
+    {
+      provide: ListMasterDataOwnershipPoliciesUseCase,
+      useFactory: (policies: IMasterDataOwnershipPolicyRepository) =>
+        new ListMasterDataOwnershipPoliciesUseCase(policies),
+      inject: [MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY],
+    },
+    {
+      provide: VerifyTier1MasterDataChecklistUseCase,
+      useFactory: (policies: IMasterDataOwnershipPolicyRepository, checklistService: Tier1MasterDataChecklistService) =>
+        new VerifyTier1MasterDataChecklistUseCase(policies, checklistService),
+      inject: [MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY, Tier1MasterDataChecklistService],
+    },
   ],
   exports: [
     SITE_REPOSITORY,
@@ -588,6 +612,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     INVENTORY_STATUS_REPOSITORY,
     INVENTORY_DIMENSION_REPOSITORY,
     INVENTORY_BALANCE_REPOSITORY,
+    MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY,
   ],
 })
 export class MasterDataModule {}
