@@ -28,9 +28,10 @@ import {
   IWarehouseProfileRuleRepository,
   WAREHOUSE_PROFILE_RULE_REPOSITORY,
 } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRuleRepository';
-import { RULE_RESOLVER } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
+import { IRuleResolver, RULE_RESOLVER } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
 import { ScopeKeyService } from '@modules/WarehouseProfile/Application/Services/ScopeKeyService';
 import { RuleResolver } from '@modules/WarehouseProfile/Application/Services/RuleResolver';
+import { RuleConflictDetector } from '@modules/WarehouseProfile/Application/Services/RuleConflictDetector';
 import { ConditionEvaluator } from '@modules/WarehouseProfile/Domain/Services/ConditionEvaluator';
 import { WarehouseProfilePolicyValidator } from '@modules/WarehouseProfile/Application/Services/WarehouseProfilePolicyValidator';
 import { RulePayloadValidator } from '@modules/WarehouseProfile/Application/Services/RulePayloadValidator';
@@ -49,6 +50,7 @@ import { ListRuleDefinitionsUseCase } from '@modules/WarehouseProfile/Applicatio
 import { AddWarehouseProfileRuleUseCase } from '@modules/WarehouseProfile/Application/UseCases/AddWarehouseProfileRuleUseCase';
 import { ListWarehouseProfileRulesUseCase } from '@modules/WarehouseProfile/Application/UseCases/ListWarehouseProfileRulesUseCase';
 import { RemoveWarehouseProfileRuleUseCase } from '@modules/WarehouseProfile/Application/UseCases/RemoveWarehouseProfileRuleUseCase';
+import { PreviewRuleResolutionUseCase } from '@modules/WarehouseProfile/Application/UseCases/PreviewRuleResolutionUseCase';
 import { WarehouseProfileOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileOrmEntity';
 import { WarehouseProfileAssignmentOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileAssignmentOrmEntity';
 import { RuleGroupOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/RuleGroupOrmEntity';
@@ -64,6 +66,7 @@ import { WarehouseProfileAssignmentController } from '@modules/WarehouseProfile/
 import { RuleGroupController } from '@modules/WarehouseProfile/Presentation/Controllers/RuleGroupController';
 import { RuleDefinitionController } from '@modules/WarehouseProfile/Presentation/Controllers/RuleDefinitionController';
 import { WarehouseProfileRuleController } from '@modules/WarehouseProfile/Presentation/Controllers/WarehouseProfileRuleController';
+import { RulePreviewController } from '@modules/WarehouseProfile/Presentation/Controllers/RulePreviewController';
 
 @Module({
   imports: [
@@ -82,6 +85,7 @@ import { WarehouseProfileRuleController } from '@modules/WarehouseProfile/Presen
     RuleGroupController,
     RuleDefinitionController,
     WarehouseProfileRuleController,
+    RulePreviewController,
   ],
   providers: [
     { provide: WAREHOUSE_PROFILE_REPOSITORY, useClass: WarehouseProfileRepository },
@@ -93,6 +97,7 @@ import { WarehouseProfileRuleController } from '@modules/WarehouseProfile/Presen
     WarehouseProfilePolicyValidator,
     RulePayloadValidator,
     ConditionEvaluator,
+    RuleConflictDetector,
     {
       provide: RULE_RESOLVER,
       useFactory: (
@@ -263,6 +268,12 @@ import { WarehouseProfileRuleController } from '@modules/WarehouseProfile/Presen
       useFactory: (bindings: IWarehouseProfileRuleRepository, profiles: IWarehouseProfileRepository) =>
         new RemoveWarehouseProfileRuleUseCase(bindings, profiles),
       inject: [WAREHOUSE_PROFILE_RULE_REPOSITORY, WAREHOUSE_PROFILE_REPOSITORY],
+    },
+    {
+      provide: PreviewRuleResolutionUseCase,
+      useFactory: (resolver: IRuleResolver, conflictDetector: RuleConflictDetector) =>
+        new PreviewRuleResolutionUseCase(resolver, conflictDetector),
+      inject: [RULE_RESOLVER, RuleConflictDetector],
     },
   ],
   exports: [
