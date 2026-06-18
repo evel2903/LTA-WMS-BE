@@ -34,6 +34,23 @@ import { GetSkuUseCase } from '@modules/MasterData/Application/UseCases/GetSkuUs
 import { GetSkuRuleFactsUseCase } from '@modules/MasterData/Application/UseCases/GetSkuRuleFactsUseCase';
 import { ListSkusUseCase } from '@modules/MasterData/Application/UseCases/ListSkusUseCase';
 import { UpdateSkuUseCase } from '@modules/MasterData/Application/UseCases/UpdateSkuUseCase';
+import { CreatePackDefinitionUseCase } from '@modules/MasterData/Application/UseCases/CreatePackDefinitionUseCase';
+import { GetPackDefinitionUseCase } from '@modules/MasterData/Application/UseCases/GetPackDefinitionUseCase';
+import { ListPackDefinitionsUseCase } from '@modules/MasterData/Application/UseCases/ListPackDefinitionsUseCase';
+import { UpdatePackDefinitionUseCase } from '@modules/MasterData/Application/UseCases/UpdatePackDefinitionUseCase';
+import { CreateUomConversionUseCase } from '@modules/MasterData/Application/UseCases/CreateUomConversionUseCase';
+import { GetUomConversionUseCase } from '@modules/MasterData/Application/UseCases/GetUomConversionUseCase';
+import { ListUomConversionsUseCase } from '@modules/MasterData/Application/UseCases/ListUomConversionsUseCase';
+import { UpdateUomConversionUseCase } from '@modules/MasterData/Application/UseCases/UpdateUomConversionUseCase';
+import { CreateSkuBarcodeUseCase } from '@modules/MasterData/Application/UseCases/CreateSkuBarcodeUseCase';
+import { GetSkuBarcodeUseCase } from '@modules/MasterData/Application/UseCases/GetSkuBarcodeUseCase';
+import { ListSkuBarcodesUseCase } from '@modules/MasterData/Application/UseCases/ListSkuBarcodesUseCase';
+import { ResolveSkuBarcodeUseCase } from '@modules/MasterData/Application/UseCases/ResolveSkuBarcodeUseCase';
+import { UpdateSkuBarcodeUseCase } from '@modules/MasterData/Application/UseCases/UpdateSkuBarcodeUseCase';
+import { CreateItemCoverageUseCase } from '@modules/MasterData/Application/UseCases/CreateItemCoverageUseCase';
+import { GetItemCoverageUseCase } from '@modules/MasterData/Application/UseCases/GetItemCoverageUseCase';
+import { ListItemCoveragesUseCase } from '@modules/MasterData/Application/UseCases/ListItemCoveragesUseCase';
+import { UpdateItemCoverageUseCase } from '@modules/MasterData/Application/UseCases/UpdateItemCoverageUseCase';
 import { ISiteRepository, SITE_REPOSITORY } from '@modules/MasterData/Application/Interfaces/ISiteRepository';
 import {
   IWarehouseRepository,
@@ -51,6 +68,22 @@ import {
 import { IOwnerRepository, OWNER_REPOSITORY } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { IUomRepository, UOM_REPOSITORY } from '@modules/MasterData/Application/Interfaces/IUomRepository';
 import { ISkuRepository, SKU_REPOSITORY } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
+import {
+  IPackDefinitionRepository,
+  PACK_DEFINITION_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IPackDefinitionRepository';
+import {
+  IUomConversionRepository,
+  UOM_CONVERSION_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IUomConversionRepository';
+import {
+  ISkuBarcodeRepository,
+  SKU_BARCODE_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/ISkuBarcodeRepository';
+import {
+  IItemCoverageRepository,
+  ITEM_COVERAGE_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IItemCoverageRepository';
 import { SiteOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/SiteOrmEntity';
 import { WarehouseOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/WarehouseOrmEntity';
 import { ZoneOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ZoneOrmEntity';
@@ -59,6 +92,10 @@ import { LocationOrmEntity } from '@modules/MasterData/Infrastructure/Persistenc
 import { OwnerOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/OwnerOrmEntity';
 import { UomOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/UomOrmEntity';
 import { SkuOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/SkuOrmEntity';
+import { PackDefinitionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/PackDefinitionOrmEntity';
+import { UomConversionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/UomConversionOrmEntity';
+import { SkuBarcodeOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/SkuBarcodeOrmEntity';
+import { ItemCoverageOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ItemCoverageOrmEntity';
 import { SiteRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/SiteRepository';
 import { WarehouseRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/WarehouseRepository';
 import { ZoneRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/ZoneRepository';
@@ -67,6 +104,10 @@ import { LocationRepository } from '@modules/MasterData/Infrastructure/Persisten
 import { OwnerRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/OwnerRepository';
 import { UomRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/UomRepository';
 import { SkuRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/SkuRepository';
+import { PackDefinitionRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/PackDefinitionRepository';
+import { UomConversionRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/UomConversionRepository';
+import { SkuBarcodeRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/SkuBarcodeRepository';
+import { ItemCoverageRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/ItemCoverageRepository';
 import { SiteController } from '@modules/MasterData/Presentation/Controllers/SiteController';
 import { WarehouseController } from '@modules/MasterData/Presentation/Controllers/WarehouseController';
 import { ZoneController } from '@modules/MasterData/Presentation/Controllers/ZoneController';
@@ -75,6 +116,10 @@ import { LocationController } from '@modules/MasterData/Presentation/Controllers
 import { OwnerController } from '@modules/MasterData/Presentation/Controllers/OwnerController';
 import { UomController } from '@modules/MasterData/Presentation/Controllers/UomController';
 import { SkuController } from '@modules/MasterData/Presentation/Controllers/SkuController';
+import { PackDefinitionController } from '@modules/MasterData/Presentation/Controllers/PackDefinitionController';
+import { UomConversionController } from '@modules/MasterData/Presentation/Controllers/UomConversionController';
+import { SkuBarcodeController } from '@modules/MasterData/Presentation/Controllers/SkuBarcodeController';
+import { ItemCoverageController } from '@modules/MasterData/Presentation/Controllers/ItemCoverageController';
 
 @Module({
   imports: [
@@ -87,6 +132,10 @@ import { SkuController } from '@modules/MasterData/Presentation/Controllers/SkuC
       OwnerOrmEntity,
       UomOrmEntity,
       SkuOrmEntity,
+      PackDefinitionOrmEntity,
+      UomConversionOrmEntity,
+      SkuBarcodeOrmEntity,
+      ItemCoverageOrmEntity,
     ]),
   ],
   controllers: [
@@ -98,6 +147,10 @@ import { SkuController } from '@modules/MasterData/Presentation/Controllers/SkuC
     OwnerController,
     UomController,
     SkuController,
+    PackDefinitionController,
+    UomConversionController,
+    SkuBarcodeController,
+    ItemCoverageController,
   ],
   providers: [
     { provide: SITE_REPOSITORY, useClass: SiteRepository },
@@ -108,6 +161,10 @@ import { SkuController } from '@modules/MasterData/Presentation/Controllers/SkuC
     { provide: OWNER_REPOSITORY, useClass: OwnerRepository },
     { provide: UOM_REPOSITORY, useClass: UomRepository },
     { provide: SKU_REPOSITORY, useClass: SkuRepository },
+    { provide: PACK_DEFINITION_REPOSITORY, useClass: PackDefinitionRepository },
+    { provide: UOM_CONVERSION_REPOSITORY, useClass: UomConversionRepository },
+    { provide: SKU_BARCODE_REPOSITORY, useClass: SkuBarcodeRepository },
+    { provide: ITEM_COVERAGE_REPOSITORY, useClass: ItemCoverageRepository },
     {
       provide: CreateSiteUseCase,
       useFactory: (sites: ISiteRepository) => new CreateSiteUseCase(sites),
@@ -294,6 +351,117 @@ import { SkuController } from '@modules/MasterData/Presentation/Controllers/SkuC
         new UpdateSkuUseCase(skus, owners, uoms),
       inject: [SKU_REPOSITORY, OWNER_REPOSITORY, UOM_REPOSITORY],
     },
+    {
+      provide: CreatePackDefinitionUseCase,
+      useFactory: (packDefinitions: IPackDefinitionRepository, skus: ISkuRepository, uoms: IUomRepository) =>
+        new CreatePackDefinitionUseCase(packDefinitions, skus, uoms),
+      inject: [PACK_DEFINITION_REPOSITORY, SKU_REPOSITORY, UOM_REPOSITORY],
+    },
+    {
+      provide: GetPackDefinitionUseCase,
+      useFactory: (packDefinitions: IPackDefinitionRepository) => new GetPackDefinitionUseCase(packDefinitions),
+      inject: [PACK_DEFINITION_REPOSITORY],
+    },
+    {
+      provide: ListPackDefinitionsUseCase,
+      useFactory: (packDefinitions: IPackDefinitionRepository) => new ListPackDefinitionsUseCase(packDefinitions),
+      inject: [PACK_DEFINITION_REPOSITORY],
+    },
+    {
+      provide: UpdatePackDefinitionUseCase,
+      useFactory: (packDefinitions: IPackDefinitionRepository, skus: ISkuRepository, uoms: IUomRepository) =>
+        new UpdatePackDefinitionUseCase(packDefinitions, skus, uoms),
+      inject: [PACK_DEFINITION_REPOSITORY, SKU_REPOSITORY, UOM_REPOSITORY],
+    },
+    {
+      provide: CreateUomConversionUseCase,
+      useFactory: (uomConversions: IUomConversionRepository, skus: ISkuRepository, uoms: IUomRepository) =>
+        new CreateUomConversionUseCase(uomConversions, skus, uoms),
+      inject: [UOM_CONVERSION_REPOSITORY, SKU_REPOSITORY, UOM_REPOSITORY],
+    },
+    {
+      provide: GetUomConversionUseCase,
+      useFactory: (uomConversions: IUomConversionRepository) => new GetUomConversionUseCase(uomConversions),
+      inject: [UOM_CONVERSION_REPOSITORY],
+    },
+    {
+      provide: ListUomConversionsUseCase,
+      useFactory: (uomConversions: IUomConversionRepository) => new ListUomConversionsUseCase(uomConversions),
+      inject: [UOM_CONVERSION_REPOSITORY],
+    },
+    {
+      provide: UpdateUomConversionUseCase,
+      useFactory: (uomConversions: IUomConversionRepository, skus: ISkuRepository, uoms: IUomRepository) =>
+        new UpdateUomConversionUseCase(uomConversions, skus, uoms),
+      inject: [UOM_CONVERSION_REPOSITORY, SKU_REPOSITORY, UOM_REPOSITORY],
+    },
+    {
+      provide: CreateSkuBarcodeUseCase,
+      useFactory: (
+        skuBarcodes: ISkuBarcodeRepository,
+        packDefinitions: IPackDefinitionRepository,
+        skus: ISkuRepository,
+        owners: IOwnerRepository,
+        uoms: IUomRepository,
+      ) => new CreateSkuBarcodeUseCase(skuBarcodes, packDefinitions, skus, owners, uoms),
+      inject: [SKU_BARCODE_REPOSITORY, PACK_DEFINITION_REPOSITORY, SKU_REPOSITORY, OWNER_REPOSITORY, UOM_REPOSITORY],
+    },
+    {
+      provide: GetSkuBarcodeUseCase,
+      useFactory: (skuBarcodes: ISkuBarcodeRepository) => new GetSkuBarcodeUseCase(skuBarcodes),
+      inject: [SKU_BARCODE_REPOSITORY],
+    },
+    {
+      provide: ListSkuBarcodesUseCase,
+      useFactory: (skuBarcodes: ISkuBarcodeRepository) => new ListSkuBarcodesUseCase(skuBarcodes),
+      inject: [SKU_BARCODE_REPOSITORY],
+    },
+    {
+      provide: ResolveSkuBarcodeUseCase,
+      useFactory: (skuBarcodes: ISkuBarcodeRepository) => new ResolveSkuBarcodeUseCase(skuBarcodes),
+      inject: [SKU_BARCODE_REPOSITORY],
+    },
+    {
+      provide: UpdateSkuBarcodeUseCase,
+      useFactory: (
+        skuBarcodes: ISkuBarcodeRepository,
+        packDefinitions: IPackDefinitionRepository,
+        skus: ISkuRepository,
+        owners: IOwnerRepository,
+        uoms: IUomRepository,
+      ) => new UpdateSkuBarcodeUseCase(skuBarcodes, packDefinitions, skus, owners, uoms),
+      inject: [SKU_BARCODE_REPOSITORY, PACK_DEFINITION_REPOSITORY, SKU_REPOSITORY, OWNER_REPOSITORY, UOM_REPOSITORY],
+    },
+    {
+      provide: CreateItemCoverageUseCase,
+      useFactory: (
+        itemCoverages: IItemCoverageRepository,
+        skus: ISkuRepository,
+        warehouses: IWarehouseRepository,
+        owners: IOwnerRepository,
+      ) => new CreateItemCoverageUseCase(itemCoverages, skus, warehouses, owners),
+      inject: [ITEM_COVERAGE_REPOSITORY, SKU_REPOSITORY, WAREHOUSE_REPOSITORY, OWNER_REPOSITORY],
+    },
+    {
+      provide: GetItemCoverageUseCase,
+      useFactory: (itemCoverages: IItemCoverageRepository) => new GetItemCoverageUseCase(itemCoverages),
+      inject: [ITEM_COVERAGE_REPOSITORY],
+    },
+    {
+      provide: ListItemCoveragesUseCase,
+      useFactory: (itemCoverages: IItemCoverageRepository) => new ListItemCoveragesUseCase(itemCoverages),
+      inject: [ITEM_COVERAGE_REPOSITORY],
+    },
+    {
+      provide: UpdateItemCoverageUseCase,
+      useFactory: (
+        itemCoverages: IItemCoverageRepository,
+        skus: ISkuRepository,
+        warehouses: IWarehouseRepository,
+        owners: IOwnerRepository,
+      ) => new UpdateItemCoverageUseCase(itemCoverages, skus, warehouses, owners),
+      inject: [ITEM_COVERAGE_REPOSITORY, SKU_REPOSITORY, WAREHOUSE_REPOSITORY, OWNER_REPOSITORY],
+    },
   ],
   exports: [
     SITE_REPOSITORY,
@@ -304,6 +472,10 @@ import { SkuController } from '@modules/MasterData/Presentation/Controllers/SkuC
     OWNER_REPOSITORY,
     UOM_REPOSITORY,
     SKU_REPOSITORY,
+    PACK_DEFINITION_REPOSITORY,
+    UOM_CONVERSION_REPOSITORY,
+    SKU_BARCODE_REPOSITORY,
+    ITEM_COVERAGE_REPOSITORY,
   ],
 })
 export class MasterDataModule {}

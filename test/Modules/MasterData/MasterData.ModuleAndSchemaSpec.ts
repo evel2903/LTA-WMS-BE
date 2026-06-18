@@ -9,9 +9,15 @@ import { LocationOrmEntity } from '@modules/MasterData/Infrastructure/Persistenc
 import { OwnerOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/OwnerOrmEntity';
 import { UomOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/UomOrmEntity';
 import { SkuOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/SkuOrmEntity';
+import { SkuBarcodeOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/SkuBarcodeOrmEntity';
+import { PackDefinitionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/PackDefinitionOrmEntity';
+import { UomConversionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/UomConversionOrmEntity';
+import { ItemCoverageOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ItemCoverageOrmEntity';
 import { CreateMasterDataSiteWarehouseZone1781622000000 } from '@shared/Database/Migrations/1781622000000-CreateMasterDataSiteWarehouseZone';
 import { CreateLocationProfileAndLocation1781623000000 } from '@shared/Database/Migrations/1781623000000-CreateLocationProfileAndLocation';
 import { CreateOwnerUomSku1781624000000 } from '@shared/Database/Migrations/1781624000000-CreateOwnerUomSku';
+import { CreateSkuSupportTables1781625000000 } from '@shared/Database/Migrations/1781625000000-CreateSkuSupportTables';
+import { AddUomConversionOverlapExclusion1781625100000 } from '@shared/Database/Migrations/1781625100000-AddUomConversionOverlapExclusion';
 import { getMetadataArgsStorage } from 'typeorm';
 
 describe('MasterData module and schema registration', () => {
@@ -35,6 +41,17 @@ describe('MasterData module and schema registration', () => {
   it('registers Owner, UOM and SKU ORM entities in TypeOrmDataSource', () => {
     expect(TypeOrmDataSource.options.entities).toEqual(
       expect.arrayContaining([OwnerOrmEntity, UomOrmEntity, SkuOrmEntity]),
+    );
+  });
+
+  it('registers SKU support ORM entities in TypeOrmDataSource', () => {
+    expect(TypeOrmDataSource.options.entities).toEqual(
+      expect.arrayContaining([
+        SkuBarcodeOrmEntity,
+        PackDefinitionOrmEntity,
+        UomConversionOrmEntity,
+        ItemCoverageOrmEntity,
+      ]),
     );
   });
 
@@ -111,5 +128,53 @@ describe('MasterData module and schema registration', () => {
     expect(sql).toContain('foreign key ("default_owner_id") references "owners"("id")');
     expect(sql).toContain('foreign key ("base_uom_id") references "uoms"("id")');
     expect(sql).toContain('foreign key ("inventory_uom_id") references "uoms"("id")');
+  });
+
+  it('provides a migration for SKU support tables, FKs and scoped unique constraints', async () => {
+    const migration = new CreateSkuSupportTables1781625000000();
+    const queries: string[] = [];
+    const queryRunner = {
+      query: jest.fn(async (sql: string) => {
+        queries.push(sql);
+      }),
+    };
+
+    await migration.up(queryRunner as never);
+
+    const sql = queries.join('\n').toLowerCase();
+    expect(sql).toContain('create table "pack_definitions"');
+    expect(sql).toContain('create table "uom_conversions"');
+    expect(sql).toContain('create table "sku_barcodes"');
+    expect(sql).toContain('create table "item_coverages"');
+    expect(sql).toContain('unique ("sku_id", "pack_code")');
+    expect(sql).toContain('unique ("sku_id", "from_uom_id", "to_uom_id", "effective_from")');
+    expect(sql).toContain('where owner_id is null');
+    expect(sql).toContain('where owner_id is not null');
+    expect(sql).toContain('foreign key ("sku_id") references "skus"("id")');
+    expect(sql).toContain('foreign key ("warehouse_id") references "warehouses"("id")');
+  });
+
+  it('provides DB-level protection against active UOM conversion window overlap', async () => {
+    const migration = new AddUomConversionOverlapExclusion1781625100000();
+    const queries: string[] = [];
+    const queryRunner = {
+      query: jest.fn(async (sql: string) => {
+        queries.push(sql);
+      }),
+    };
+
+    await migration.up(queryRunner as never);
+
+    const sql = queries.join('\n').toLowerCase();
+    expect(sql).toContain('create extension if not exists btree_gist');
+    expect(sql).toContain('add constraint "ex_uom_conversions_active_window_overlap"');
+    expect(sql).toContain('exclude using gist');
+    expect(sql).toContain('"sku_id" with =');
+    expect(sql).toContain('"from_uom_id" with =');
+    expect(sql).toContain('"to_uom_id" with =');
+    expect(sql).toContain(
+      'tstzrange("effective_from", coalesce("effective_to", \'infinity\'::timestamptz), \'[]\') with &&',
+    );
+    expect(sql).toContain("where (status = 'active')");
   });
 });

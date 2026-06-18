@@ -12,6 +12,10 @@ import { LocationOrmEntity } from '@modules/MasterData/Infrastructure/Persistenc
 import { OwnerOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/OwnerOrmEntity';
 import { UomOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/UomOrmEntity';
 import { SkuOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/SkuOrmEntity';
+import { PackDefinitionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/PackDefinitionOrmEntity';
+import { UomConversionOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/UomConversionOrmEntity';
+import { SkuBarcodeOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/SkuBarcodeOrmEntity';
+import { ItemCoverageOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ItemCoverageOrmEntity';
 
 const env = GetEnv();
 
@@ -34,6 +38,10 @@ export default new DataSource({
     OwnerOrmEntity,
     UomOrmEntity,
     SkuOrmEntity,
+    PackDefinitionOrmEntity,
+    UomConversionOrmEntity,
+    SkuBarcodeOrmEntity,
+    ItemCoverageOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',
