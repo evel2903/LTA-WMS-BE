@@ -28,7 +28,10 @@ import {
   IWarehouseProfileRuleRepository,
   WAREHOUSE_PROFILE_RULE_REPOSITORY,
 } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRuleRepository';
+import { RULE_RESOLVER } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
 import { ScopeKeyService } from '@modules/WarehouseProfile/Application/Services/ScopeKeyService';
+import { RuleResolver } from '@modules/WarehouseProfile/Application/Services/RuleResolver';
+import { ConditionEvaluator } from '@modules/WarehouseProfile/Domain/Services/ConditionEvaluator';
 import { WarehouseProfilePolicyValidator } from '@modules/WarehouseProfile/Application/Services/WarehouseProfilePolicyValidator';
 import { RulePayloadValidator } from '@modules/WarehouseProfile/Application/Services/RulePayloadValidator';
 import { CreateWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/CreateWarehouseProfileUseCase';
@@ -89,6 +92,24 @@ import { WarehouseProfileRuleController } from '@modules/WarehouseProfile/Presen
     ScopeKeyService,
     WarehouseProfilePolicyValidator,
     RulePayloadValidator,
+    ConditionEvaluator,
+    {
+      provide: RULE_RESOLVER,
+      useFactory: (
+        profiles: IWarehouseProfileRepository,
+        definitions: IRuleDefinitionRepository,
+        bindings: IWarehouseProfileRuleRepository,
+        groups: IRuleGroupRepository,
+        conditionEvaluator: ConditionEvaluator,
+      ) => new RuleResolver(profiles, definitions, bindings, groups, conditionEvaluator),
+      inject: [
+        WAREHOUSE_PROFILE_REPOSITORY,
+        RULE_DEFINITION_REPOSITORY,
+        WAREHOUSE_PROFILE_RULE_REPOSITORY,
+        RULE_GROUP_REPOSITORY,
+        ConditionEvaluator,
+      ],
+    },
     {
       provide: CreateWarehouseProfileUseCase,
       useFactory: (
@@ -250,6 +271,7 @@ import { WarehouseProfileRuleController } from '@modules/WarehouseProfile/Presen
     RULE_GROUP_REPOSITORY,
     RULE_DEFINITION_REPOSITORY,
     WAREHOUSE_PROFILE_RULE_REPOSITORY,
+    RULE_RESOLVER,
   ],
 })
 export class WarehouseProfileModule {}

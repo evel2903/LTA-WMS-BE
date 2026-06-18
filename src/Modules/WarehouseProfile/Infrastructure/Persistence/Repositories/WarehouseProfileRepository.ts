@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { FindOptionsWhere, IsNull, LessThanOrEqual, MoreThan, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   IWarehouseProfileRepository,
   WarehouseProfileListFilter,
 } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
 import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileEntity';
+import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/WarehouseProfileStatus';
 import { WarehouseProfileOrmMapper } from '@modules/WarehouseProfile/Infrastructure/Mappers/WarehouseProfileOrmMapper';
 import { WarehouseProfileOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileOrmEntity';
 
@@ -68,6 +69,23 @@ export class WarehouseProfileRepository implements IWarehouseProfileRepository {
       Items: items.map(WarehouseProfileOrmMapper.ToDomain),
       TotalItems: total,
     };
+  }
+
+  public async ListActiveByScope(evaluatedAt: Date): Promise<WarehouseProfileEntity[]> {
+    const activeWindow: FindOptionsWhere<WarehouseProfileOrmEntity> = {
+      Status: WarehouseProfileStatus.Active,
+      EffectiveFrom: LessThanOrEqual(evaluatedAt),
+    };
+
+    const items = await this.profiles.find({
+      where: [
+        { ...activeWindow, EffectiveTo: IsNull() },
+        { ...activeWindow, EffectiveTo: MoreThan(evaluatedAt) },
+      ],
+      order: { Version: 'DESC', EffectiveFrom: 'DESC' },
+    });
+
+    return items.map(WarehouseProfileOrmMapper.ToDomain);
   }
 
   private HandleUniqueViolation(error: unknown): void {

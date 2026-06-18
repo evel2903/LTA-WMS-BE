@@ -19,4 +19,10 @@ export interface IWarehouseProfileRepository {
     take: number,
     filter?: WarehouseProfileListFilter,
   ): Promise<{ Items: WarehouseProfileEntity[]; TotalItems: number }>;
+  /**
+   * Returns every ACTIVE profile whose effective window contains `evaluatedAt`.
+   * Scope-axis wildcard matching and most-specific selection happen in the resolver
+   * (B3) so the port stays a thin boundary; B5 will enforce one active profile per scope.
+   */
+  ListActiveByScope(evaluatedAt: Date): Promise<WarehouseProfileEntity[]>;
 }

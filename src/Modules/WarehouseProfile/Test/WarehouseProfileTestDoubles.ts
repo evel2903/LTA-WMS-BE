@@ -19,6 +19,7 @@ import {
 } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileAssignmentRepository';
 import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileEntity';
 import { WarehouseProfileAssignmentEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileAssignmentEntity';
+import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/WarehouseProfileStatus';
 
 const Now = new Date('2026-01-01T00:00:00.000Z');
 
@@ -57,6 +58,17 @@ export class InMemoryWarehouseProfileRepository implements IWarehouseProfileRepo
       items = items.filter((profile) => profile.WarehouseTypeCode === filter.WarehouseTypeCode);
     if (filter.WarehouseId) items = items.filter((profile) => profile.WarehouseId === filter.WarehouseId);
     return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+
+  public async ListActiveByScope(evaluatedAt: Date): Promise<WarehouseProfileEntity[]> {
+    return [...this.profiles.values()]
+      .filter(
+        (profile) =>
+          profile.Status === WarehouseProfileStatus.Active &&
+          profile.EffectiveFrom.getTime() <= evaluatedAt.getTime() &&
+          (profile.EffectiveTo === null || profile.EffectiveTo.getTime() > evaluatedAt.getTime()),
+      )
+      .sort((a, b) => b.Version - a.Version || b.EffectiveFrom.getTime() - a.EffectiveFrom.getTime());
   }
 }
 
