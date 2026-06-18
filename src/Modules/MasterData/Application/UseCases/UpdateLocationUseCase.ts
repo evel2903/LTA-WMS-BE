@@ -133,10 +133,19 @@ export class UpdateLocationUseCase {
       throw new BusinessRuleException('Parent location must belong to the same zone');
     }
 
+    // Track every node visited while walking up the ancestor chain. This catches
+    // both a cycle through the current location and any pre-existing cycle in the
+    // stored hierarchy that does not pass through it (e.g. A -> B -> A), preventing
+    // an infinite loop on corrupted data.
+    const visited = new Set<string>([parent.Id]);
     while (parent.ParentLocationId) {
       if (parent.ParentLocationId === currentLocationId) {
         throw new BusinessRuleException('Location hierarchy cannot contain cycles');
       }
+      if (visited.has(parent.ParentLocationId)) {
+        throw new BusinessRuleException('Location hierarchy cannot contain cycles');
+      }
+      visited.add(parent.ParentLocationId);
       parent = await this.GetAncestor(parent.ParentLocationId);
     }
   }

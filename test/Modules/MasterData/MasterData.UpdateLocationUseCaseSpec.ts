@@ -273,6 +273,27 @@ describe('UpdateLocationUseCase', () => {
     );
   });
 
+  it('does not hang and throws a deterministic error when ancestor chain has an independent cycle', async () => {
+    const { locations, useCase } = buildUseCase();
+    // Current location is independent of the corrupted chain.
+    const current = Location({ Id: 'location-1', ParentLocationId: null });
+    // New parent 'parent-a' sits on a pre-existing cycle in the DB that does NOT
+    // pass through location-1: parent-a -> parent-b -> parent-a.
+    const parentA = Location({ Id: 'parent-a', ParentLocationId: 'parent-b' });
+    const parentB = Location({ Id: 'parent-b', ParentLocationId: 'parent-a' });
+    locations.FindById.mockImplementation(async (id) => {
+      if (id === 'location-1') return current;
+      if (id === 'parent-a') return parentA;
+      if (id === 'parent-b') return parentB;
+      return null;
+    });
+
+    await expect(useCase.Execute({ Id: 'location-1', ParentLocationId: 'parent-a' })).rejects.toBeInstanceOf(
+      BusinessRuleException,
+    );
+    expect(locations.Update).not.toHaveBeenCalled();
+  });
+
   it('enforces active profile policy constraints when updating location attributes', async () => {
     const { locations, profiles, useCase } = buildUseCase();
     locations.FindById.mockResolvedValue(Location({ Id: 'location-1', CapacityQty: null }));

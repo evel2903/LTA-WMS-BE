@@ -66,6 +66,20 @@ describe('E2E LocationProfileController (no DB)', () => {
     expect(createExecute).not.toHaveBeenCalled();
   });
 
+  it('POST /location-profiles rejects an empty LocationType at request validation', async () => {
+    await request(app.getHttpServer())
+      .post('/location-profiles')
+      .send({
+        ProfileCode: 'BIN-DRY',
+        ProfileName: 'Dry Bin',
+        LocationType: '',
+        Status: MasterDataStatus.Active,
+      })
+      .expect(400);
+
+    expect(createExecute).not.toHaveBeenCalled();
+  });
+
   it('POST /location-profiles calls use case on valid body', async () => {
     createExecute.mockResolvedValue({ Id: 'profile-1', ProfileCode: 'BIN-DRY' });
 

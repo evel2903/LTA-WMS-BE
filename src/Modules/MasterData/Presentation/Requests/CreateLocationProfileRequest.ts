@@ -13,6 +13,7 @@ export class CreateLocationProfileRequest {
   public ProfileName!: string;
 
   @IsString()
+  @IsNotEmpty()
   @MaxLength(50)
   public LocationType!: string;
 
