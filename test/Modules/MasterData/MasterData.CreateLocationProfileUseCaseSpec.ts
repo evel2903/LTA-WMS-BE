@@ -92,6 +92,23 @@ describe('LocationProfile use cases', () => {
     ).rejects.toBeInstanceOf(BusinessRuleException);
   });
 
+  it('throws BusinessRuleException when an active profile has a whitespace-only LocationType', async () => {
+    const profiles = new FakeLocationProfileRepository();
+    profiles.FindByCode.mockResolvedValue(null);
+
+    const useCase = new CreateLocationProfileUseCase(profiles);
+
+    await expect(
+      useCase.Execute({
+        ProfileCode: 'BIN-DRY',
+        ProfileName: 'Dry Bin',
+        LocationType: '   ',
+        Status: MasterDataStatus.Active,
+      }),
+    ).rejects.toBeInstanceOf(BusinessRuleException);
+    expect(profiles.Create).not.toHaveBeenCalled();
+  });
+
   it('updates a profile and keeps policy fields defaulted when omitted', async () => {
     const profiles = new FakeLocationProfileRepository();
     profiles.FindById.mockResolvedValue(Profile({ CapacityPolicy: { RequireCapacityQty: true } }));
