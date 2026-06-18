@@ -18,6 +18,7 @@ import { EmailModule } from '@modules/Email/EmailModule';
 import { HealthModule } from '@modules/Health/HealthModule';
 import { JobsModule } from '@modules/Jobs/JobsModule';
 import { MasterDataModule } from '@modules/MasterData/MasterDataModule';
+import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfileModule';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { MasterDataModule } from '@modules/MasterData/MasterDataModule';
     CommonModule,
     UserModule,
     MasterDataModule,
+    WarehouseProfileModule,
     AuthenticationModule,
     FileUploadModule,
     CacheModule,
