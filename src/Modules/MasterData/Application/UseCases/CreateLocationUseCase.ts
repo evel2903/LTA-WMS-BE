@@ -32,13 +32,17 @@ export class CreateLocationUseCase {
   ) {}
 
   public async Execute(request: CreateLocationDto, context: AuditContext = SystemAuditContext): Promise<LocationDto> {
+    let reasonCodeId: string | null = null;
     if (this.ownershipPolicy) {
-      await this.ownershipPolicy.Enforce({
+      const decision = await this.ownershipPolicy.Enforce({
         ObjectGroup: MasterDataObjectGroup.WarehouseLocation,
+        ObjectType: ObjectType.Location,
         Action: ActionCode.Create,
+        ReasonCode: request.ReasonCode ?? null,
         SourceSystem: request.SourceSystem ?? null,
         ReferenceId: request.ReferenceId ?? null,
       });
+      reasonCodeId = decision.ReasonCodeId ?? null;
     }
 
     const warehouse = await this.warehouseRepository.FindById(request.WarehouseId);
@@ -121,6 +125,7 @@ export class CreateLocationUseCase {
         ObjectType: ObjectType.Location,
         ObjectId: created.Id,
         ObjectCode: created.LocationCode,
+        ReasonCodeId: reasonCodeId,
         AfterJson: LocationDtoMapper.ToDto(created) as unknown as Record<string, unknown>,
         WarehouseId: created.WarehouseId,
       });

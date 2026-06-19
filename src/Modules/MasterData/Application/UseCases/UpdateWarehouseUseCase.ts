@@ -35,13 +35,17 @@ export class UpdateWarehouseUseCase {
   ) {}
 
   public async Execute(request: UpdateWarehouseDto, context: AuditContext = SystemAuditContext): Promise<WarehouseDto> {
+    let reasonCodeId: string | null = null;
     if (this.ownershipPolicy) {
-      await this.ownershipPolicy.Enforce({
+      const decision = await this.ownershipPolicy.Enforce({
         ObjectGroup: MasterDataObjectGroup.WarehouseLocation,
+        ObjectType: ObjectType.Warehouse,
         Action: ActionCode.Update,
+        ReasonCode: request.ReasonCode ?? null,
         SourceSystem: request.SourceSystem ?? null,
         ReferenceId: request.ReferenceId ?? null,
       });
+      reasonCodeId = decision.ReasonCodeId ?? null;
     }
 
     const warehouse = await this.warehouseRepository.FindById(request.Id);
@@ -87,6 +91,7 @@ export class UpdateWarehouseUseCase {
         ObjectCode: updated.WarehouseCode,
         BeforeJson: before,
         AfterJson: snapshot(updated),
+        ReasonCodeId: reasonCodeId,
         WarehouseId: updated.Id,
       });
 

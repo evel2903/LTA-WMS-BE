@@ -8,4 +8,5 @@ export interface CreateOwnerDto {
   VisibilityScope?: Record<string, unknown>;
   SourceSystem?: string;
   ReferenceId?: string;
+  ReasonCode?: string | null;
 }

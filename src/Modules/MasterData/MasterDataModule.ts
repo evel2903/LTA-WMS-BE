@@ -10,6 +10,10 @@ import {
   IPermissionChecker,
   PERMISSION_CHECKER,
 } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import {
+  IReasonCodeCatalog,
+  REASON_CODE_CATALOG,
+} from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
 import { CreateSiteUseCase } from '@modules/MasterData/Application/UseCases/CreateSiteUseCase';
 import { GetSiteByIdUseCase } from '@modules/MasterData/Application/UseCases/GetSiteByIdUseCase';
 import { ListSitesUseCase } from '@modules/MasterData/Application/UseCases/ListSitesUseCase';
@@ -222,8 +226,9 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     { provide: MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY, useClass: MasterDataOwnershipPolicyRepository },
     {
       provide: MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
-      useFactory: (policies: IMasterDataOwnershipPolicyRepository) => new MasterDataOwnershipPolicyService(policies),
-      inject: [MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY],
+      useFactory: (policies: IMasterDataOwnershipPolicyRepository, reasonCatalog: IReasonCodeCatalog) =>
+        new MasterDataOwnershipPolicyService(policies, reasonCatalog),
+      inject: [MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY, REASON_CODE_CATALOG],
     },
     InventoryDimensionKeyService,
     Tier1MasterDataChecklistService,

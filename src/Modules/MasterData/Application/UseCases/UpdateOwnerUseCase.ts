@@ -24,13 +24,17 @@ export class UpdateOwnerUseCase {
   ) {}
 
   public async Execute(request: UpdateOwnerDto, context: AuditContext = SystemAuditContext): Promise<OwnerDto> {
+    let reasonCodeId: string | null = null;
     if (this.ownershipPolicy) {
-      await this.ownershipPolicy.Enforce({
+      const decision = await this.ownershipPolicy.Enforce({
         ObjectGroup: MasterDataObjectGroup.OwnerCustomerSupplier,
+        ObjectType: ObjectType.Owner,
         Action: ActionCode.Update,
+        ReasonCode: request.ReasonCode ?? null,
         SourceSystem: request.SourceSystem ?? null,
         ReferenceId: request.ReferenceId ?? null,
       });
+      reasonCodeId = decision.ReasonCodeId ?? null;
     }
 
     const owner = await this.ownerRepository.FindById(request.Id);
@@ -61,6 +65,7 @@ export class UpdateOwnerUseCase {
         ObjectType: ObjectType.Owner,
         ObjectId: updated.Id,
         ObjectCode: updated.OwnerCode,
+        ReasonCodeId: reasonCodeId,
         BeforeJson: before,
         AfterJson: OwnerDtoMapper.ToDto(updated) as unknown as Record<string, unknown>,
         OwnerId: updated.Id,

@@ -28,13 +28,17 @@ export class CreateLocationProfileUseCase {
     request: CreateLocationProfileDto,
     context: AuditContext = SystemAuditContext,
   ): Promise<LocationProfileDto> {
+    let reasonCodeId: string | null = null;
     if (this.ownershipPolicy) {
-      await this.ownershipPolicy.Enforce({
+      const decision = await this.ownershipPolicy.Enforce({
         ObjectGroup: MasterDataObjectGroup.LocationProfile,
+        ObjectType: ObjectType.LocationProfile,
         Action: ActionCode.Create,
+        ReasonCode: request.ReasonCode ?? null,
         SourceSystem: request.SourceSystem ?? null,
         ReferenceId: request.ReferenceId ?? null,
       });
+      reasonCodeId = decision.ReasonCodeId ?? null;
     }
 
     if (request.Status === MasterDataStatus.Active && request.LocationType.trim().length === 0) {
@@ -71,6 +75,7 @@ export class CreateLocationProfileUseCase {
         ObjectType: ObjectType.LocationProfile,
         ObjectId: created.Id,
         ObjectCode: created.ProfileCode,
+        ReasonCodeId: reasonCodeId,
         AfterJson: LocationProfileDtoMapper.ToDto(created) as unknown as Record<string, unknown>,
       });
 

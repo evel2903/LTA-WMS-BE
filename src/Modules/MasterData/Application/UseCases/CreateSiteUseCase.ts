@@ -25,13 +25,17 @@ export class CreateSiteUseCase {
   ) {}
 
   public async Execute(request: CreateSiteDto, context: AuditContext = SystemAuditContext): Promise<SiteDto> {
+    let reasonCodeId: string | null = null;
     if (this.ownershipPolicy) {
-      await this.ownershipPolicy.Enforce({
+      const decision = await this.ownershipPolicy.Enforce({
         ObjectGroup: MasterDataObjectGroup.WarehouseLocation,
+        ObjectType: ObjectType.Site,
         Action: ActionCode.Create,
+        ReasonCode: request.ReasonCode ?? null,
         SourceSystem: request.SourceSystem ?? null,
         ReferenceId: request.ReferenceId ?? null,
       });
+      reasonCodeId = decision.ReasonCodeId ?? null;
     }
 
     const existing = await this.siteRepository.FindByCode(request.SiteCode);
@@ -57,6 +61,7 @@ export class CreateSiteUseCase {
         ObjectType: ObjectType.Site,
         ObjectId: created.Id,
         ObjectCode: created.SiteCode,
+        ReasonCodeId: reasonCodeId,
         AfterJson: SiteDtoMapper.ToDto(created) as unknown as Record<string, unknown>,
       });
 

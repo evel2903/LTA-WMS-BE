@@ -30,13 +30,17 @@ export class CreateWarehouseUseCase {
   ) {}
 
   public async Execute(request: CreateWarehouseDto, context: AuditContext = SystemAuditContext): Promise<WarehouseDto> {
+    let reasonCodeId: string | null = null;
     if (this.ownershipPolicy) {
-      await this.ownershipPolicy.Enforce({
+      const decision = await this.ownershipPolicy.Enforce({
         ObjectGroup: MasterDataObjectGroup.WarehouseLocation,
+        ObjectType: ObjectType.Warehouse,
         Action: ActionCode.Create,
+        ReasonCode: request.ReasonCode ?? null,
         SourceSystem: request.SourceSystem ?? null,
         ReferenceId: request.ReferenceId ?? null,
       });
+      reasonCodeId = decision.ReasonCodeId ?? null;
     }
 
     const site = await this.siteRepository.FindById(request.SiteId);
@@ -80,6 +84,7 @@ export class CreateWarehouseUseCase {
           WarehouseTypeCode: created.WarehouseTypeCode,
           Status: created.Status,
         },
+        ReasonCodeId: reasonCodeId,
         WarehouseId: created.Id,
       });
 

@@ -27,13 +27,17 @@ export class UpdateLocationProfileUseCase {
     request: UpdateLocationProfileDto,
     context: AuditContext = SystemAuditContext,
   ): Promise<LocationProfileDto> {
+    let reasonCodeId: string | null = null;
     if (this.ownershipPolicy) {
-      await this.ownershipPolicy.Enforce({
+      const decision = await this.ownershipPolicy.Enforce({
         ObjectGroup: MasterDataObjectGroup.LocationProfile,
+        ObjectType: ObjectType.LocationProfile,
         Action: ActionCode.Update,
+        ReasonCode: request.ReasonCode ?? null,
         SourceSystem: request.SourceSystem ?? null,
         ReferenceId: request.ReferenceId ?? null,
       });
+      reasonCodeId = decision.ReasonCodeId ?? null;
     }
 
     const profile = await this.locationProfileRepository.FindById(request.Id);
@@ -80,6 +84,7 @@ export class UpdateLocationProfileUseCase {
         ObjectType: ObjectType.LocationProfile,
         ObjectId: updated.Id,
         ObjectCode: updated.ProfileCode,
+        ReasonCodeId: reasonCodeId,
         BeforeJson: before,
         AfterJson: LocationProfileDtoMapper.ToDto(updated) as unknown as Record<string, unknown>,
       });

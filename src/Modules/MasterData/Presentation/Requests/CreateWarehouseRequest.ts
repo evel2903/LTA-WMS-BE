@@ -39,4 +39,9 @@ export class CreateWarehouseRequest {
   @IsString()
   @MaxLength(100)
   public ReferenceId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  public ReasonCode?: string;
 }

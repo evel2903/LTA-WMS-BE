@@ -9,4 +9,5 @@ export class CreateWarehouseDto {
   public Timezone?: string;
   public SourceSystem?: string;
   public ReferenceId?: string;
+  public ReasonCode?: string | null;
 }

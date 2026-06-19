@@ -6,4 +6,5 @@ export class CreateSiteDto {
   public Status!: MasterDataStatus;
   public SourceSystem?: string;
   public ReferenceId?: string;
+  public ReasonCode?: string | null;
 }

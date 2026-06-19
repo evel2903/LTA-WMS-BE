@@ -24,13 +24,17 @@ export class UpdateSiteUseCase {
   ) {}
 
   public async Execute(request: UpdateSiteDto, context: AuditContext = SystemAuditContext): Promise<SiteDto> {
+    let reasonCodeId: string | null = null;
     if (this.ownershipPolicy) {
-      await this.ownershipPolicy.Enforce({
+      const decision = await this.ownershipPolicy.Enforce({
         ObjectGroup: MasterDataObjectGroup.WarehouseLocation,
+        ObjectType: ObjectType.Site,
         Action: ActionCode.Update,
+        ReasonCode: request.ReasonCode ?? null,
         SourceSystem: request.SourceSystem ?? null,
         ReferenceId: request.ReferenceId ?? null,
       });
+      reasonCodeId = decision.ReasonCodeId ?? null;
     }
 
     const site = await this.siteRepository.FindById(request.Id);
@@ -59,6 +63,7 @@ export class UpdateSiteUseCase {
         ObjectType: ObjectType.Site,
         ObjectId: updated.Id,
         ObjectCode: updated.SiteCode,
+        ReasonCodeId: reasonCodeId,
         BeforeJson: before,
         AfterJson: SiteDtoMapper.ToDto(updated) as unknown as Record<string, unknown>,
       });

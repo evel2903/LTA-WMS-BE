@@ -24,4 +24,5 @@ export class CreateLocationDto {
   public PutawaySequence?: number | null;
   public SourceSystem?: string | null;
   public ReferenceId?: string | null;
+  public ReasonCode?: string | null;
 }

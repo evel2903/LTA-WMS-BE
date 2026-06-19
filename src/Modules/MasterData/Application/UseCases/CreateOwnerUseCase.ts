@@ -26,13 +26,17 @@ export class CreateOwnerUseCase {
   ) {}
 
   public async Execute(request: CreateOwnerDto, context: AuditContext = SystemAuditContext): Promise<OwnerDto> {
+    let reasonCodeId: string | null = null;
     if (this.ownershipPolicy) {
-      await this.ownershipPolicy.Enforce({
+      const decision = await this.ownershipPolicy.Enforce({
         ObjectGroup: MasterDataObjectGroup.OwnerCustomerSupplier,
+        ObjectType: ObjectType.Owner,
         Action: ActionCode.Create,
+        ReasonCode: request.ReasonCode ?? null,
         SourceSystem: request.SourceSystem ?? null,
         ReferenceId: request.ReferenceId ?? null,
       });
+      reasonCodeId = decision.ReasonCodeId ?? null;
     }
 
     const existing = await this.ownerRepository.FindByCode(request.OwnerCode);
@@ -60,6 +64,7 @@ export class CreateOwnerUseCase {
         ObjectType: ObjectType.Owner,
         ObjectId: created.Id,
         ObjectCode: created.OwnerCode,
+        ReasonCodeId: reasonCodeId,
         AfterJson: OwnerDtoMapper.ToDto(created) as unknown as Record<string, unknown>,
         OwnerId: created.Id,
       });

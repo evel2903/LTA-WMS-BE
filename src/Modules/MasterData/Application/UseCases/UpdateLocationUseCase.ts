@@ -31,13 +31,17 @@ export class UpdateLocationUseCase {
   ) {}
 
   public async Execute(request: UpdateLocationDto, context: AuditContext = SystemAuditContext): Promise<LocationDto> {
+    let reasonCodeId: string | null = null;
     if (this.ownershipPolicy) {
-      await this.ownershipPolicy.Enforce({
+      const decision = await this.ownershipPolicy.Enforce({
         ObjectGroup: MasterDataObjectGroup.WarehouseLocation,
+        ObjectType: ObjectType.Location,
         Action: ActionCode.Update,
+        ReasonCode: request.ReasonCode ?? null,
         SourceSystem: request.SourceSystem ?? null,
         ReferenceId: request.ReferenceId ?? null,
       });
+      reasonCodeId = decision.ReasonCodeId ?? null;
     }
 
     const location = await this.locationRepository.FindById(request.Id);
@@ -130,6 +134,7 @@ export class UpdateLocationUseCase {
         ObjectType: ObjectType.Location,
         ObjectId: updated.Id,
         ObjectCode: updated.LocationCode,
+        ReasonCodeId: reasonCodeId,
         BeforeJson: before,
         AfterJson: LocationDtoMapper.ToDto(updated) as unknown as Record<string, unknown>,
         WarehouseId: updated.WarehouseId,
