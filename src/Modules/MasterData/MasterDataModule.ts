@@ -1,6 +1,11 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccessControlModule } from '@modules/AccessControl/AccessControlModule';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import {
+  MasterDataOwnershipPolicyService,
+  MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+} from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
 import {
   IPermissionChecker,
   PERMISSION_CHECKER,
@@ -215,6 +220,11 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     { provide: INVENTORY_DIMENSION_REPOSITORY, useClass: InventoryDimensionRepository },
     { provide: INVENTORY_BALANCE_REPOSITORY, useClass: InventoryBalanceRepository },
     { provide: MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY, useClass: MasterDataOwnershipPolicyRepository },
+    {
+      provide: MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+      useFactory: (policies: IMasterDataOwnershipPolicyRepository) => new MasterDataOwnershipPolicyService(policies),
+      inject: [MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY],
+    },
     InventoryDimensionKeyService,
     Tier1MasterDataChecklistService,
     {
@@ -239,9 +249,13 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: CreateWarehouseUseCase,
-      useFactory: (warehouses: IWarehouseRepository, sites: ISiteRepository) =>
-        new CreateWarehouseUseCase(warehouses, sites),
-      inject: [WAREHOUSE_REPOSITORY, SITE_REPOSITORY],
+      useFactory: (
+        warehouses: IWarehouseRepository,
+        sites: ISiteRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new CreateWarehouseUseCase(warehouses, sites, ownership, audited),
+      inject: [WAREHOUSE_REPOSITORY, SITE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: GetWarehouseByIdUseCase,
@@ -255,9 +269,13 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateWarehouseUseCase,
-      useFactory: (warehouses: IWarehouseRepository, sites: ISiteRepository) =>
-        new UpdateWarehouseUseCase(warehouses, sites),
-      inject: [WAREHOUSE_REPOSITORY, SITE_REPOSITORY],
+      useFactory: (
+        warehouses: IWarehouseRepository,
+        sites: ISiteRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdateWarehouseUseCase(warehouses, sites, ownership, audited),
+      inject: [WAREHOUSE_REPOSITORY, SITE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: CreateZoneUseCase,

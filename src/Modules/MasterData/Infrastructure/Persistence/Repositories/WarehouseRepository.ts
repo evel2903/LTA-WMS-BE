@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   IWarehouseRepository,
@@ -27,9 +27,10 @@ export class WarehouseRepository implements IWarehouseRepository {
     return entity ? WarehouseOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(warehouse: WarehouseEntity): Promise<WarehouseEntity> {
+  public async Create(warehouse: WarehouseEntity, manager?: EntityManager): Promise<WarehouseEntity> {
+    const repo = manager ? manager.getRepository(WarehouseOrmEntity) : this.warehouses;
     try {
-      const created = await this.warehouses.save(WarehouseOrmMapper.ToOrm(warehouse));
+      const created = await repo.save(WarehouseOrmMapper.ToOrm(warehouse));
       return WarehouseOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -37,9 +38,10 @@ export class WarehouseRepository implements IWarehouseRepository {
     }
   }
 
-  public async Update(warehouse: WarehouseEntity): Promise<WarehouseEntity> {
+  public async Update(warehouse: WarehouseEntity, manager?: EntityManager): Promise<WarehouseEntity> {
+    const repo = manager ? manager.getRepository(WarehouseOrmEntity) : this.warehouses;
     try {
-      const updated = await this.warehouses.save(WarehouseOrmMapper.ToOrm(warehouse));
+      const updated = await repo.save(WarehouseOrmMapper.ToOrm(warehouse));
       return WarehouseOrmMapper.ToDomain(updated);
     } catch (error) {
       this.HandleUniqueViolation(error);

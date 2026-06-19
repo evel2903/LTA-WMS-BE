@@ -1,5 +1,6 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { CorrelationIdMiddleware } from '@common/Middleware/CorrelationIdMiddleware';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ValidateProcessEnv } from '@shared/Config/Env/Env';
 import { ConfigService } from '@nestjs/config';
@@ -66,4 +67,8 @@ import { AccessControlModule } from '@modules/AccessControl/AccessControlModule'
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  public configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
+  }
+}

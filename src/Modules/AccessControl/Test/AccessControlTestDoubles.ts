@@ -246,3 +246,18 @@ export class FakeAuditWriter implements IAuditWriter {
     this.Entries.push(entry);
   }
 }
+
+/**
+ * Structurally-compatible stand-in for AuditedTransaction: runs the work with a no-op
+ * manager and captures the audit entry, so use-case specs can assert the audit without a
+ * DB. Cast as `unknown as AuditedTransaction` at the call site.
+ */
+export class StubAuditedTransaction {
+  public readonly Entries: AuditEntry[] = [];
+
+  public async Run<T>(work: (manager: never) => Promise<{ result: T; entry: AuditEntry }>): Promise<T> {
+    const { result, entry } = await work(undefined as never);
+    this.Entries.push(entry);
+    return result;
+  }
+}

@@ -61,6 +61,7 @@ import {
   AUDIT_LOG_REPOSITORY,
 } from '@modules/AccessControl/Application/Interfaces/IAuditLogRepository';
 import { AuditWriter } from '@modules/AccessControl/Infrastructure/Audit/AuditWriter';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { AuditLogRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/AuditLogRepository';
 import { AuditLogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/AuditLogOrmEntity';
 import { QueryAuditLogsUseCase } from '@modules/AccessControl/Application/UseCases/QueryAuditLogsUseCase';
@@ -91,6 +92,7 @@ import { AuditLogController } from '@modules/AccessControl/Presentation/Controll
     { provide: REASON_CODE_REPOSITORY, useClass: ReasonCodeRepository },
     { provide: AUDIT_LOG_REPOSITORY, useClass: AuditLogRepository },
     { provide: AUDIT_WRITER, useClass: AuditWriter },
+    AuditedTransaction,
     {
       provide: QueryAuditLogsUseCase,
       useFactory: (auditLogs: IAuditLogRepository) => new QueryAuditLogsUseCase(auditLogs),
@@ -193,6 +195,7 @@ import { AuditLogController } from '@modules/AccessControl/Presentation/Controll
     REASON_CODE_REPOSITORY,
     AUDIT_WRITER,
     AUDIT_LOG_REPOSITORY,
+    AuditedTransaction,
     GetUserEffectivePermissionsUseCase,
   ],
 })
