@@ -39,9 +39,22 @@ import { UserRoleOrmEntity } from '@modules/AccessControl/Infrastructure/Persist
 import { GroupOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/GroupOrmEntity';
 import { GroupMemberOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/GroupMemberOrmEntity';
 import { DataScopeOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/DataScopeOrmEntity';
+import {
+  IReasonCodeRepository,
+  REASON_CODE_REPOSITORY,
+} from '@modules/AccessControl/Application/Interfaces/IReasonCodeRepository';
+import { REASON_CODE_CATALOG } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
+import { ReasonCodeCatalog } from '@modules/AccessControl/Application/Services/ReasonCodeCatalog';
+import { ReasonCodeRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/ReasonCodeRepository';
+import { ReasonCodeOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ReasonCodeOrmEntity';
+import { CreateReasonCodeUseCase } from '@modules/AccessControl/Application/UseCases/CreateReasonCodeUseCase';
+import { GetReasonCodeUseCase } from '@modules/AccessControl/Application/UseCases/GetReasonCodeUseCase';
+import { ListReasonCodesUseCase } from '@modules/AccessControl/Application/UseCases/ListReasonCodesUseCase';
+import { UpdateReasonCodeUseCase } from '@modules/AccessControl/Application/UseCases/UpdateReasonCodeUseCase';
 import { RoleController } from '@modules/AccessControl/Presentation/Controllers/RoleController';
 import { PermissionController } from '@modules/AccessControl/Presentation/Controllers/PermissionController';
 import { UserRoleController } from '@modules/AccessControl/Presentation/Controllers/UserRoleController';
+import { ReasonCodeController } from '@modules/AccessControl/Presentation/Controllers/ReasonCodeController';
 
 @Module({
   imports: [
@@ -53,17 +66,44 @@ import { UserRoleController } from '@modules/AccessControl/Presentation/Controll
       GroupOrmEntity,
       GroupMemberOrmEntity,
       DataScopeOrmEntity,
+      ReasonCodeOrmEntity,
     ]),
   ],
-  controllers: [RoleController, PermissionController, UserRoleController],
+  controllers: [RoleController, PermissionController, UserRoleController, ReasonCodeController],
   providers: [
     { provide: ROLE_REPOSITORY, useClass: RoleRepository },
     { provide: PERMISSION_REPOSITORY, useClass: PermissionRepository },
     { provide: ROLE_PERMISSION_REPOSITORY, useClass: RolePermissionRepository },
     { provide: USER_ROLE_REPOSITORY, useClass: UserRoleRepository },
     { provide: DATA_SCOPE_REPOSITORY, useClass: DataScopeRepository },
+    { provide: REASON_CODE_REPOSITORY, useClass: ReasonCodeRepository },
     ScopeExtractor,
     PermissionGuard,
+    {
+      provide: REASON_CODE_CATALOG,
+      useFactory: (reasonCodes: IReasonCodeRepository) => new ReasonCodeCatalog(reasonCodes),
+      inject: [REASON_CODE_REPOSITORY],
+    },
+    {
+      provide: CreateReasonCodeUseCase,
+      useFactory: (reasonCodes: IReasonCodeRepository) => new CreateReasonCodeUseCase(reasonCodes),
+      inject: [REASON_CODE_REPOSITORY],
+    },
+    {
+      provide: GetReasonCodeUseCase,
+      useFactory: (reasonCodes: IReasonCodeRepository) => new GetReasonCodeUseCase(reasonCodes),
+      inject: [REASON_CODE_REPOSITORY],
+    },
+    {
+      provide: ListReasonCodesUseCase,
+      useFactory: (reasonCodes: IReasonCodeRepository) => new ListReasonCodesUseCase(reasonCodes),
+      inject: [REASON_CODE_REPOSITORY],
+    },
+    {
+      provide: UpdateReasonCodeUseCase,
+      useFactory: (reasonCodes: IReasonCodeRepository) => new UpdateReasonCodeUseCase(reasonCodes),
+      inject: [REASON_CODE_REPOSITORY],
+    },
     {
       provide: PERMISSION_CHECKER,
       useFactory: (
@@ -125,6 +165,8 @@ import { UserRoleController } from '@modules/AccessControl/Presentation/Controll
     PERMISSION_CHECKER,
     ScopeExtractor,
     PermissionGuard,
+    REASON_CODE_CATALOG,
+    REASON_CODE_REPOSITORY,
     GetUserEffectivePermissionsUseCase,
   ],
 })
