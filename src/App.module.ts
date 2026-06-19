@@ -19,6 +19,7 @@ import { HealthModule } from '@modules/Health/HealthModule';
 import { JobsModule } from '@modules/Jobs/JobsModule';
 import { MasterDataModule } from '@modules/MasterData/MasterDataModule';
 import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfileModule';
+import { AccessControlModule } from '@modules/AccessControl/AccessControlModule';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
     UserModule,
     MasterDataModule,
     WarehouseProfileModule,
+    AccessControlModule,
     AuthenticationModule,
     FileUploadModule,
     CacheModule,

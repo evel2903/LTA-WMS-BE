@@ -1,0 +1,134 @@
+import { ConflictException } from '@common/Exceptions/AppException';
+import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
+import { RoleEntity } from '@modules/AccessControl/Domain/Entities/RoleEntity';
+import { PermissionEntity } from '@modules/AccessControl/Domain/Entities/PermissionEntity';
+import { RolePermissionEntity } from '@modules/AccessControl/Domain/Entities/RolePermissionEntity';
+import { UserRoleEntity } from '@modules/AccessControl/Domain/Entities/UserRoleEntity';
+import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/IRoleRepository';
+import {
+  IPermissionRepository,
+  PermissionListFilter,
+} from '@modules/AccessControl/Application/Interfaces/IPermissionRepository';
+import { IRolePermissionRepository } from '@modules/AccessControl/Application/Interfaces/IRolePermissionRepository';
+import { IUserRoleRepository } from '@modules/AccessControl/Application/Interfaces/IUserRoleRepository';
+
+export class InMemoryRoleRepository implements IRoleRepository {
+  private readonly roles = new Map<string, RoleEntity>();
+
+  public async FindById(id: string): Promise<RoleEntity | null> {
+    return this.roles.get(id) ?? null;
+  }
+
+  public async FindByCode(roleCode: RoleCode): Promise<RoleEntity | null> {
+    return [...this.roles.values()].find((role) => role.RoleCode === roleCode) ?? null;
+  }
+
+  public async FindByIds(ids: string[]): Promise<RoleEntity[]> {
+    const set = new Set(ids);
+    return [...this.roles.values()].filter((role) => set.has(role.Id));
+  }
+
+  public async Create(role: RoleEntity): Promise<RoleEntity> {
+    if ([...this.roles.values()].some((existing) => existing.RoleCode === role.RoleCode)) {
+      throw new ConflictException('Role code already exists');
+    }
+    this.roles.set(role.Id, role);
+    return role;
+  }
+
+  public async List(skip: number, take: number): Promise<{ Items: RoleEntity[]; TotalItems: number }> {
+    const items = [...this.roles.values()];
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+}
+
+export class InMemoryPermissionRepository implements IPermissionRepository {
+  private readonly permissions = new Map<string, PermissionEntity>();
+
+  public async FindById(id: string): Promise<PermissionEntity | null> {
+    return this.permissions.get(id) ?? null;
+  }
+
+  public async FindByCode(permissionCode: string): Promise<PermissionEntity | null> {
+    return [...this.permissions.values()].find((p) => p.PermissionCode === permissionCode) ?? null;
+  }
+
+  public async FindByIds(ids: string[]): Promise<PermissionEntity[]> {
+    const set = new Set(ids);
+    return [...this.permissions.values()].filter((p) => set.has(p.Id));
+  }
+
+  public async Create(permission: PermissionEntity): Promise<PermissionEntity> {
+    if ([...this.permissions.values()].some((p) => p.PermissionCode === permission.PermissionCode)) {
+      throw new ConflictException('Permission already exists');
+    }
+    this.permissions.set(permission.Id, permission);
+    return permission;
+  }
+
+  public async List(
+    skip: number,
+    take: number,
+    filter: PermissionListFilter = {},
+  ): Promise<{ Items: PermissionEntity[]; TotalItems: number }> {
+    let items = [...this.permissions.values()];
+    if (filter.Action) items = items.filter((p) => p.Action === filter.Action);
+    if (filter.ObjectType) items = items.filter((p) => p.ObjectType === filter.ObjectType);
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+}
+
+export class InMemoryRolePermissionRepository implements IRolePermissionRepository {
+  private readonly rolePermissions = new Map<string, RolePermissionEntity>();
+
+  public async FindByRoleAndPermission(roleId: string, permissionId: string): Promise<RolePermissionEntity | null> {
+    return (
+      [...this.rolePermissions.values()].find((rp) => rp.RoleId === roleId && rp.PermissionId === permissionId) ?? null
+    );
+  }
+
+  public async FindByRoleId(roleId: string): Promise<RolePermissionEntity[]> {
+    return [...this.rolePermissions.values()].filter((rp) => rp.RoleId === roleId);
+  }
+
+  public async FindByRoleIds(roleIds: string[]): Promise<RolePermissionEntity[]> {
+    const set = new Set(roleIds);
+    return [...this.rolePermissions.values()].filter((rp) => set.has(rp.RoleId));
+  }
+
+  public async Create(rolePermission: RolePermissionEntity): Promise<RolePermissionEntity> {
+    if (
+      [...this.rolePermissions.values()].some(
+        (rp) => rp.RoleId === rolePermission.RoleId && rp.PermissionId === rolePermission.PermissionId,
+      )
+    ) {
+      throw new ConflictException('Permission is already granted to this role');
+    }
+    this.rolePermissions.set(rolePermission.Id, rolePermission);
+    return rolePermission;
+  }
+}
+
+export class InMemoryUserRoleRepository implements IUserRoleRepository {
+  private readonly userRoles = new Map<string, UserRoleEntity>();
+
+  public async FindByUserId(userId: string): Promise<UserRoleEntity[]> {
+    return [...this.userRoles.values()].filter((ur) => ur.UserId === userId);
+  }
+
+  public async FindByUserAndRole(userId: string, roleId: string): Promise<UserRoleEntity | null> {
+    return [...this.userRoles.values()].find((ur) => ur.UserId === userId && ur.RoleId === roleId) ?? null;
+  }
+
+  public async Create(userRole: UserRoleEntity): Promise<UserRoleEntity> {
+    if ([...this.userRoles.values()].some((ur) => ur.UserId === userRole.UserId && ur.RoleId === userRole.RoleId)) {
+      throw new ConflictException('User already has this role');
+    }
+    this.userRoles.set(userRole.Id, userRole);
+    return userRole;
+  }
+
+  public async Delete(id: string): Promise<void> {
+    this.userRoles.delete(id);
+  }
+}
