@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import { IOwnerRepository, OwnerListFilter } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { OwnerEntity } from '@modules/MasterData/Domain/Entities/OwnerEntity';
@@ -24,9 +24,10 @@ export class OwnerRepository implements IOwnerRepository {
     return entity ? OwnerOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(owner: OwnerEntity): Promise<OwnerEntity> {
+  public async Create(owner: OwnerEntity, manager?: EntityManager): Promise<OwnerEntity> {
+    const repo = manager ? manager.getRepository(OwnerOrmEntity) : this.owners;
     try {
-      const created = await this.owners.save(OwnerOrmMapper.ToOrm(owner));
+      const created = await repo.save(OwnerOrmMapper.ToOrm(owner));
       return OwnerOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -34,9 +35,10 @@ export class OwnerRepository implements IOwnerRepository {
     }
   }
 
-  public async Update(owner: OwnerEntity): Promise<OwnerEntity> {
+  public async Update(owner: OwnerEntity, manager?: EntityManager): Promise<OwnerEntity> {
+    const repo = manager ? manager.getRepository(OwnerOrmEntity) : this.owners;
     try {
-      const updated = await this.owners.save(OwnerOrmMapper.ToOrm(owner));
+      const updated = await repo.save(OwnerOrmMapper.ToOrm(owner));
       return OwnerOrmMapper.ToDomain(updated);
     } catch (error) {
       this.HandleUniqueViolation(error);

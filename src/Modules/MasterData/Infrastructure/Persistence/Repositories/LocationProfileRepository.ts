@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   ILocationProfileRepository,
@@ -27,9 +27,10 @@ export class LocationProfileRepository implements ILocationProfileRepository {
     return entity ? LocationProfileOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(profile: LocationProfileEntity): Promise<LocationProfileEntity> {
+  public async Create(profile: LocationProfileEntity, manager?: EntityManager): Promise<LocationProfileEntity> {
+    const repo = manager ? manager.getRepository(LocationProfileOrmEntity) : this.locationProfiles;
     try {
-      const created = await this.locationProfiles.save(LocationProfileOrmMapper.ToOrm(profile));
+      const created = await repo.save(LocationProfileOrmMapper.ToOrm(profile));
       return LocationProfileOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -37,9 +38,10 @@ export class LocationProfileRepository implements ILocationProfileRepository {
     }
   }
 
-  public async Update(profile: LocationProfileEntity): Promise<LocationProfileEntity> {
+  public async Update(profile: LocationProfileEntity, manager?: EntityManager): Promise<LocationProfileEntity> {
+    const repo = manager ? manager.getRepository(LocationProfileOrmEntity) : this.locationProfiles;
     try {
-      const updated = await this.locationProfiles.save(LocationProfileOrmMapper.ToOrm(profile));
+      const updated = await repo.save(LocationProfileOrmMapper.ToOrm(profile));
       return LocationProfileOrmMapper.ToDomain(updated);
     } catch (error) {
       this.HandleUniqueViolation(error);

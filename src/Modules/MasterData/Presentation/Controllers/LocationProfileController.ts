@@ -4,6 +4,8 @@ import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { CurrentAuditContext } from '@modules/AccessControl/Presentation/Decorators/CurrentAuditContext';
+import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { CreateLocationProfileUseCase } from '@modules/MasterData/Application/UseCases/CreateLocationProfileUseCase';
 import { GetLocationProfileUseCase } from '@modules/MasterData/Application/UseCases/GetLocationProfileUseCase';
 import { ListLocationProfilesUseCase } from '@modules/MasterData/Application/UseCases/ListLocationProfilesUseCase';
@@ -24,8 +26,8 @@ export class LocationProfileController {
 
   @Post()
   @RequirePermission(ActionCode.Create, ObjectType.LocationProfile)
-  public async Create(@Body() request: CreateLocationProfileRequest) {
-    return await this.createLocationProfileUseCase.Execute(request);
+  public async Create(@Body() request: CreateLocationProfileRequest, @CurrentAuditContext() context: AuditContext) {
+    return await this.createLocationProfileUseCase.Execute(request, context);
   }
 
   @Get(':id')
@@ -42,7 +44,11 @@ export class LocationProfileController {
 
   @Patch(':id')
   @RequirePermission(ActionCode.Update, ObjectType.LocationProfile)
-  public async Update(@Param('id') id: string, @Body() request: UpdateLocationProfileRequest) {
-    return await this.updateLocationProfileUseCase.Execute({ Id: id, ...request });
+  public async Update(
+    @Param('id') id: string,
+    @Body() request: UpdateLocationProfileRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.updateLocationProfileUseCase.Execute({ Id: id, ...request }, context);
   }
 }

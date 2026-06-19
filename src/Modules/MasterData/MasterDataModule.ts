@@ -303,8 +303,12 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: CreateLocationProfileUseCase,
-      useFactory: (locationProfiles: ILocationProfileRepository) => new CreateLocationProfileUseCase(locationProfiles),
-      inject: [LOCATION_PROFILE_REPOSITORY],
+      useFactory: (
+        locationProfiles: ILocationProfileRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new CreateLocationProfileUseCase(locationProfiles, ownership, audited),
+      inject: [LOCATION_PROFILE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: GetLocationProfileUseCase,
@@ -318,8 +322,12 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateLocationProfileUseCase,
-      useFactory: (locationProfiles: ILocationProfileRepository) => new UpdateLocationProfileUseCase(locationProfiles),
-      inject: [LOCATION_PROFILE_REPOSITORY],
+      useFactory: (
+        locationProfiles: ILocationProfileRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdateLocationProfileUseCase(locationProfiles, ownership, audited),
+      inject: [LOCATION_PROFILE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: CreateLocationUseCase,
@@ -376,8 +384,12 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: CreateOwnerUseCase,
-      useFactory: (owners: IOwnerRepository) => new CreateOwnerUseCase(owners),
-      inject: [OWNER_REPOSITORY],
+      useFactory: (
+        owners: IOwnerRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new CreateOwnerUseCase(owners, ownership, audited),
+      inject: [OWNER_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: GetOwnerUseCase,
@@ -391,8 +403,12 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateOwnerUseCase,
-      useFactory: (owners: IOwnerRepository) => new UpdateOwnerUseCase(owners),
-      inject: [OWNER_REPOSITORY],
+      useFactory: (
+        owners: IOwnerRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdateOwnerUseCase(owners, ownership, audited),
+      inject: [OWNER_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: CreateUomUseCase,

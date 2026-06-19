@@ -71,13 +71,16 @@ describe('E2E OwnerController (no DB)', () => {
       })
       .expect(201);
 
-    expect(createExecute).toHaveBeenCalledWith({
-      OwnerCode: 'OWNER-A',
-      OwnerName: 'Owner A',
-      Status: MasterDataStatus.Active,
-      BillingPolicy: { BillingCycle: 'MONTHLY' },
-      VisibilityScope: {},
-    });
+    expect(createExecute).toHaveBeenCalledWith(
+      {
+        OwnerCode: 'OWNER-A',
+        OwnerName: 'Owner A',
+        Status: MasterDataStatus.Active,
+        BillingPolicy: { BillingCycle: 'MONTHLY' },
+        VisibilityScope: {},
+      },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
     expect(response.body.Success).toBe(true);
     expect(response.body.Data.OwnerCode).toBe('OWNER-A');
   });
@@ -107,7 +110,10 @@ describe('E2E OwnerController (no DB)', () => {
     await request(app.getHttpServer()).patch('/owners/owner-1').send({ OwnerName: 'Updated' }).expect(200);
 
     expect(getExecute).toHaveBeenCalledWith('owner-1');
-    expect(updateExecute).toHaveBeenCalledWith({ Id: 'owner-1', OwnerName: 'Updated' });
+    expect(updateExecute).toHaveBeenCalledWith(
+      { Id: 'owner-1', OwnerName: 'Updated' },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 
   it('PATCH /owners/:id rejects empty required business fields', async () => {

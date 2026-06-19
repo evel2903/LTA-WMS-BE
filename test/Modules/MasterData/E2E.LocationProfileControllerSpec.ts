@@ -101,17 +101,20 @@ describe('E2E LocationProfileController (no DB)', () => {
       })
       .expect(201);
 
-    expect(createExecute).toHaveBeenCalledWith({
-      ProfileCode: 'BIN-DRY',
-      ProfileName: 'Dry Bin',
-      LocationType: 'BIN',
-      Status: MasterDataStatus.Active,
-      CapacityPolicy: { RequireCapacityQty: true },
-      EligibilityPolicy: {},
-      MixPolicy: {},
-      CompliancePolicy: {},
-      OperationPolicy: {},
-    });
+    expect(createExecute).toHaveBeenCalledWith(
+      {
+        ProfileCode: 'BIN-DRY',
+        ProfileName: 'Dry Bin',
+        LocationType: 'BIN',
+        Status: MasterDataStatus.Active,
+        CapacityPolicy: { RequireCapacityQty: true },
+        EligibilityPolicy: {},
+        MixPolicy: {},
+        CompliancePolicy: {},
+        OperationPolicy: {},
+      },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 
   it('PATCH /location-profiles/:id rejects empty required business fields', async () => {

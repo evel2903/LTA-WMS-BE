@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { OwnerEntity } from '@modules/MasterData/Domain/Entities/OwnerEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
@@ -12,7 +13,7 @@ export interface OwnerListFilter {
 export interface IOwnerRepository {
   FindById(id: string): Promise<OwnerEntity | null>;
   FindByCode(ownerCode: string): Promise<OwnerEntity | null>;
-  Create(owner: OwnerEntity): Promise<OwnerEntity>;
-  Update(owner: OwnerEntity): Promise<OwnerEntity>;
+  Create(owner: OwnerEntity, manager?: EntityManager): Promise<OwnerEntity>;
+  Update(owner: OwnerEntity, manager?: EntityManager): Promise<OwnerEntity>;
   List(skip: number, take: number, filter?: OwnerListFilter): Promise<{ Items: OwnerEntity[]; TotalItems: number }>;
 }
