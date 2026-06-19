@@ -19,6 +19,9 @@ import { UserRoleOrmEntity } from '@modules/AccessControl/Infrastructure/Persist
 import { SeedAdminDataScopes } from '@modules/AccessControl/Application/Services/DataScopeSeed';
 import { DataScopeRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/DataScopeRepository';
 import { DataScopeOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/DataScopeOrmEntity';
+import { SeedReasonCodeCatalog } from '@modules/AccessControl/Application/Services/ReasonCodeCatalogSeed';
+import { ReasonCodeRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/ReasonCodeRepository';
+import { ReasonCodeOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ReasonCodeOrmEntity';
 
 const GetRequired = (key: string, value: string | undefined): string => {
   if (!value || value.trim().length === 0) {
@@ -80,6 +83,11 @@ async function Seed() {
     const dataScopeRepository = new DataScopeRepository(dataSource.getRepository(DataScopeOrmEntity));
     await SeedAdminDataScopes(roleRepository, dataScopeRepository);
     console.log('Seed: admin data scopes ensured');
+
+    // Idempotent reason-code catalog seed (V0 action coverage; consumed by C4-C9).
+    const reasonCodeRepository = new ReasonCodeRepository(dataSource.getRepository(ReasonCodeOrmEntity));
+    await SeedReasonCodeCatalog(reasonCodeRepository);
+    console.log('Seed: reason code catalog ensured');
   } finally {
     await dataSource.destroy();
   }

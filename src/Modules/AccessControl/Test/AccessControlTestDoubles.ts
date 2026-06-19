@@ -14,6 +14,11 @@ import { IUserRoleRepository } from '@modules/AccessControl/Application/Interfac
 import { PrincipalType } from '@modules/AccessControl/Domain/Enums/PrincipalType';
 import { DataScopeEntity } from '@modules/AccessControl/Domain/Entities/DataScopeEntity';
 import { IDataScopeRepository, PrincipalRef } from '@modules/AccessControl/Application/Interfaces/IDataScopeRepository';
+import { ReasonCodeEntity } from '@modules/AccessControl/Domain/Entities/ReasonCodeEntity';
+import {
+  IReasonCodeRepository,
+  ReasonCodeListFilter,
+} from '@modules/AccessControl/Application/Interfaces/IReasonCodeRepository';
 
 export class InMemoryRoleRepository implements IRoleRepository {
   private readonly roles = new Map<string, RoleEntity>();
@@ -157,5 +162,42 @@ export class InMemoryDataScopeRepository implements IDataScopeRepository {
 
   public async Delete(id: string): Promise<void> {
     this.scopes.delete(id);
+  }
+}
+
+export class InMemoryReasonCodeRepository implements IReasonCodeRepository {
+  private readonly reasonCodes = new Map<string, ReasonCodeEntity>();
+
+  public async FindById(id: string): Promise<ReasonCodeEntity | null> {
+    return this.reasonCodes.get(id) ?? null;
+  }
+
+  public async FindByCode(reasonCode: string): Promise<ReasonCodeEntity | null> {
+    return [...this.reasonCodes.values()].find((rc) => rc.ReasonCode === reasonCode) ?? null;
+  }
+
+  public async Create(reasonCode: ReasonCodeEntity): Promise<ReasonCodeEntity> {
+    if ([...this.reasonCodes.values()].some((rc) => rc.ReasonCode === reasonCode.ReasonCode)) {
+      throw new ConflictException('Reason code already exists');
+    }
+    this.reasonCodes.set(reasonCode.Id, reasonCode);
+    return reasonCode;
+  }
+
+  public async Update(reasonCode: ReasonCodeEntity): Promise<ReasonCodeEntity> {
+    this.reasonCodes.set(reasonCode.Id, reasonCode);
+    return reasonCode;
+  }
+
+  public async List(
+    skip: number,
+    take: number,
+    filter: ReasonCodeListFilter = {},
+  ): Promise<{ Items: ReasonCodeEntity[]; TotalItems: number }> {
+    let items = [...this.reasonCodes.values()];
+    if (filter.ReasonGroup) items = items.filter((rc) => rc.ReasonGroup === filter.ReasonGroup);
+    if (filter.Status) items = items.filter((rc) => rc.Status === filter.Status);
+    if (filter.Action) items = items.filter((rc) => rc.AppliesToActions.includes(filter.Action!));
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
   }
 }
