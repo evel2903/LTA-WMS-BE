@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import { ISiteRepository, SiteListFilter } from '@modules/MasterData/Application/Interfaces/ISiteRepository';
 import { SiteEntity } from '@modules/MasterData/Domain/Entities/SiteEntity';
@@ -24,9 +24,10 @@ export class SiteRepository implements ISiteRepository {
     return entity ? SiteOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(site: SiteEntity): Promise<SiteEntity> {
+  public async Create(site: SiteEntity, manager?: EntityManager): Promise<SiteEntity> {
+    const repo = manager ? manager.getRepository(SiteOrmEntity) : this.sites;
     try {
-      const created = await this.sites.save(SiteOrmMapper.ToOrm(site));
+      const created = await repo.save(SiteOrmMapper.ToOrm(site));
       return SiteOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -34,9 +35,10 @@ export class SiteRepository implements ISiteRepository {
     }
   }
 
-  public async Update(site: SiteEntity): Promise<SiteEntity> {
+  public async Update(site: SiteEntity, manager?: EntityManager): Promise<SiteEntity> {
+    const repo = manager ? manager.getRepository(SiteOrmEntity) : this.sites;
     try {
-      const updated = await this.sites.save(SiteOrmMapper.ToOrm(site));
+      const updated = await repo.save(SiteOrmMapper.ToOrm(site));
       return SiteOrmMapper.ToDomain(updated);
     } catch (error) {
       this.HandleUniqueViolation(error);

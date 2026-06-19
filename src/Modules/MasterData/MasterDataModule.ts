@@ -229,8 +229,9 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     Tier1MasterDataChecklistService,
     {
       provide: CreateSiteUseCase,
-      useFactory: (sites: ISiteRepository) => new CreateSiteUseCase(sites),
-      inject: [SITE_REPOSITORY],
+      useFactory: (sites: ISiteRepository, ownership: MasterDataOwnershipPolicyService, audited: AuditedTransaction) =>
+        new CreateSiteUseCase(sites, ownership, audited),
+      inject: [SITE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: GetSiteByIdUseCase,
@@ -244,8 +245,9 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateSiteUseCase,
-      useFactory: (sites: ISiteRepository) => new UpdateSiteUseCase(sites),
-      inject: [SITE_REPOSITORY],
+      useFactory: (sites: ISiteRepository, ownership: MasterDataOwnershipPolicyService, audited: AuditedTransaction) =>
+        new UpdateSiteUseCase(sites, ownership, audited),
+      inject: [SITE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: CreateWarehouseUseCase,

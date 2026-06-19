@@ -1,15 +1,39 @@
 import { randomUUID } from 'crypto';
 import { ConflictException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { CreateSiteDto } from '@modules/MasterData/Application/DTOs/CreateSiteDto';
 import { SiteDto } from '@modules/MasterData/Application/DTOs/SiteDto';
 import { ISiteRepository } from '@modules/MasterData/Application/Interfaces/ISiteRepository';
 import { SiteDtoMapper } from '@modules/MasterData/Application/Mappers/SiteDtoMapper';
+import { MasterDataOwnershipPolicyService } from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
 import { SiteEntity } from '@modules/MasterData/Domain/Entities/SiteEntity';
+import { MasterDataObjectGroup } from '@modules/MasterData/Domain/Enums/MasterDataObjectGroup';
 
 export class CreateSiteUseCase {
-  constructor(private readonly siteRepository: ISiteRepository) {}
+  // Optional audit deps: bare for fixture tests; the module always wires them (production audits).
+  constructor(
+    private readonly siteRepository: ISiteRepository,
+    private readonly ownershipPolicy?: MasterDataOwnershipPolicyService,
+    private readonly auditedTransaction?: AuditedTransaction,
+  ) {}
 
-  public async Execute(request: CreateSiteDto): Promise<SiteDto> {
+  public async Execute(request: CreateSiteDto, context: AuditContext = SystemAuditContext): Promise<SiteDto> {
+    if (this.ownershipPolicy) {
+      await this.ownershipPolicy.Enforce({
+        ObjectGroup: MasterDataObjectGroup.WarehouseLocation,
+        Action: ActionCode.Create,
+        SourceSystem: request.SourceSystem ?? null,
+        ReferenceId: request.ReferenceId ?? null,
+      });
+    }
+
     const existing = await this.siteRepository.FindByCode(request.SiteCode);
     if (existing) {
       throw new ConflictException('Site code already exists');
@@ -27,7 +51,22 @@ export class CreateSiteUseCase {
       UpdatedAt: now,
     });
 
-    const created = await this.siteRepository.Create(site);
-    return SiteDtoMapper.ToDto(created);
+    const buildEntry = (created: SiteEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Create,
+        ObjectType: ObjectType.Site,
+        ObjectId: created.Id,
+        ObjectCode: created.SiteCode,
+        AfterJson: SiteDtoMapper.ToDto(created) as unknown as Record<string, unknown>,
+      });
+
+    if (!this.auditedTransaction) {
+      const created = await this.siteRepository.Create(site);
+      return SiteDtoMapper.ToDto(created);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const created = await this.siteRepository.Create(site, manager);
+      return { result: SiteDtoMapper.ToDto(created), entry: buildEntry(created) };
+    });
   }
 }
