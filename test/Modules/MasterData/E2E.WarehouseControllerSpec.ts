@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 import request from 'supertest';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
 import { WarehouseController } from '@modules/MasterData/Presentation/Controllers/WarehouseController';
@@ -18,15 +19,17 @@ describe('E2E WarehouseController (no DB)', () => {
   const updateExecute = jest.fn();
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      controllers: [WarehouseController],
-      providers: [
-        { provide: CreateWarehouseUseCase, useValue: { Execute: createExecute } },
-        { provide: GetWarehouseByIdUseCase, useValue: { Execute: getByIdExecute } },
-        { provide: ListWarehousesUseCase, useValue: { Execute: listExecute } },
-        { provide: UpdateWarehouseUseCase, useValue: { Execute: updateExecute } },
-      ],
-    }).compile();
+    const moduleRef = await overrideAccessGuards(
+      Test.createTestingModule({
+        controllers: [WarehouseController],
+        providers: [
+          { provide: CreateWarehouseUseCase, useValue: { Execute: createExecute } },
+          { provide: GetWarehouseByIdUseCase, useValue: { Execute: getByIdExecute } },
+          { provide: ListWarehousesUseCase, useValue: { Execute: listExecute } },
+          { provide: UpdateWarehouseUseCase, useValue: { Execute: updateExecute } },
+        ],
+      }),
+    ).compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(

@@ -16,6 +16,9 @@ import { RoleOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence
 import { PermissionOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/PermissionOrmEntity';
 import { RolePermissionOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/RolePermissionOrmEntity';
 import { UserRoleOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/UserRoleOrmEntity';
+import { SeedAdminDataScopes } from '@modules/AccessControl/Application/Services/DataScopeSeed';
+import { DataScopeRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/DataScopeRepository';
+import { DataScopeOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/DataScopeOrmEntity';
 
 const GetRequired = (key: string, value: string | undefined): string => {
   if (!value || value.trim().length === 0) {
@@ -71,6 +74,12 @@ async function Seed() {
       userRoleRepository,
     );
     console.log(`Seed: legacy user-role bridge ensured (${bridged} new assignment(s))`);
+
+    // Idempotent data-scope seed: WMS_ADMIN gets IncludeAll per scope type so admin is
+    // never scope-blocked. Runs after the RBAC seed (the WMS_ADMIN role must exist).
+    const dataScopeRepository = new DataScopeRepository(dataSource.getRepository(DataScopeOrmEntity));
+    await SeedAdminDataScopes(roleRepository, dataScopeRepository);
+    console.log('Seed: admin data scopes ensured');
   } finally {
     await dataSource.destroy();
   }

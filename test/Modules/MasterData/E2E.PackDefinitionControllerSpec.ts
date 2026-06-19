@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 import request from 'supertest';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
 import { CreatePackDefinitionUseCase } from '@modules/MasterData/Application/UseCases/CreatePackDefinitionUseCase';
@@ -17,15 +18,17 @@ describe('E2E PackDefinitionController (no DB)', () => {
   const updateExecute = jest.fn();
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      controllers: [PackDefinitionController],
-      providers: [
-        { provide: CreatePackDefinitionUseCase, useValue: { Execute: createExecute } },
-        { provide: GetPackDefinitionUseCase, useValue: { Execute: getExecute } },
-        { provide: ListPackDefinitionsUseCase, useValue: { Execute: listExecute } },
-        { provide: UpdatePackDefinitionUseCase, useValue: { Execute: updateExecute } },
-      ],
-    }).compile();
+    const moduleRef = await overrideAccessGuards(
+      Test.createTestingModule({
+        controllers: [PackDefinitionController],
+        providers: [
+          { provide: CreatePackDefinitionUseCase, useValue: { Execute: createExecute } },
+          { provide: GetPackDefinitionUseCase, useValue: { Execute: getExecute } },
+          { provide: ListPackDefinitionsUseCase, useValue: { Execute: listExecute } },
+          { provide: UpdatePackDefinitionUseCase, useValue: { Execute: updateExecute } },
+        ],
+      }),
+    ).compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));

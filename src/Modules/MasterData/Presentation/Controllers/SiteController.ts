@@ -1,4 +1,9 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
+import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
 import { CreateSiteUseCase } from '@modules/MasterData/Application/UseCases/CreateSiteUseCase';
 import { GetSiteByIdUseCase } from '@modules/MasterData/Application/UseCases/GetSiteByIdUseCase';
 import { ListSitesUseCase } from '@modules/MasterData/Application/UseCases/ListSitesUseCase';
@@ -7,6 +12,7 @@ import { CreateSiteRequest } from '@modules/MasterData/Presentation/Requests/Cre
 import { ListSitesQuery } from '@modules/MasterData/Presentation/Requests/ListSitesQuery';
 import { UpdateSiteRequest } from '@modules/MasterData/Presentation/Requests/UpdateSiteRequest';
 
+@UseGuards(JwtAuthGuard, PermissionGuard)
 @Controller('sites')
 export class SiteController {
   constructor(
@@ -17,21 +23,25 @@ export class SiteController {
   ) {}
 
   @Post()
+  @RequirePermission(ActionCode.Create, ObjectType.Site)
   public async Create(@Body() request: CreateSiteRequest) {
     return await this.createSiteUseCase.Execute(request);
   }
 
   @Get(':id')
+  @RequirePermission(ActionCode.Read, ObjectType.Site)
   public async GetById(@Param('id') id: string) {
     return await this.getSiteByIdUseCase.Execute(id);
   }
 
   @Get()
+  @RequirePermission(ActionCode.Read, ObjectType.Site)
   public async List(@Query() query: ListSitesQuery) {
     return await this.listSitesUseCase.Execute(query);
   }
 
   @Patch(':id')
+  @RequirePermission(ActionCode.Update, ObjectType.Site)
   public async Update(@Param('id') id: string, @Body() request: UpdateSiteRequest) {
     return await this.updateSiteUseCase.Execute({ Id: id, ...request });
   }

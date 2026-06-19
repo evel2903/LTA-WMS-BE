@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 import request from 'supertest';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
 import { CreateItemCoverageUseCase } from '@modules/MasterData/Application/UseCases/CreateItemCoverageUseCase';
@@ -17,15 +18,17 @@ describe('E2E ItemCoverageController (no DB)', () => {
   const updateExecute = jest.fn();
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      controllers: [ItemCoverageController],
-      providers: [
-        { provide: CreateItemCoverageUseCase, useValue: { Execute: createExecute } },
-        { provide: GetItemCoverageUseCase, useValue: { Execute: getExecute } },
-        { provide: ListItemCoveragesUseCase, useValue: { Execute: listExecute } },
-        { provide: UpdateItemCoverageUseCase, useValue: { Execute: updateExecute } },
-      ],
-    }).compile();
+    const moduleRef = await overrideAccessGuards(
+      Test.createTestingModule({
+        controllers: [ItemCoverageController],
+        providers: [
+          { provide: CreateItemCoverageUseCase, useValue: { Execute: createExecute } },
+          { provide: GetItemCoverageUseCase, useValue: { Execute: getExecute } },
+          { provide: ListItemCoveragesUseCase, useValue: { Execute: listExecute } },
+          { provide: UpdateItemCoverageUseCase, useValue: { Execute: updateExecute } },
+        ],
+      }),
+    ).compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));

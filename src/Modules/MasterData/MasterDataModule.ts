@@ -1,5 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AccessControlModule } from '@modules/AccessControl/AccessControlModule';
+import {
+  IPermissionChecker,
+  PERMISSION_CHECKER,
+} from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
 import { CreateSiteUseCase } from '@modules/MasterData/Application/UseCases/CreateSiteUseCase';
 import { GetSiteByIdUseCase } from '@modules/MasterData/Application/UseCases/GetSiteByIdUseCase';
 import { ListSitesUseCase } from '@modules/MasterData/Application/UseCases/ListSitesUseCase';
@@ -177,6 +182,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
       InventoryBalanceOrmEntity,
       MasterDataOwnershipPolicyOrmEntity,
     ]),
+    AccessControlModule,
   ],
   controllers: [
     SiteController,
@@ -271,9 +277,9 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateZoneUseCase,
-      useFactory: (zones: IZoneRepository, warehouses: IWarehouseRepository) =>
-        new UpdateZoneUseCase(zones, warehouses),
-      inject: [ZONE_REPOSITORY, WAREHOUSE_REPOSITORY],
+      useFactory: (zones: IZoneRepository, warehouses: IWarehouseRepository, checker: IPermissionChecker) =>
+        new UpdateZoneUseCase(zones, warehouses, checker),
+      inject: [ZONE_REPOSITORY, WAREHOUSE_REPOSITORY, PERMISSION_CHECKER],
     },
     {
       provide: CreateLocationProfileUseCase,

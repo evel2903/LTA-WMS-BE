@@ -11,6 +11,9 @@ import {
 } from '@modules/AccessControl/Application/Interfaces/IPermissionRepository';
 import { IRolePermissionRepository } from '@modules/AccessControl/Application/Interfaces/IRolePermissionRepository';
 import { IUserRoleRepository } from '@modules/AccessControl/Application/Interfaces/IUserRoleRepository';
+import { PrincipalType } from '@modules/AccessControl/Domain/Enums/PrincipalType';
+import { DataScopeEntity } from '@modules/AccessControl/Domain/Entities/DataScopeEntity';
+import { IDataScopeRepository, PrincipalRef } from '@modules/AccessControl/Application/Interfaces/IDataScopeRepository';
 
 export class InMemoryRoleRepository implements IRoleRepository {
   private readonly roles = new Map<string, RoleEntity>();
@@ -130,5 +133,29 @@ export class InMemoryUserRoleRepository implements IUserRoleRepository {
 
   public async Delete(id: string): Promise<void> {
     this.userRoles.delete(id);
+  }
+}
+
+export class InMemoryDataScopeRepository implements IDataScopeRepository {
+  private readonly scopes = new Map<string, DataScopeEntity>();
+
+  public async FindByPrincipal(principalType: PrincipalType, principalId: string): Promise<DataScopeEntity[]> {
+    return [...this.scopes.values()].filter((s) => s.PrincipalType === principalType && s.PrincipalId === principalId);
+  }
+
+  public async FindByPrincipals(refs: PrincipalRef[]): Promise<DataScopeEntity[]> {
+    if (refs.length === 0) return [];
+    return [...this.scopes.values()].filter((s) =>
+      refs.some((ref) => ref.Type === s.PrincipalType && ref.Id === s.PrincipalId),
+    );
+  }
+
+  public async Create(scope: DataScopeEntity): Promise<DataScopeEntity> {
+    this.scopes.set(scope.Id, scope);
+    return scope;
+  }
+
+  public async Delete(id: string): Promise<void> {
+    this.scopes.delete(id);
   }
 }

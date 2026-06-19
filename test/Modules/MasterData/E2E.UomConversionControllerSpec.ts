@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 import request from 'supertest';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
 import { CreateUomConversionUseCase } from '@modules/MasterData/Application/UseCases/CreateUomConversionUseCase';
@@ -17,15 +18,17 @@ describe('E2E UomConversionController (no DB)', () => {
   const updateExecute = jest.fn();
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      controllers: [UomConversionController],
-      providers: [
-        { provide: CreateUomConversionUseCase, useValue: { Execute: createExecute } },
-        { provide: GetUomConversionUseCase, useValue: { Execute: getExecute } },
-        { provide: ListUomConversionsUseCase, useValue: { Execute: listExecute } },
-        { provide: UpdateUomConversionUseCase, useValue: { Execute: updateExecute } },
-      ],
-    }).compile();
+    const moduleRef = await overrideAccessGuards(
+      Test.createTestingModule({
+        controllers: [UomConversionController],
+        providers: [
+          { provide: CreateUomConversionUseCase, useValue: { Execute: createExecute } },
+          { provide: GetUomConversionUseCase, useValue: { Execute: getExecute } },
+          { provide: ListUomConversionsUseCase, useValue: { Execute: listExecute } },
+          { provide: UpdateUomConversionUseCase, useValue: { Execute: updateExecute } },
+        ],
+      }),
+    ).compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));

@@ -1,4 +1,12 @@
-import { BusinessRuleException, ConflictException, NotFoundException } from '@common/Exceptions/AppException';
+import {
+  BusinessRuleException,
+  ConflictException,
+  ForbiddenAppException,
+  NotFoundException,
+} from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
 import { UpdateZoneDto } from '@modules/MasterData/Application/DTOs/UpdateZoneDto';
 import { ZoneDto } from '@modules/MasterData/Application/DTOs/ZoneDto';
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
@@ -10,12 +18,28 @@ export class UpdateZoneUseCase {
   constructor(
     private readonly zoneRepository: IZoneRepository,
     private readonly warehouseRepository: IWarehouseRepository,
+    private readonly permissionChecker: IPermissionChecker,
   ) {}
 
   public async Execute(request: UpdateZoneDto): Promise<ZoneDto> {
     const zone = await this.zoneRepository.FindById(request.Id);
     if (!zone) {
       throw new NotFoundException('Zone not found');
+    }
+
+    // Entity-resident data-scope re-check (architecture 6.4 step 5): the guard enforces
+    // the (action, object) permission, but a zone's warehouse scope lives on the row, not
+    // the request — so the use case re-checks it against the actor's data scope.
+    if (request.ActorUserId) {
+      const decision = await this.permissionChecker.Check({
+        UserId: request.ActorUserId,
+        Action: ActionCode.Update,
+        ObjectType: ObjectType.Zone,
+        Scope: { WarehouseId: zone.WarehouseId },
+      });
+      if (!decision.Allowed) {
+        throw new ForbiddenAppException(`Access denied (${decision.Reason})`, { Reason: decision.Reason });
+      }
     }
 
     const targetWarehouseId = request.WarehouseId ?? zone.WarehouseId;

@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 import request from 'supertest';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
 import { SiteController } from '@modules/MasterData/Presentation/Controllers/SiteController';
@@ -18,15 +19,17 @@ describe('E2E SiteController (no DB)', () => {
   const updateExecute = jest.fn();
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      controllers: [SiteController],
-      providers: [
-        { provide: CreateSiteUseCase, useValue: { Execute: createExecute } },
-        { provide: GetSiteByIdUseCase, useValue: { Execute: getByIdExecute } },
-        { provide: ListSitesUseCase, useValue: { Execute: listExecute } },
-        { provide: UpdateSiteUseCase, useValue: { Execute: updateExecute } },
-      ],
-    }).compile();
+    const moduleRef = await overrideAccessGuards(
+      Test.createTestingModule({
+        controllers: [SiteController],
+        providers: [
+          { provide: CreateSiteUseCase, useValue: { Execute: createExecute } },
+          { provide: GetSiteByIdUseCase, useValue: { Execute: getByIdExecute } },
+          { provide: ListSitesUseCase, useValue: { Execute: listExecute } },
+          { provide: UpdateSiteUseCase, useValue: { Execute: updateExecute } },
+        ],
+      }),
+    ).compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(

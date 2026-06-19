@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 import request from 'supertest';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
 import { GlobalExceptionFilter } from '@common/Filters/GlobalExceptionFilter';
@@ -73,28 +74,30 @@ describe('E2E WarehouseProfile activation (real controller + use cases, faked re
     const activateUseCase = new ActivateWarehouseProfileUseCase(profiles, new WarehouseProfilePolicyValidator(), guard);
     const deactivateUseCase = new DeactivateWarehouseProfileUseCase(profiles);
 
-    const moduleRef = await Test.createTestingModule({
-      controllers: [WarehouseProfileController],
-      providers: [
-        { provide: CreateWarehouseProfileUseCase, useValue: createUseCase },
-        { provide: GetWarehouseProfileUseCase, useValue: new GetWarehouseProfileUseCase(profiles) },
-        { provide: ListWarehouseProfilesUseCase, useValue: new ListWarehouseProfilesUseCase(profiles) },
-        {
-          provide: UpdateWarehouseProfileUseCase,
-          useValue: new UpdateWarehouseProfileUseCase(
-            profiles,
-            refs.Warehouses,
-            refs.Zones,
-            refs.Owners,
-            refs.Skus,
-            new ScopeKeyService(),
-            new WarehouseProfilePolicyValidator(),
-          ),
-        },
-        { provide: ActivateWarehouseProfileUseCase, useValue: activateUseCase },
-        { provide: DeactivateWarehouseProfileUseCase, useValue: deactivateUseCase },
-      ],
-    }).compile();
+    const moduleRef = await overrideAccessGuards(
+      Test.createTestingModule({
+        controllers: [WarehouseProfileController],
+        providers: [
+          { provide: CreateWarehouseProfileUseCase, useValue: createUseCase },
+          { provide: GetWarehouseProfileUseCase, useValue: new GetWarehouseProfileUseCase(profiles) },
+          { provide: ListWarehouseProfilesUseCase, useValue: new ListWarehouseProfilesUseCase(profiles) },
+          {
+            provide: UpdateWarehouseProfileUseCase,
+            useValue: new UpdateWarehouseProfileUseCase(
+              profiles,
+              refs.Warehouses,
+              refs.Zones,
+              refs.Owners,
+              refs.Skus,
+              new ScopeKeyService(),
+              new WarehouseProfilePolicyValidator(),
+            ),
+          },
+          { provide: ActivateWarehouseProfileUseCase, useValue: activateUseCase },
+          { provide: DeactivateWarehouseProfileUseCase, useValue: deactivateUseCase },
+        ],
+      }),
+    ).compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalFilters(new GlobalExceptionFilter({ LogError: jest.fn() } as unknown as LoggingService));
