@@ -25,6 +25,13 @@ import { WarehouseProfileAssignmentOrmEntity } from '@modules/WarehouseProfile/I
 import { RuleGroupOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/RuleGroupOrmEntity';
 import { RuleDefinitionOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/RuleDefinitionOrmEntity';
 import { WarehouseProfileRuleOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileRuleOrmEntity';
+import { RoleOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/RoleOrmEntity';
+import { PermissionOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/PermissionOrmEntity';
+import { RolePermissionOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/RolePermissionOrmEntity';
+import { UserRoleOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/UserRoleOrmEntity';
+import { GroupOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/GroupOrmEntity';
+import { GroupMemberOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/GroupMemberOrmEntity';
+import { DataScopeOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/DataScopeOrmEntity';
 
 const env = GetEnv();
 
@@ -60,6 +67,13 @@ export default new DataSource({
     RuleGroupOrmEntity,
     RuleDefinitionOrmEntity,
     WarehouseProfileRuleOrmEntity,
+    RoleOrmEntity,
+    PermissionOrmEntity,
+    RolePermissionOrmEntity,
+    UserRoleOrmEntity,
+    GroupOrmEntity,
+    GroupMemberOrmEntity,
+    DataScopeOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

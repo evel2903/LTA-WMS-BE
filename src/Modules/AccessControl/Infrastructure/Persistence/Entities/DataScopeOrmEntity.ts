@@ -1,0 +1,42 @@
+import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, UpdateDateColumn } from 'typeorm';
+
+/**
+ * Schema-only in C1: principal→scope rows. `principal_id` is polymorphic
+ * (user/role/group) so there is no hard FK. Runtime resolution/enforcement is C2.
+ */
+@Entity({ name: 'data_scopes' })
+export class DataScopeOrmEntity {
+  @PrimaryColumn({ name: 'id', type: 'char', length: 36 })
+  public Id!: string;
+
+  @Column({ name: 'principal_type', type: 'varchar', length: 30 })
+  public PrincipalType!: string;
+
+  @Index('IDX_data_scopes_principal')
+  @Column({ name: 'principal_id', type: 'char', length: 36 })
+  public PrincipalId!: string;
+
+  @Column({ name: 'scope_type', type: 'varchar', length: 30 })
+  public ScopeType!: string;
+
+  @Column({ name: 'scope_value_id', type: 'char', length: 36, nullable: true })
+  public ScopeValueId!: string | null;
+
+  @Column({ name: 'scope_value_code', type: 'varchar', length: 100, nullable: true })
+  public ScopeValueCode!: string | null;
+
+  @Column({ name: 'include_all', type: 'boolean', default: false })
+  public IncludeAll!: boolean;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  public CreatedAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  public UpdatedAt!: Date;
+
+  @Column({ name: 'created_by', type: 'char', length: 36, nullable: true })
+  public CreatedBy!: string | null;
+
+  @Column({ name: 'updated_by', type: 'char', length: 36, nullable: true })
+  public UpdatedBy!: string | null;
+}
