@@ -1,4 +1,12 @@
 import { ConflictException, NotFoundException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { ItemCoverageDto } from '@modules/MasterData/Application/DTOs/ItemCoverageDto';
 import { UpdateItemCoverageDto } from '@modules/MasterData/Application/DTOs/UpdateItemCoverageDto';
 import { IItemCoverageRepository } from '@modules/MasterData/Application/Interfaces/IItemCoverageRepository';
@@ -7,21 +15,30 @@ import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuR
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
 import { ItemCoverageMapper } from '@modules/MasterData/Application/Mappers/ItemCoverageMapper';
 import { SkuSupportPolicyValidator } from '@modules/MasterData/Application/Services/SkuSupportPolicyValidator';
+import { ItemCoverageEntity } from '@modules/MasterData/Domain/Entities/ItemCoverageEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
 export class UpdateItemCoverageUseCase {
+  // auditedTransaction is optional only so fixture-setup tests can construct the use case
+  // bare; the module always wires it. ItemCoverage is AUDIT-ONLY (no A6 ownership group),
+  // so there is no ownership policy or reason-code handling here.
   constructor(
     private readonly itemCoverages: IItemCoverageRepository,
     private readonly skus: ISkuRepository,
     private readonly warehouses: IWarehouseRepository,
     private readonly owners: IOwnerRepository,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {}
 
-  public async Execute(request: UpdateItemCoverageDto): Promise<ItemCoverageDto> {
+  public async Execute(
+    request: UpdateItemCoverageDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<ItemCoverageDto> {
     const coverage = await this.itemCoverages.FindById(request.Id);
     if (!coverage) {
       throw new NotFoundException('Item coverage not found');
     }
+    const before = ItemCoverageMapper.ToDto(coverage) as unknown as Record<string, unknown>;
 
     const targetSkuId = request.SkuId ?? coverage.SkuId;
     const targetWarehouseId = request.WarehouseId ?? coverage.WarehouseId;
@@ -85,8 +102,26 @@ export class UpdateItemCoverageUseCase {
     coverage.ReferenceId = request.ReferenceId !== undefined ? request.ReferenceId : coverage.ReferenceId;
     coverage.UpdatedAt = new Date();
 
-    const updated = await this.itemCoverages.Update(coverage);
-    return ItemCoverageMapper.ToDto(updated);
+    const buildEntry = (updated: ItemCoverageEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Update,
+        ObjectType: ObjectType.ItemCoverage,
+        ObjectId: updated.Id,
+        ObjectCode: null,
+        BeforeJson: before,
+        AfterJson: ItemCoverageMapper.ToDto(updated) as unknown as Record<string, unknown>,
+        WarehouseId: updated.WarehouseId,
+        OwnerId: updated.OwnerId,
+      });
+
+    if (!this.auditedTransaction) {
+      const updated = await this.itemCoverages.Update(coverage);
+      return ItemCoverageMapper.ToDto(updated);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const updated = await this.itemCoverages.Update(coverage, manager);
+      return { result: ItemCoverageMapper.ToDto(updated), entry: buildEntry(updated) };
+    });
   }
 
   private async ValidateReferences(

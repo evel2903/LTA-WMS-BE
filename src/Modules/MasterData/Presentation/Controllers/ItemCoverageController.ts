@@ -4,6 +4,8 @@ import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { CurrentAuditContext } from '@modules/AccessControl/Presentation/Decorators/CurrentAuditContext';
+import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { CreateItemCoverageUseCase } from '@modules/MasterData/Application/UseCases/CreateItemCoverageUseCase';
 import { GetItemCoverageUseCase } from '@modules/MasterData/Application/UseCases/GetItemCoverageUseCase';
 import { ListItemCoveragesUseCase } from '@modules/MasterData/Application/UseCases/ListItemCoveragesUseCase';
@@ -27,8 +29,8 @@ export class ItemCoverageController {
     OwnerId: { In: 'body', Key: 'OwnerId' },
     WarehouseId: { In: 'body', Key: 'WarehouseId' },
   })
-  public async Create(@Body() request: CreateItemCoverageRequest) {
-    return await this.createItemCoverageUseCase.Execute(request);
+  public async Create(@Body() request: CreateItemCoverageRequest, @CurrentAuditContext() context: AuditContext) {
+    return await this.createItemCoverageUseCase.Execute(request, context);
   }
 
   @Get(':id')
@@ -45,7 +47,11 @@ export class ItemCoverageController {
 
   @Patch(':id')
   @RequirePermission(ActionCode.Update, ObjectType.ItemCoverage)
-  public async Update(@Param('id') id: string, @Body() request: UpdateItemCoverageRequest) {
-    return await this.updateItemCoverageUseCase.Execute({ Id: id, ...request });
+  public async Update(
+    @Param('id') id: string,
+    @Body() request: UpdateItemCoverageRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.updateItemCoverageUseCase.Execute({ Id: id, ...request }, context);
   }
 }

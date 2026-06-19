@@ -129,8 +129,11 @@ describe('E2E SkuBarcodeController (no DB)', () => {
     await request(app.getHttpServer()).get('/sku-barcodes/barcode-1').expect(200);
     await request(app.getHttpServer()).patch('/sku-barcodes/barcode-1').send({ BarcodeType: 'QR' }).expect(200);
 
-    expect(createExecute).toHaveBeenCalledWith(body);
+    expect(createExecute).toHaveBeenCalledWith(body, expect.objectContaining({ ActorUserId: 'test-admin' }));
     expect(resolveExecute).toHaveBeenCalledWith({ BarcodeValue: '0123456789012', OwnerId: 'owner-1' });
-    expect(updateExecute).toHaveBeenCalledWith({ Id: 'barcode-1', BarcodeType: 'QR' });
+    expect(updateExecute).toHaveBeenCalledWith(
+      { Id: 'barcode-1', BarcodeType: 'QR' },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 });

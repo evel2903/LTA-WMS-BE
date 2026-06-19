@@ -1,5 +1,15 @@
 import { randomUUID } from 'crypto';
 import { ConflictException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { MasterDataOwnershipPolicyService } from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
+import { MasterDataObjectGroup } from '@modules/MasterData/Domain/Enums/MasterDataObjectGroup';
 import { CreateUomConversionDto } from '@modules/MasterData/Application/DTOs/CreateUomConversionDto';
 import { UomConversionDto } from '@modules/MasterData/Application/DTOs/UomConversionDto';
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
@@ -11,13 +21,34 @@ import { UomConversionEntity } from '@modules/MasterData/Domain/Entities/UomConv
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
 export class CreateUomConversionUseCase {
+  // ownershipPolicy + auditedTransaction are optional only so fixture-setup tests can
+  // construct the use case bare; the module always wires them, so production always
+  // enforces A6 (UomPack: conditional-edit) + writes audit in-transaction.
   constructor(
     private readonly uomConversions: IUomConversionRepository,
     private readonly skus: ISkuRepository,
     private readonly uoms: IUomRepository,
+    private readonly ownershipPolicy?: MasterDataOwnershipPolicyService,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {}
 
-  public async Execute(request: CreateUomConversionDto): Promise<UomConversionDto> {
+  public async Execute(
+    request: CreateUomConversionDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<UomConversionDto> {
+    let reasonCodeId: string | null = null;
+    if (this.ownershipPolicy) {
+      const decision = await this.ownershipPolicy.Enforce({
+        ObjectGroup: MasterDataObjectGroup.UomPack,
+        ObjectType: ObjectType.Uom,
+        Action: ActionCode.Create,
+        ReasonCode: request.ReasonCode ?? null,
+        SourceSystem: request.SourceSystem ?? null,
+        ReferenceId: request.ReferenceId ?? null,
+      });
+      reasonCodeId = decision.ReasonCodeId ?? null;
+    }
+
     const effectiveFrom = new Date(request.EffectiveFrom);
     const effectiveTo = request.EffectiveTo ? new Date(request.EffectiveTo) : null;
     SkuSupportPolicyValidator.ValidateConversionWindow(
@@ -68,8 +99,24 @@ export class CreateUomConversionUseCase {
       UpdatedAt: now,
     });
 
-    const created = await this.uomConversions.Create(conversion);
-    return UomConversionMapper.ToDto(created);
+    const buildEntry = (created: UomConversionEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Create,
+        ObjectType: ObjectType.Uom,
+        ObjectId: created.Id,
+        ObjectCode: null,
+        AfterJson: UomConversionMapper.ToDto(created) as unknown as Record<string, unknown>,
+        ReasonCodeId: reasonCodeId,
+      });
+
+    if (!this.auditedTransaction) {
+      const created = await this.uomConversions.Create(conversion);
+      return UomConversionMapper.ToDto(created);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const created = await this.uomConversions.Create(conversion, manager);
+      return { result: UomConversionMapper.ToDto(created), entry: buildEntry(created) };
+    });
   }
 
   private async ValidateReferences(

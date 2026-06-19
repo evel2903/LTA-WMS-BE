@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { ItemCoverageEntity } from '@modules/MasterData/Domain/Entities/ItemCoverageEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
@@ -17,8 +18,8 @@ export interface IItemCoverageRepository {
     warehouseId: string,
     ownerId: string | null,
   ): Promise<ItemCoverageEntity | null>;
-  Create(itemCoverage: ItemCoverageEntity): Promise<ItemCoverageEntity>;
-  Update(itemCoverage: ItemCoverageEntity): Promise<ItemCoverageEntity>;
+  Create(itemCoverage: ItemCoverageEntity, manager?: EntityManager): Promise<ItemCoverageEntity>;
+  Update(itemCoverage: ItemCoverageEntity, manager?: EntityManager): Promise<ItemCoverageEntity>;
   List(
     skip: number,
     take: number,

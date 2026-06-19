@@ -1,5 +1,15 @@
 import { randomUUID } from 'crypto';
 import { ConflictException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { MasterDataOwnershipPolicyService } from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
+import { MasterDataObjectGroup } from '@modules/MasterData/Domain/Enums/MasterDataObjectGroup';
 import { CreatePackDefinitionDto } from '@modules/MasterData/Application/DTOs/CreatePackDefinitionDto';
 import { PackDefinitionDto } from '@modules/MasterData/Application/DTOs/PackDefinitionDto';
 import { IPackDefinitionRepository } from '@modules/MasterData/Application/Interfaces/IPackDefinitionRepository';
@@ -11,13 +21,34 @@ import { PackDefinitionEntity } from '@modules/MasterData/Domain/Entities/PackDe
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
 export class CreatePackDefinitionUseCase {
+  // ownershipPolicy + auditedTransaction are optional only so fixture-setup tests can
+  // construct the use case bare; the module always wires them, so production always
+  // enforces A6 (UomPack: conditional-edit) + writes audit in-transaction.
   constructor(
     private readonly packDefinitions: IPackDefinitionRepository,
     private readonly skus: ISkuRepository,
     private readonly uoms: IUomRepository,
+    private readonly ownershipPolicy?: MasterDataOwnershipPolicyService,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {}
 
-  public async Execute(request: CreatePackDefinitionDto): Promise<PackDefinitionDto> {
+  public async Execute(
+    request: CreatePackDefinitionDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<PackDefinitionDto> {
+    let reasonCodeId: string | null = null;
+    if (this.ownershipPolicy) {
+      const decision = await this.ownershipPolicy.Enforce({
+        ObjectGroup: MasterDataObjectGroup.UomPack,
+        ObjectType: ObjectType.Sku,
+        Action: ActionCode.Create,
+        ReasonCode: request.ReasonCode ?? null,
+        SourceSystem: request.SourceSystem ?? null,
+        ReferenceId: request.ReferenceId ?? null,
+      });
+      reasonCodeId = decision.ReasonCodeId ?? null;
+    }
+
     SkuSupportPolicyValidator.ValidatePackQuantity(request.QuantityPerPack);
 
     const duplicate = await this.packDefinitions.FindBySkuAndPackCode(request.SkuId, request.PackCode);
@@ -51,8 +82,24 @@ export class CreatePackDefinitionUseCase {
       UpdatedAt: now,
     });
 
-    const created = await this.packDefinitions.Create(pack);
-    return PackDefinitionMapper.ToDto(created);
+    const buildEntry = (created: PackDefinitionEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Create,
+        ObjectType: ObjectType.Sku,
+        ObjectId: created.Id,
+        ObjectCode: created.PackCode,
+        AfterJson: PackDefinitionMapper.ToDto(created) as unknown as Record<string, unknown>,
+        ReasonCodeId: reasonCodeId,
+      });
+
+    if (!this.auditedTransaction) {
+      const created = await this.packDefinitions.Create(pack);
+      return PackDefinitionMapper.ToDto(created);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const created = await this.packDefinitions.Create(pack, manager);
+      return { result: PackDefinitionMapper.ToDto(created), entry: buildEntry(created) };
+    });
   }
 
   private async ValidateReferences(skuId: string, uomId: string, status: MasterDataStatus): Promise<void> {

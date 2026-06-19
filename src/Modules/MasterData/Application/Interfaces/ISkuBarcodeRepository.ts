@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { SkuBarcodeEntity } from '@modules/MasterData/Domain/Entities/SkuBarcodeEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
@@ -14,8 +15,8 @@ export interface SkuBarcodeListFilter {
 export interface ISkuBarcodeRepository {
   FindById(id: string): Promise<SkuBarcodeEntity | null>;
   FindByValueAndOwner(barcodeValue: string, ownerId: string | null): Promise<SkuBarcodeEntity | null>;
-  Create(skuBarcode: SkuBarcodeEntity): Promise<SkuBarcodeEntity>;
-  Update(skuBarcode: SkuBarcodeEntity): Promise<SkuBarcodeEntity>;
+  Create(skuBarcode: SkuBarcodeEntity, manager?: EntityManager): Promise<SkuBarcodeEntity>;
+  Update(skuBarcode: SkuBarcodeEntity, manager?: EntityManager): Promise<SkuBarcodeEntity>;
   List(
     skip: number,
     take: number,

@@ -11,4 +11,5 @@ export interface UpdatePackDefinitionDto {
   Status?: MasterDataStatus;
   SourceSystem?: string | null;
   ReferenceId?: string | null;
+  ReasonCode?: string | null;
 }

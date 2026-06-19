@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   IPackDefinitionRepository,
@@ -35,9 +35,10 @@ export class PackDefinitionRepository implements IPackDefinitionRepository {
     return entity ? PackDefinitionOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(packDefinition: PackDefinitionEntity): Promise<PackDefinitionEntity> {
+  public async Create(packDefinition: PackDefinitionEntity, manager?: EntityManager): Promise<PackDefinitionEntity> {
+    const repo = manager ? manager.getRepository(PackDefinitionOrmEntity) : this.packDefinitions;
     try {
-      const created = await this.packDefinitions.save(PackDefinitionOrmMapper.ToOrm(packDefinition));
+      const created = await repo.save(PackDefinitionOrmMapper.ToOrm(packDefinition));
       return PackDefinitionOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -45,9 +46,10 @@ export class PackDefinitionRepository implements IPackDefinitionRepository {
     }
   }
 
-  public async Update(packDefinition: PackDefinitionEntity): Promise<PackDefinitionEntity> {
+  public async Update(packDefinition: PackDefinitionEntity, manager?: EntityManager): Promise<PackDefinitionEntity> {
+    const repo = manager ? manager.getRepository(PackDefinitionOrmEntity) : this.packDefinitions;
     try {
-      const updated = await this.packDefinitions.save(PackDefinitionOrmMapper.ToOrm(packDefinition));
+      const updated = await repo.save(PackDefinitionOrmMapper.ToOrm(packDefinition));
       return PackDefinitionOrmMapper.ToDomain(updated);
     } catch (error) {
       this.HandleUniqueViolation(error);
