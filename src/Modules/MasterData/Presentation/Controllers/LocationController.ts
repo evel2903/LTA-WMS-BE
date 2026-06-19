@@ -4,6 +4,8 @@ import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { CurrentAuditContext } from '@modules/AccessControl/Presentation/Decorators/CurrentAuditContext';
+import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { CreateLocationUseCase } from '@modules/MasterData/Application/UseCases/CreateLocationUseCase';
 import { GetLocationUseCase } from '@modules/MasterData/Application/UseCases/GetLocationUseCase';
 import { GetLocationTreeUseCase } from '@modules/MasterData/Application/UseCases/GetLocationTreeUseCase';
@@ -27,8 +29,8 @@ export class LocationController {
 
   @Post()
   @RequirePermission(ActionCode.Create, ObjectType.Location)
-  public async Create(@Body() request: CreateLocationRequest) {
-    return await this.createLocationUseCase.Execute(request);
+  public async Create(@Body() request: CreateLocationRequest, @CurrentAuditContext() context: AuditContext) {
+    return await this.createLocationUseCase.Execute(request, context);
   }
 
   @Get('tree')
@@ -51,7 +53,11 @@ export class LocationController {
 
   @Patch(':id')
   @RequirePermission(ActionCode.Update, ObjectType.Location)
-  public async Update(@Param('id') id: string, @Body() request: UpdateLocationRequest) {
-    return await this.updateLocationUseCase.Execute({ Id: id, ...request });
+  public async Update(
+    @Param('id') id: string,
+    @Body() request: UpdateLocationRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.updateLocationUseCase.Execute({ Id: id, ...request }, context);
   }
 }

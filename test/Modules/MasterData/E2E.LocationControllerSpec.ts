@@ -85,17 +85,20 @@ describe('E2E LocationController (no DB)', () => {
       })
       .expect(201);
 
-    expect(createExecute).toHaveBeenCalledWith({
-      WarehouseId: 'warehouse-1',
-      ZoneId: 'zone-1',
-      LocationProfileId: 'profile-1',
-      LocationCode: 'BIN-001',
-      LocationName: 'Bin 001',
-      LocationType: 'BIN',
-      LocationStatus: LocationStatus.Active,
-      CapacityQty: 100,
-      BondedFlag: false,
-    });
+    expect(createExecute).toHaveBeenCalledWith(
+      {
+        WarehouseId: 'warehouse-1',
+        ZoneId: 'zone-1',
+        LocationProfileId: 'profile-1',
+        LocationCode: 'BIN-001',
+        LocationName: 'Bin 001',
+        LocationType: 'BIN',
+        LocationStatus: LocationStatus.Active,
+        CapacityQty: 100,
+        BondedFlag: false,
+      },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 
   it('POST /locations rejects empty ParentLocationId', async () => {
