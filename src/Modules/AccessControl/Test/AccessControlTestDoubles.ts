@@ -24,6 +24,8 @@ import {
   AuditLogQueryFilter,
   IAuditLogRepository,
 } from '@modules/AccessControl/Application/Interfaces/IAuditLogRepository';
+import { IAuditWriter } from '@modules/AccessControl/Application/Interfaces/IAuditWriter';
+import { AuditEntry } from '@modules/AccessControl/Application/DTOs/AuditEntry';
 
 export class InMemoryRoleRepository implements IRoleRepository {
   private readonly roles = new Map<string, RoleEntity>();
@@ -233,5 +235,14 @@ export class InMemoryAuditLogRepository implements IAuditLogRepository {
     if (filter.To) items = items.filter((l) => l.OccurredAt.getTime() <= filter.To!.getTime());
     items.sort((a, b) => b.OccurredAt.getTime() - a.OccurredAt.getTime());
     return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+}
+
+/** Captures appended audit entries (ignores the transaction manager) for use-case specs. */
+export class FakeAuditWriter implements IAuditWriter {
+  public readonly Entries: AuditEntry[] = [];
+
+  public async Append(entry: AuditEntry): Promise<void> {
+    this.Entries.push(entry);
   }
 }
