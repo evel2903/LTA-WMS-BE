@@ -8,4 +8,5 @@ export interface CreateUomDto {
   Status: MasterDataStatus;
   SourceSystem?: string;
   ReferenceId?: string;
+  ReasonCode?: string | null;
 }

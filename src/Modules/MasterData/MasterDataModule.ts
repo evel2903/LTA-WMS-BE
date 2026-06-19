@@ -417,8 +417,9 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: CreateUomUseCase,
-      useFactory: (uoms: IUomRepository) => new CreateUomUseCase(uoms),
-      inject: [UOM_REPOSITORY],
+      useFactory: (uoms: IUomRepository, ownership: MasterDataOwnershipPolicyService, audited: AuditedTransaction) =>
+        new CreateUomUseCase(uoms, ownership, audited),
+      inject: [UOM_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: GetUomUseCase,
@@ -432,8 +433,9 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateUomUseCase,
-      useFactory: (uoms: IUomRepository) => new UpdateUomUseCase(uoms),
-      inject: [UOM_REPOSITORY],
+      useFactory: (uoms: IUomRepository, ownership: MasterDataOwnershipPolicyService, audited: AuditedTransaction) =>
+        new UpdateUomUseCase(uoms, ownership, audited),
+      inject: [UOM_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: CreateSkuUseCase,
