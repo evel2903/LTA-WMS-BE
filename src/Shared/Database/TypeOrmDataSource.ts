@@ -33,6 +33,7 @@ import { GroupOrmEntity } from '@modules/AccessControl/Infrastructure/Persistenc
 import { GroupMemberOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/GroupMemberOrmEntity';
 import { DataScopeOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/DataScopeOrmEntity';
 import { ReasonCodeOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ReasonCodeOrmEntity';
+import { AuditLogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/AuditLogOrmEntity';
 
 const env = GetEnv();
 
@@ -76,6 +77,7 @@ export default new DataSource({
     GroupMemberOrmEntity,
     DataScopeOrmEntity,
     ReasonCodeOrmEntity,
+    AuditLogOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

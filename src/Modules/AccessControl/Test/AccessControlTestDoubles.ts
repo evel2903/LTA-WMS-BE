@@ -19,6 +19,11 @@ import {
   IReasonCodeRepository,
   ReasonCodeListFilter,
 } from '@modules/AccessControl/Application/Interfaces/IReasonCodeRepository';
+import { AuditLogEntity } from '@modules/AccessControl/Domain/Entities/AuditLogEntity';
+import {
+  AuditLogQueryFilter,
+  IAuditLogRepository,
+} from '@modules/AccessControl/Application/Interfaces/IAuditLogRepository';
 
 export class InMemoryRoleRepository implements IRoleRepository {
   private readonly roles = new Map<string, RoleEntity>();
@@ -198,6 +203,35 @@ export class InMemoryReasonCodeRepository implements IReasonCodeRepository {
     if (filter.ReasonGroup) items = items.filter((rc) => rc.ReasonGroup === filter.ReasonGroup);
     if (filter.Status) items = items.filter((rc) => rc.Status === filter.Status);
     if (filter.Action) items = items.filter((rc) => rc.AppliesToActions.includes(filter.Action!));
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+}
+
+export class InMemoryAuditLogRepository implements IAuditLogRepository {
+  private readonly logs = new Map<string, AuditLogEntity>();
+
+  public async Seed(log: AuditLogEntity): Promise<void> {
+    this.logs.set(log.Id, log);
+  }
+
+  public async FindById(id: string): Promise<AuditLogEntity | null> {
+    return this.logs.get(id) ?? null;
+  }
+
+  public async Query(
+    skip: number,
+    take: number,
+    filter: AuditLogQueryFilter = {},
+  ): Promise<{ Items: AuditLogEntity[]; TotalItems: number }> {
+    let items = [...this.logs.values()];
+    if (filter.ActorUserId) items = items.filter((l) => l.ActorUserId === filter.ActorUserId);
+    if (filter.Action) items = items.filter((l) => l.Action === filter.Action);
+    if (filter.ObjectType) items = items.filter((l) => l.ObjectType === filter.ObjectType);
+    if (filter.ObjectId) items = items.filter((l) => l.ObjectId === filter.ObjectId);
+    if (filter.ReasonCodeId) items = items.filter((l) => l.ReasonCodeId === filter.ReasonCodeId);
+    if (filter.From) items = items.filter((l) => l.OccurredAt.getTime() >= filter.From!.getTime());
+    if (filter.To) items = items.filter((l) => l.OccurredAt.getTime() <= filter.To!.getTime());
+    items.sort((a, b) => b.OccurredAt.getTime() - a.OccurredAt.getTime());
     return { Items: items.slice(skip, skip + take), TotalItems: items.length };
   }
 }

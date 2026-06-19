@@ -55,6 +55,17 @@ import { RoleController } from '@modules/AccessControl/Presentation/Controllers/
 import { PermissionController } from '@modules/AccessControl/Presentation/Controllers/PermissionController';
 import { UserRoleController } from '@modules/AccessControl/Presentation/Controllers/UserRoleController';
 import { ReasonCodeController } from '@modules/AccessControl/Presentation/Controllers/ReasonCodeController';
+import { AUDIT_WRITER } from '@modules/AccessControl/Application/Interfaces/IAuditWriter';
+import {
+  IAuditLogRepository,
+  AUDIT_LOG_REPOSITORY,
+} from '@modules/AccessControl/Application/Interfaces/IAuditLogRepository';
+import { AuditWriter } from '@modules/AccessControl/Infrastructure/Audit/AuditWriter';
+import { AuditLogRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/AuditLogRepository';
+import { AuditLogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/AuditLogOrmEntity';
+import { QueryAuditLogsUseCase } from '@modules/AccessControl/Application/UseCases/QueryAuditLogsUseCase';
+import { GetAuditLogUseCase } from '@modules/AccessControl/Application/UseCases/GetAuditLogUseCase';
+import { AuditLogController } from '@modules/AccessControl/Presentation/Controllers/AuditLogController';
 
 @Module({
   imports: [
@@ -67,9 +78,10 @@ import { ReasonCodeController } from '@modules/AccessControl/Presentation/Contro
       GroupMemberOrmEntity,
       DataScopeOrmEntity,
       ReasonCodeOrmEntity,
+      AuditLogOrmEntity,
     ]),
   ],
-  controllers: [RoleController, PermissionController, UserRoleController, ReasonCodeController],
+  controllers: [RoleController, PermissionController, UserRoleController, ReasonCodeController, AuditLogController],
   providers: [
     { provide: ROLE_REPOSITORY, useClass: RoleRepository },
     { provide: PERMISSION_REPOSITORY, useClass: PermissionRepository },
@@ -77,6 +89,18 @@ import { ReasonCodeController } from '@modules/AccessControl/Presentation/Contro
     { provide: USER_ROLE_REPOSITORY, useClass: UserRoleRepository },
     { provide: DATA_SCOPE_REPOSITORY, useClass: DataScopeRepository },
     { provide: REASON_CODE_REPOSITORY, useClass: ReasonCodeRepository },
+    { provide: AUDIT_LOG_REPOSITORY, useClass: AuditLogRepository },
+    { provide: AUDIT_WRITER, useClass: AuditWriter },
+    {
+      provide: QueryAuditLogsUseCase,
+      useFactory: (auditLogs: IAuditLogRepository) => new QueryAuditLogsUseCase(auditLogs),
+      inject: [AUDIT_LOG_REPOSITORY],
+    },
+    {
+      provide: GetAuditLogUseCase,
+      useFactory: (auditLogs: IAuditLogRepository) => new GetAuditLogUseCase(auditLogs),
+      inject: [AUDIT_LOG_REPOSITORY],
+    },
     ScopeExtractor,
     PermissionGuard,
     {
@@ -167,6 +191,8 @@ import { ReasonCodeController } from '@modules/AccessControl/Presentation/Contro
     PermissionGuard,
     REASON_CODE_CATALOG,
     REASON_CODE_REPOSITORY,
+    AUDIT_WRITER,
+    AUDIT_LOG_REPOSITORY,
     GetUserEffectivePermissionsUseCase,
   ],
 })
