@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 import request from 'supertest';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
 import { CreateLocationUseCase } from '@modules/MasterData/Application/UseCases/CreateLocationUseCase';
@@ -20,16 +21,18 @@ describe('E2E LocationController (no DB)', () => {
   const updateExecute = jest.fn();
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      controllers: [LocationController],
-      providers: [
-        { provide: CreateLocationUseCase, useValue: { Execute: createExecute } },
-        { provide: GetLocationUseCase, useValue: { Execute: getExecute } },
-        { provide: ListLocationsUseCase, useValue: { Execute: listExecute } },
-        { provide: GetLocationTreeUseCase, useValue: { Execute: treeExecute } },
-        { provide: UpdateLocationUseCase, useValue: { Execute: updateExecute } },
-      ],
-    }).compile();
+    const moduleRef = await overrideAccessGuards(
+      Test.createTestingModule({
+        controllers: [LocationController],
+        providers: [
+          { provide: CreateLocationUseCase, useValue: { Execute: createExecute } },
+          { provide: GetLocationUseCase, useValue: { Execute: getExecute } },
+          { provide: ListLocationsUseCase, useValue: { Execute: listExecute } },
+          { provide: GetLocationTreeUseCase, useValue: { Execute: treeExecute } },
+          { provide: UpdateLocationUseCase, useValue: { Execute: updateExecute } },
+        ],
+      }),
+    ).compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(

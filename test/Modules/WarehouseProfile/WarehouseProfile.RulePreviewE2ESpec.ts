@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 import request from 'supertest';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
 import { GlobalExceptionFilter } from '@common/Filters/GlobalExceptionFilter';
@@ -73,10 +74,12 @@ describe('E2E rule preview endpoint (real controller + use case, faked resolver,
     const resolver = new StubRuleResolver(decision);
     const useCase = new PreviewRuleResolutionUseCase(resolver, new RuleConflictDetector());
 
-    const moduleRef = await Test.createTestingModule({
-      controllers: [RulePreviewController],
-      providers: [{ provide: PreviewRuleResolutionUseCase, useValue: useCase }],
-    }).compile();
+    const moduleRef = await overrideAccessGuards(
+      Test.createTestingModule({
+        controllers: [RulePreviewController],
+        providers: [{ provide: PreviewRuleResolutionUseCase, useValue: useCase }],
+      }),
+    ).compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalFilters(new GlobalExceptionFilter({ LogError: jest.fn() } as unknown as LoggingService));

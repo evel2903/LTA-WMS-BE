@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 import request from 'supertest';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
 import { GlobalExceptionFilter } from '@common/Filters/GlobalExceptionFilter';
@@ -72,10 +73,12 @@ describe('E2E WarehouseProfile checklist (real controller + use case, no DB)', (
     const service = new WarehouseProfileChecklistService(profiles, groups, definitions, bindings, preview);
     const useCase = new VerifyWarehouseProfileChecklistUseCase(profiles, resolver, service);
 
-    const moduleRef = await Test.createTestingModule({
-      controllers: [WarehouseProfileChecklistController],
-      providers: [{ provide: VerifyWarehouseProfileChecklistUseCase, useValue: useCase }],
-    }).compile();
+    const moduleRef = await overrideAccessGuards(
+      Test.createTestingModule({
+        controllers: [WarehouseProfileChecklistController],
+        providers: [{ provide: VerifyWarehouseProfileChecklistUseCase, useValue: useCase }],
+      }),
+    ).compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalFilters(new GlobalExceptionFilter({ LogError: jest.fn() } as unknown as LoggingService));

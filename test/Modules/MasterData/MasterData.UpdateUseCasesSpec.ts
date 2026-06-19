@@ -152,7 +152,7 @@ describe('MasterData update use cases', () => {
     const warehouses = new FakeWarehouseRepository();
     zones.FindById.mockResolvedValue(null);
 
-    const useCase = new UpdateZoneUseCase(zones, warehouses);
+    const useCase = new UpdateZoneUseCase(zones, warehouses, { Check: jest.fn() } as never);
 
     await expect(useCase.Execute({ Id: 'missing-zone', ZoneName: 'Missing' })).rejects.toBeInstanceOf(
       NotFoundException,
@@ -165,7 +165,7 @@ describe('MasterData update use cases', () => {
     zones.FindById.mockResolvedValue(Zone('zone-1', 'warehouse-1', 'PICK'));
     zones.FindByWarehouseAndCode.mockResolvedValue(Zone('zone-2', 'warehouse-1', 'PACK'));
 
-    const useCase = new UpdateZoneUseCase(zones, warehouses);
+    const useCase = new UpdateZoneUseCase(zones, warehouses, { Check: jest.fn() } as never);
 
     await expect(useCase.Execute({ Id: 'zone-1', ZoneCode: 'PACK' })).rejects.toBeInstanceOf(ConflictException);
   });
@@ -176,7 +176,7 @@ describe('MasterData update use cases', () => {
     zones.FindById.mockResolvedValue(Zone('zone-1', 'warehouse-1', 'PICK'));
     warehouses.FindById.mockResolvedValue(Warehouse('warehouse-1', 'site-1', 'WH-HCM', MasterDataStatus.Inactive));
 
-    const useCase = new UpdateZoneUseCase(zones, warehouses);
+    const useCase = new UpdateZoneUseCase(zones, warehouses, { Check: jest.fn() } as never);
 
     await expect(useCase.Execute({ Id: 'zone-1', WarehouseId: 'warehouse-1' })).rejects.toBeInstanceOf(
       BusinessRuleException,

@@ -13,6 +13,15 @@ import {
   IUserRoleRepository,
   USER_ROLE_REPOSITORY,
 } from '@modules/AccessControl/Application/Interfaces/IUserRoleRepository';
+import {
+  IDataScopeRepository,
+  DATA_SCOPE_REPOSITORY,
+} from '@modules/AccessControl/Application/Interfaces/IDataScopeRepository';
+import { PERMISSION_CHECKER } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import { PermissionChecker } from '@modules/AccessControl/Application/Services/PermissionChecker';
+import { DataScopeRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/DataScopeRepository';
+import { ScopeExtractor } from '@modules/AccessControl/Presentation/Services/ScopeExtractor';
+import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { ListRolesUseCase } from '@modules/AccessControl/Application/UseCases/ListRolesUseCase';
 import { GetRoleUseCase } from '@modules/AccessControl/Application/UseCases/GetRoleUseCase';
 import { ListPermissionsUseCase } from '@modules/AccessControl/Application/UseCases/ListPermissionsUseCase';
@@ -52,6 +61,19 @@ import { UserRoleController } from '@modules/AccessControl/Presentation/Controll
     { provide: PERMISSION_REPOSITORY, useClass: PermissionRepository },
     { provide: ROLE_PERMISSION_REPOSITORY, useClass: RolePermissionRepository },
     { provide: USER_ROLE_REPOSITORY, useClass: UserRoleRepository },
+    { provide: DATA_SCOPE_REPOSITORY, useClass: DataScopeRepository },
+    ScopeExtractor,
+    PermissionGuard,
+    {
+      provide: PERMISSION_CHECKER,
+      useFactory: (
+        userRoles: IUserRoleRepository,
+        rolePermissions: IRolePermissionRepository,
+        permissions: IPermissionRepository,
+        dataScopes: IDataScopeRepository,
+      ) => new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes),
+      inject: [USER_ROLE_REPOSITORY, ROLE_PERMISSION_REPOSITORY, PERMISSION_REPOSITORY, DATA_SCOPE_REPOSITORY],
+    },
     {
       provide: ListRolesUseCase,
       useFactory: (roles: IRoleRepository) => new ListRolesUseCase(roles),
@@ -99,6 +121,10 @@ import { UserRoleController } from '@modules/AccessControl/Presentation/Controll
     PERMISSION_REPOSITORY,
     ROLE_PERMISSION_REPOSITORY,
     USER_ROLE_REPOSITORY,
+    DATA_SCOPE_REPOSITORY,
+    PERMISSION_CHECKER,
+    ScopeExtractor,
+    PermissionGuard,
     GetUserEffectivePermissionsUseCase,
   ],
 })

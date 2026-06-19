@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 import request from 'supertest';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
 import { CreateOwnerUseCase } from '@modules/MasterData/Application/UseCases/CreateOwnerUseCase';
@@ -18,15 +19,17 @@ describe('E2E OwnerController (no DB)', () => {
   const updateExecute = jest.fn();
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      controllers: [OwnerController],
-      providers: [
-        { provide: CreateOwnerUseCase, useValue: { Execute: createExecute } },
-        { provide: GetOwnerUseCase, useValue: { Execute: getExecute } },
-        { provide: ListOwnersUseCase, useValue: { Execute: listExecute } },
-        { provide: UpdateOwnerUseCase, useValue: { Execute: updateExecute } },
-      ],
-    }).compile();
+    const moduleRef = await overrideAccessGuards(
+      Test.createTestingModule({
+        controllers: [OwnerController],
+        providers: [
+          { provide: CreateOwnerUseCase, useValue: { Execute: createExecute } },
+          { provide: GetOwnerUseCase, useValue: { Execute: getExecute } },
+          { provide: ListOwnersUseCase, useValue: { Execute: listExecute } },
+          { provide: UpdateOwnerUseCase, useValue: { Execute: updateExecute } },
+        ],
+      }),
+    ).compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));

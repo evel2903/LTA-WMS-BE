@@ -12,8 +12,9 @@ import { RoleController } from '@modules/AccessControl/Presentation/Controllers/
 import { PermissionController } from '@modules/AccessControl/Presentation/Controllers/PermissionController';
 import { UserRoleController } from '@modules/AccessControl/Presentation/Controllers/UserRoleController';
 import { CreateAccessControlRbacSchema1781630000000 } from '@shared/Database/Migrations/1781630000000-CreateAccessControlRbacSchema';
-import { ROLES_KEY } from '@common/Security/Roles';
-import { Role } from '@common/Constants/Role';
+import { REQUIRE_PERMISSION_KEY } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 
 const captureMigrationSql = async (direction: 'up' | 'down'): Promise<string> => {
   const migration = new CreateAccessControlRbacSchema1781630000000();
@@ -55,9 +56,11 @@ describe('AccessControl module and schema registration', () => {
     );
   });
 
-  it('gates the sensitive user-role controller behind the admin role', () => {
-    const roles = Reflect.getMetadata(ROLES_KEY, UserRoleController) as Role[] | undefined;
-    expect(roles).toEqual([Role.Admin]);
+  it('requires UserAssignment permission on the user-role mutation endpoints (C2 PermissionGuard)', () => {
+    const assignMeta = Reflect.getMetadata(REQUIRE_PERMISSION_KEY, UserRoleController.prototype.AssignRole);
+    const removeMeta = Reflect.getMetadata(REQUIRE_PERMISSION_KEY, UserRoleController.prototype.RemoveRole);
+    expect(assignMeta).toMatchObject({ Action: ActionCode.Update, ObjectType: ObjectType.UserAssignment });
+    expect(removeMeta).toMatchObject({ Action: ActionCode.Update, ObjectType: ObjectType.UserAssignment });
   });
 
   it('does not expose any permission-guard/enforcement controller in C1', () => {

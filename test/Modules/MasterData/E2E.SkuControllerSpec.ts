@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 import request from 'supertest';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
 import { CreateSkuUseCase } from '@modules/MasterData/Application/UseCases/CreateSkuUseCase';
@@ -20,16 +21,18 @@ describe('E2E SkuController (no DB)', () => {
   const updateExecute = jest.fn();
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      controllers: [SkuController],
-      providers: [
-        { provide: CreateSkuUseCase, useValue: { Execute: createExecute } },
-        { provide: GetSkuUseCase, useValue: { Execute: getExecute } },
-        { provide: GetSkuRuleFactsUseCase, useValue: { Execute: getRuleFactsExecute } },
-        { provide: ListSkusUseCase, useValue: { Execute: listExecute } },
-        { provide: UpdateSkuUseCase, useValue: { Execute: updateExecute } },
-      ],
-    }).compile();
+    const moduleRef = await overrideAccessGuards(
+      Test.createTestingModule({
+        controllers: [SkuController],
+        providers: [
+          { provide: CreateSkuUseCase, useValue: { Execute: createExecute } },
+          { provide: GetSkuUseCase, useValue: { Execute: getExecute } },
+          { provide: GetSkuRuleFactsUseCase, useValue: { Execute: getRuleFactsExecute } },
+          { provide: ListSkusUseCase, useValue: { Execute: listExecute } },
+          { provide: UpdateSkuUseCase, useValue: { Execute: updateExecute } },
+        ],
+      }),
+    ).compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));

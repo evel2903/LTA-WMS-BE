@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AccessControlModule } from '@modules/AccessControl/AccessControlModule';
 import { IOwnerRepository, OWNER_REPOSITORY } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { ISkuRepository, SKU_REPOSITORY } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import {
@@ -84,6 +85,7 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
       WarehouseProfileRuleOrmEntity,
     ]),
     MasterDataModule,
+    AccessControlModule,
   ],
   controllers: [
     WarehouseProfileController,

@@ -1,10 +1,13 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, Unique, UpdateDateColumn } from 'typeorm';
 
 /**
- * Schema-only in C1: principal→scope rows. `principal_id` is polymorphic
- * (user/role/group) so there is no hard FK. Runtime resolution/enforcement is C2.
+ * principal→scope rows. `principal_id` is polymorphic (user/role/group) so there is
+ * no hard FK. C1 created the table (schema-only); C2 adds the composite lookup index
+ * + unique constraint and does runtime resolution/enforcement.
  */
 @Entity({ name: 'data_scopes' })
+@Index('IDX_data_scopes_principal_lookup', ['PrincipalType', 'PrincipalId'])
+@Unique('UQ_data_scopes_principal_scope', ['PrincipalType', 'PrincipalId', 'ScopeType', 'ScopeValueId'])
 export class DataScopeOrmEntity {
   @PrimaryColumn({ name: 'id', type: 'char', length: 36 })
   public Id!: string;

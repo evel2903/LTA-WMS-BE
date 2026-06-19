@@ -2,6 +2,8 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
+import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
+import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { ZoneController } from '@modules/MasterData/Presentation/Controllers/ZoneController';
 import { CreateZoneUseCase } from '@modules/MasterData/Application/UseCases/CreateZoneUseCase';
 import { GetZoneByIdUseCase } from '@modules/MasterData/Application/UseCases/GetZoneByIdUseCase';
@@ -26,7 +28,17 @@ describe('E2E ZoneController (no DB)', () => {
         { provide: ListZonesUseCase, useValue: { Execute: listExecute } },
         { provide: UpdateZoneUseCase, useValue: { Execute: updateExecute } },
       ],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({
+        canActivate: (context: { switchToHttp: () => { getRequest: () => { user?: unknown } } }) => {
+          context.switchToHttp().getRequest().user = { UserId: 'test-admin', Role: 'Admin' };
+          return true;
+        },
+      })
+      .overrideGuard(PermissionGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(
@@ -112,7 +124,7 @@ describe('E2E ZoneController (no DB)', () => {
     await request(app.getHttpServer()).patch('/zones/zone-1').send({ ZoneName: 'Updated' }).expect(200);
 
     expect(getByIdExecute).toHaveBeenCalledWith('zone-1');
-    expect(updateExecute).toHaveBeenCalledWith({ Id: 'zone-1', ZoneName: 'Updated' });
+    expect(updateExecute).toHaveBeenCalledWith({ Id: 'zone-1', ZoneName: 'Updated', ActorUserId: 'test-admin' });
   });
 
   it('PATCH /zones/:id rejects empty required fields when provided', async () => {
