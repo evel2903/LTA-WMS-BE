@@ -28,6 +28,9 @@ import { ListPermissionsUseCase } from '@modules/AccessControl/Application/UseCa
 import { GetUserEffectivePermissionsUseCase } from '@modules/AccessControl/Application/UseCases/GetUserEffectivePermissionsUseCase';
 import { AssignRoleToUserUseCase } from '@modules/AccessControl/Application/UseCases/AssignRoleToUserUseCase';
 import { RemoveRoleFromUserUseCase } from '@modules/AccessControl/Application/UseCases/RemoveRoleFromUserUseCase';
+import { ListUserDataScopesUseCase } from '@modules/AccessControl/Application/UseCases/ListUserDataScopesUseCase';
+import { AssignDataScopeToUserUseCase } from '@modules/AccessControl/Application/UseCases/AssignDataScopeToUserUseCase';
+import { RemoveDataScopeFromUserUseCase } from '@modules/AccessControl/Application/UseCases/RemoveDataScopeFromUserUseCase';
 import { RoleRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/RoleRepository';
 import { PermissionRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/PermissionRepository';
 import { RolePermissionRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/RolePermissionRepository';
@@ -243,6 +246,23 @@ import { ExceptionCaseController } from '@modules/AccessControl/Presentation/Con
       useFactory: (roles: IRoleRepository, userRoles: IUserRoleRepository, audited: AuditedTransaction) =>
         new RemoveRoleFromUserUseCase(roles, userRoles, audited),
       inject: [ROLE_REPOSITORY, USER_ROLE_REPOSITORY, AuditedTransaction],
+    },
+    {
+      provide: ListUserDataScopesUseCase,
+      useFactory: (dataScopes: IDataScopeRepository) => new ListUserDataScopesUseCase(dataScopes),
+      inject: [DATA_SCOPE_REPOSITORY],
+    },
+    {
+      provide: AssignDataScopeToUserUseCase,
+      useFactory: (dataScopes: IDataScopeRepository, audited: AuditedTransaction) =>
+        new AssignDataScopeToUserUseCase(dataScopes, audited),
+      inject: [DATA_SCOPE_REPOSITORY, AuditedTransaction],
+    },
+    {
+      provide: RemoveDataScopeFromUserUseCase,
+      useFactory: (dataScopes: IDataScopeRepository, audited: AuditedTransaction) =>
+        new RemoveDataScopeFromUserUseCase(dataScopes, audited),
+      inject: [DATA_SCOPE_REPOSITORY, AuditedTransaction],
     },
     { provide: APPROVAL_REQUEST_REPOSITORY, useClass: ApprovalRequestRepository },
     {

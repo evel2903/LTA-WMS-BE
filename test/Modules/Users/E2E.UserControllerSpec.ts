@@ -7,6 +7,7 @@ import { DeleteUserUseCase } from '@modules/Users/Application/UseCases/DeleteUse
 import { GetUserByIdUseCase } from '@modules/Users/Application/UseCases/GetUserByIdUseCase';
 import { ListUsersUseCase } from '@modules/Users/Application/UseCases/ListUsersUseCase';
 import { UpdateUserUseCase } from '@modules/Users/Application/UseCases/UpdateUserUseCase';
+import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 
 describe('E2E UserController (no DB)', () => {
   let app: INestApplication;
@@ -18,16 +19,18 @@ describe('E2E UserController (no DB)', () => {
   const deleteExecute = jest.fn();
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      controllers: [UserController],
-      providers: [
-        { provide: CreateUserUseCase, useValue: { Execute: createExecute } },
-        { provide: GetUserByIdUseCase, useValue: { Execute: getByIdExecute } },
-        { provide: ListUsersUseCase, useValue: { Execute: listExecute } },
-        { provide: UpdateUserUseCase, useValue: { Execute: updateExecute } },
-        { provide: DeleteUserUseCase, useValue: { Execute: deleteExecute } },
-      ],
-    }).compile();
+    const moduleRef = await overrideAccessGuards(
+      Test.createTestingModule({
+        controllers: [UserController],
+        providers: [
+          { provide: CreateUserUseCase, useValue: { Execute: createExecute } },
+          { provide: GetUserByIdUseCase, useValue: { Execute: getByIdExecute } },
+          { provide: ListUsersUseCase, useValue: { Execute: listExecute } },
+          { provide: UpdateUserUseCase, useValue: { Execute: updateExecute } },
+          { provide: DeleteUserUseCase, useValue: { Execute: deleteExecute } },
+        ],
+      }),
+    ).compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(

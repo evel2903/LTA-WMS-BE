@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AccessControlModule } from '@modules/AccessControl/AccessControlModule';
 import { CreateUserUseCase } from '@modules/Users/Application/UseCases/CreateUserUseCase';
 import { DeleteUserUseCase } from '@modules/Users/Application/UseCases/DeleteUserUseCase';
 import { GetUserByIdUseCase } from '@modules/Users/Application/UseCases/GetUserByIdUseCase';
@@ -11,7 +12,7 @@ import { UserOrmEntity } from '@modules/Users/Infrastructure/Persistence/Entitie
 import { UserController } from '@modules/Users/Presentation/Controllers/UserController';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UserOrmEntity])],
+  imports: [TypeOrmModule.forFeature([UserOrmEntity]), AccessControlModule],
   controllers: [UserController],
   providers: [
     { provide: USER_REPOSITORY, useClass: UserRepository },

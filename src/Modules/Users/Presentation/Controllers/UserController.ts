@@ -1,4 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
+import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
 import { CreateUserUseCase } from '@modules/Users/Application/UseCases/CreateUserUseCase';
 import { DeleteUserUseCase } from '@modules/Users/Application/UseCases/DeleteUserUseCase';
 import { GetUserByIdUseCase } from '@modules/Users/Application/UseCases/GetUserByIdUseCase';
@@ -28,7 +33,12 @@ export class UserController {
     return await this.getUserByIdUseCase.Execute(id);
   }
 
+  // The user roster carries PII and backs the admin-only RBAC assignment screen (C10),
+  // so reading it requires the same permission as managing assignments. Other /users
+  // endpoints retain their pre-existing access model (tracked separately).
   @Get()
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission(ActionCode.Read, ObjectType.UserAssignment)
   public async List(@Query() query: ListUsersQuery) {
     return await this.listUsersUseCase.Execute(query);
   }
