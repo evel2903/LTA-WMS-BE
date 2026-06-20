@@ -82,6 +82,17 @@ import { RejectApprovalRequestUseCase } from '@modules/AccessControl/Application
 import { GetApprovalRequestUseCase } from '@modules/AccessControl/Application/UseCases/GetApprovalRequestUseCase';
 import { ListApprovalRequestsUseCase } from '@modules/AccessControl/Application/UseCases/ListApprovalRequestsUseCase';
 import { ApprovalRequestController } from '@modules/AccessControl/Presentation/Controllers/ApprovalRequestController';
+import {
+  IControlExceptionCatalogRepository,
+  CONTROL_EXCEPTION_CATALOG_REPOSITORY,
+} from '@modules/AccessControl/Application/Interfaces/IControlExceptionCatalogRepository';
+import { VALIDATION_RULE_CATALOG_REPOSITORY } from '@modules/AccessControl/Application/Interfaces/IValidationRuleCatalogRepository';
+import { CONTROL_EXCEPTION_CATALOG } from '@modules/AccessControl/Application/Interfaces/IControlExceptionCatalog';
+import { ControlExceptionCatalog } from '@modules/AccessControl/Application/Services/ControlExceptionCatalog';
+import { ControlExceptionCatalogRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/ControlExceptionCatalogRepository';
+import { ValidationRuleCatalogRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/ValidationRuleCatalogRepository';
+import { ControlExceptionCatalogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ControlExceptionCatalogOrmEntity';
+import { ValidationRuleCatalogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ValidationRuleCatalogOrmEntity';
 
 @Module({
   imports: [
@@ -96,6 +107,8 @@ import { ApprovalRequestController } from '@modules/AccessControl/Presentation/C
       ReasonCodeOrmEntity,
       AuditLogOrmEntity,
       ApprovalRequestOrmEntity,
+      ControlExceptionCatalogOrmEntity,
+      ValidationRuleCatalogOrmEntity,
     ]),
   ],
   controllers: [
@@ -132,6 +145,13 @@ import { ApprovalRequestController } from '@modules/AccessControl/Presentation/C
       provide: REASON_CODE_CATALOG,
       useFactory: (reasonCodes: IReasonCodeRepository) => new ReasonCodeCatalog(reasonCodes),
       inject: [REASON_CODE_REPOSITORY],
+    },
+    { provide: CONTROL_EXCEPTION_CATALOG_REPOSITORY, useClass: ControlExceptionCatalogRepository },
+    { provide: VALIDATION_RULE_CATALOG_REPOSITORY, useClass: ValidationRuleCatalogRepository },
+    {
+      provide: CONTROL_EXCEPTION_CATALOG,
+      useFactory: (repo: IControlExceptionCatalogRepository) => new ControlExceptionCatalog(repo),
+      inject: [CONTROL_EXCEPTION_CATALOG_REPOSITORY],
     },
     {
       provide: CreateReasonCodeUseCase,
@@ -271,6 +291,9 @@ import { ApprovalRequestController } from '@modules/AccessControl/Presentation/C
     GetUserEffectivePermissionsUseCase,
     APPROVAL_REQUEST_REPOSITORY,
     CreateApprovalRequestUseCase,
+    CONTROL_EXCEPTION_CATALOG,
+    CONTROL_EXCEPTION_CATALOG_REPOSITORY,
+    VALIDATION_RULE_CATALOG_REPOSITORY,
   ],
 })
 export class AccessControlModule {}

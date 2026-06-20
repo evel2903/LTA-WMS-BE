@@ -36,6 +36,8 @@ import { DataScopeOrmEntity } from '@modules/AccessControl/Infrastructure/Persis
 import { ReasonCodeOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ReasonCodeOrmEntity';
 import { AuditLogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/AuditLogOrmEntity';
 import { ApprovalRequestOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ApprovalRequestOrmEntity';
+import { ControlExceptionCatalogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ControlExceptionCatalogOrmEntity';
+import { ValidationRuleCatalogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ValidationRuleCatalogOrmEntity';
 
 const env = GetEnv();
 
@@ -82,6 +84,8 @@ export default new DataSource({
     ReasonCodeOrmEntity,
     AuditLogOrmEntity,
     ApprovalRequestOrmEntity,
+    ControlExceptionCatalogOrmEntity,
+    ValidationRuleCatalogOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

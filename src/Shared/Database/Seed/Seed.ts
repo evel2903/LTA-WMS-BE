@@ -22,6 +22,12 @@ import { DataScopeOrmEntity } from '@modules/AccessControl/Infrastructure/Persis
 import { SeedReasonCodeCatalog } from '@modules/AccessControl/Application/Services/ReasonCodeCatalogSeed';
 import { ReasonCodeRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/ReasonCodeRepository';
 import { ReasonCodeOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ReasonCodeOrmEntity';
+import { SeedControlExceptionCatalog } from '@modules/AccessControl/Application/Services/ControlExceptionCatalogSeed';
+import { SeedValidationRuleCatalog } from '@modules/AccessControl/Application/Services/ValidationRuleCatalogSeed';
+import { ControlExceptionCatalogRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/ControlExceptionCatalogRepository';
+import { ValidationRuleCatalogRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/ValidationRuleCatalogRepository';
+import { ControlExceptionCatalogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ControlExceptionCatalogOrmEntity';
+import { ValidationRuleCatalogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ValidationRuleCatalogOrmEntity';
 
 const GetRequired = (key: string, value: string | undefined): string => {
   if (!value || value.trim().length === 0) {
@@ -88,6 +94,20 @@ async function Seed() {
     const reasonCodeRepository = new ReasonCodeRepository(dataSource.getRepository(ReasonCodeOrmEntity));
     await SeedReasonCodeCatalog(reasonCodeRepository);
     console.log('Seed: reason code catalog ensured');
+
+    // Idempotent C8 catalogs: control-exception (CTRL-EX-01..09) + validation-rule (RBAC-VAL-01..10)
+    // from doc 09. Upsert by code; the control-exception catalog is consumed by C9.
+    const controlExceptionCatalogRepository = new ControlExceptionCatalogRepository(
+      dataSource.getRepository(ControlExceptionCatalogOrmEntity),
+    );
+    await SeedControlExceptionCatalog(controlExceptionCatalogRepository);
+    console.log('Seed: control exception catalog ensured');
+
+    const validationRuleCatalogRepository = new ValidationRuleCatalogRepository(
+      dataSource.getRepository(ValidationRuleCatalogOrmEntity),
+    );
+    await SeedValidationRuleCatalog(validationRuleCatalogRepository);
+    console.log('Seed: validation rule catalog ensured');
   } finally {
     await dataSource.destroy();
   }

@@ -31,6 +31,10 @@ import {
   ApprovalRequestListFilter,
   IApprovalRequestRepository,
 } from '@modules/AccessControl/Application/Interfaces/IApprovalRequestRepository';
+import { ControlExceptionCatalogEntity } from '@modules/AccessControl/Domain/Entities/ControlExceptionCatalogEntity';
+import { IControlExceptionCatalogRepository } from '@modules/AccessControl/Application/Interfaces/IControlExceptionCatalogRepository';
+import { ValidationRuleCatalogEntity } from '@modules/AccessControl/Domain/Entities/ValidationRuleCatalogEntity';
+import { IValidationRuleCatalogRepository } from '@modules/AccessControl/Application/Interfaces/IValidationRuleCatalogRepository';
 
 export class InMemoryRoleRepository implements IRoleRepository {
   private readonly roles = new Map<string, RoleEntity>();
@@ -284,6 +288,50 @@ export class InMemoryApprovalRequestRepository implements IApprovalRequestReposi
     if (filter.TargetObjectId) items = items.filter((r) => r.TargetObjectId === filter.TargetObjectId);
     if (filter.Action) items = items.filter((r) => r.Action === filter.Action);
     return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+}
+
+/** Idempotent control-exception catalog double: Upsert keyed by Code (no duplicate rows). */
+export class InMemoryControlExceptionCatalogRepository implements IControlExceptionCatalogRepository {
+  private readonly entries = new Map<string, ControlExceptionCatalogEntity>();
+
+  public async FindByCode(code: string): Promise<ControlExceptionCatalogEntity | null> {
+    return [...this.entries.values()].find((e) => e.Code === code) ?? null;
+  }
+
+  public async List(): Promise<ControlExceptionCatalogEntity[]> {
+    return [...this.entries.values()].sort((a, b) => a.Code.localeCompare(b.Code));
+  }
+
+  public async Upsert(entity: ControlExceptionCatalogEntity): Promise<ControlExceptionCatalogEntity> {
+    const existing = [...this.entries.values()].find((e) => e.Code === entity.Code);
+    if (existing) {
+      this.entries.delete(existing.Id);
+    }
+    this.entries.set(entity.Id, entity);
+    return entity;
+  }
+}
+
+/** Idempotent validation-rule catalog double: Upsert keyed by Code (no duplicate rows). */
+export class InMemoryValidationRuleCatalogRepository implements IValidationRuleCatalogRepository {
+  private readonly entries = new Map<string, ValidationRuleCatalogEntity>();
+
+  public async FindByCode(code: string): Promise<ValidationRuleCatalogEntity | null> {
+    return [...this.entries.values()].find((e) => e.Code === code) ?? null;
+  }
+
+  public async List(): Promise<ValidationRuleCatalogEntity[]> {
+    return [...this.entries.values()].sort((a, b) => a.Code.localeCompare(b.Code));
+  }
+
+  public async Upsert(entity: ValidationRuleCatalogEntity): Promise<ValidationRuleCatalogEntity> {
+    const existing = [...this.entries.values()].find((e) => e.Code === entity.Code);
+    if (existing) {
+      this.entries.delete(existing.Id);
+    }
+    this.entries.set(entity.Id, entity);
+    return entity;
   }
 }
 
