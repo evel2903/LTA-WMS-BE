@@ -79,7 +79,7 @@ const approvedApproval = (targetObjectId: string): ApprovalRequestEntity => {
     Id: randomUUID(),
     RequesterUserId: 'requester',
     Action: ActionCode.Override,
-    TargetObjectType: ObjectType.Rule,
+    TargetObjectType: ObjectType.Location,
     TargetObjectId: targetObjectId,
     Decision: ApprovalDecision.Approved,
     CreatedAt: now,

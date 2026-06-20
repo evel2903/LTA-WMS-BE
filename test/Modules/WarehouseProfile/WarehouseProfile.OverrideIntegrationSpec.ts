@@ -1,7 +1,9 @@
 import { randomUUID } from 'crypto';
 import dataSource from '@shared/Database/TypeOrmDataSource';
-import { ForbiddenAppException } from '@common/Exceptions/AppException';
+import { BusinessRuleException, ForbiddenAppException } from '@common/Exceptions/AppException';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ApprovalDecision } from '@modules/AccessControl/Domain/Enums/ApprovalDecision';
+import { ApprovalRequestEntity } from '@modules/AccessControl/Domain/Entities/ApprovalRequestEntity';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ActorType } from '@modules/AccessControl/Domain/Enums/ActorType';
 import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
@@ -279,5 +281,41 @@ describe('C7 override control (live Postgres)', () => {
     ).rejects.toThrow(/append-only/i);
 
     await expect(dataSource.query(`DELETE FROM override_logs WHERE id = $1`, [dto.Id])).rejects.toThrow(/append-only/i);
+  });
+
+  it('AC2: an APPROVED approval authorizes at most ONE override (single-use, DB-enforced)', async () => {
+    if (!available) return;
+    const rule = await seedRule({ ControlMode: RuleControlMode.ApprovalRequired, AllowOverride: true });
+    const targetId = `loc-${randomUUID().slice(0, 8)}`;
+    const now = new Date();
+    const approval = await approvalRepository.Create(
+      new ApprovalRequestEntity({
+        Id: randomUUID(),
+        RequesterUserId: randomUUID(),
+        Action: ActionCode.Override,
+        TargetObjectType: ObjectType.Location,
+        TargetObjectId: targetId,
+        Decision: ApprovalDecision.Approved,
+        DecidedByUserId: actorId,
+        CreatedAt: now,
+        UpdatedAt: now,
+      }),
+    );
+    const req = {
+      RuleId: rule.Id,
+      TargetObjectType: ObjectType.Location,
+      TargetObjectId: targetId,
+      ReasonCode: reasonCode,
+      ApprovalRequestId: approval.Id,
+    };
+
+    // First override consumes the approval.
+    const first = await makeUseCase().Execute({ ...req }, context(actorId));
+    expect(first.Id).toBeDefined();
+
+    // Re-using the same APPROVED approval for a second override is rejected by the unique index.
+    await expect(makeUseCase().Execute({ ...req }, context(actorId))).rejects.toBeInstanceOf(BusinessRuleException);
+    const logCount = await overrideRepo().count({ where: { ApprovalRequestId: approval.Id } });
+    expect(logCount).toBe(1);
   });
 });

@@ -43,6 +43,11 @@ export class CreateOverrideLogs1781635000000 implements MigrationInterface {
       `CREATE INDEX "IDX_override_logs_target" ON "override_logs" ("target_object_type", "target_object_id")`,
     );
     await queryRunner.query(`CREATE INDEX "IDX_override_logs_created_at" ON "override_logs" ("created_at")`);
+    // Single-use approval: an APPROVED ApprovalRequest can authorize at most ONE override
+    // (DB-enforced, race-safe — replay/concurrent reuse rejected with a unique violation).
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX "UQ_override_logs_approval_request" ON "override_logs" ("approval_request_id") WHERE "approval_request_id" IS NOT NULL`,
+    );
 
     await queryRunner.query(`
       CREATE OR REPLACE FUNCTION "prevent_override_log_update_delete"() RETURNS trigger AS $$
@@ -61,6 +66,7 @@ export class CreateOverrideLogs1781635000000 implements MigrationInterface {
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP TRIGGER IF EXISTS "trg_prevent_override_log_update_delete" ON "override_logs"`);
     await queryRunner.query(`DROP FUNCTION IF EXISTS "prevent_override_log_update_delete"()`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "UQ_override_logs_approval_request"`);
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_override_logs_created_at"`);
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_override_logs_target"`);
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_override_logs_actor"`);

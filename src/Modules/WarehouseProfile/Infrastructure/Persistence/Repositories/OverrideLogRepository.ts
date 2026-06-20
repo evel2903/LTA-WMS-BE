@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
+import { BusinessRuleException } from '@common/Exceptions/AppException';
 import {
   IOverrideLogRepository,
   OverrideLogListFilter,
@@ -23,8 +24,16 @@ export class OverrideLogRepository implements IOverrideLogRepository {
 
   public async Create(entity: OverrideLogEntity, manager?: EntityManager): Promise<OverrideLogEntity> {
     const repo = manager ? manager.getRepository(OverrideLogOrmEntity) : this.overrideLogs;
-    const created = await repo.save(OverrideLogOrmMapper.ToOrm(entity));
-    return OverrideLogOrmMapper.ToDomain(created);
+    try {
+      const created = await repo.save(OverrideLogOrmMapper.ToOrm(entity));
+      return OverrideLogOrmMapper.ToDomain(created);
+    } catch (error) {
+      // UQ_override_logs_approval_request: one APPROVED approval authorizes at most one override.
+      if ((error as { code?: string }).code === '23505') {
+        throw new BusinessRuleException('Approval request has already been consumed by another override');
+      }
+      throw error;
+    }
   }
 
   public async FindById(id: string): Promise<OverrideLogEntity | null> {

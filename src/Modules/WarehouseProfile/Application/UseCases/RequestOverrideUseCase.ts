@@ -14,6 +14,7 @@ import { IReasonCodeCatalog } from '@modules/AccessControl/Application/Interface
 import { IApprovalRequestRepository } from '@modules/AccessControl/Application/Interfaces/IApprovalRequestRepository';
 import { RuleControlMode } from '@modules/WarehouseProfile/Domain/Enums/RuleControlMode';
 import { RulePrecedenceTier } from '@modules/WarehouseProfile/Domain/Enums/RulePrecedenceTier';
+import { RuleStatus } from '@modules/WarehouseProfile/Domain/Enums/RuleStatus';
 import { OverrideLogEntity } from '@modules/WarehouseProfile/Domain/Entities/OverrideLogEntity';
 import { IRuleDefinitionRepository } from '@modules/WarehouseProfile/Application/Interfaces/IRuleDefinitionRepository';
 import { IOverrideLogRepository } from '@modules/WarehouseProfile/Application/Interfaces/IOverrideLogRepository';
@@ -63,6 +64,15 @@ export class RequestOverrideUseCase {
     const rule = await this.ruleDefinitions.FindById(request.RuleId);
     if (!rule) {
       throw new NotFoundException('Rule not found');
+    }
+
+    // 1b) Only a rule that is actually in force can be overridden — a DRAFT/RETIRED or
+    // out-of-effective-window rule never produced a live block, so "overriding" it would forge a
+    // meaningless immutable log entry. (Authoritative from the rule definition, not client input.)
+    const now = new Date();
+    const inEffectiveWindow = now >= rule.EffectiveFrom && (rule.EffectiveTo == null || now < rule.EffectiveTo);
+    if (rule.Status !== RuleStatus.Active || !inEffectiveWindow) {
+      throw new BusinessRuleException('Cannot override a rule that is not active and in its effective window');
     }
 
     // 2) AC3 — never override a compliance hard block. Authoritative, not client-supplied.
@@ -119,17 +129,21 @@ export class RequestOverrideUseCase {
         throw new BusinessRuleException('Override requires an approved approval request');
       }
       const approval = await this.approvalRequests.FindById(request.ApprovalRequestId);
+      // The approval must be APPROVED *and* be for THIS override of THIS target — match action +
+      // object type + id, not the id alone (ids are loosely-typed strings; an approval granted for a
+      // different action or object type that happens to share the id must not authorize this override).
       if (
         !approval ||
         approval.Decision !== ApprovalDecision.Approved ||
+        approval.Action !== ActionCode.Override ||
+        approval.TargetObjectType !== request.TargetObjectType ||
         approval.TargetObjectId !== request.TargetObjectId
       ) {
-        throw new BusinessRuleException('Override requires an approved approval request');
+        throw new BusinessRuleException('Override requires an approved approval request matching the target');
       }
     }
 
     // 6) AC1/AC5 — persist the immutable override_log + the Override audit row in one transaction.
-    const now = new Date();
     const entity = new OverrideLogEntity({
       Id: randomUUID(),
       RuleId: rule.Id,
@@ -138,7 +152,9 @@ export class RequestOverrideUseCase {
       TargetObjectType: request.TargetObjectType,
       TargetObjectId: request.TargetObjectId,
       TargetObjectCode: request.TargetObjectCode ?? null,
-      Scope: request.Scope ?? null,
+      // Persist the ENRICHED scope the permission decision was actually evaluated against (rule's
+      // scope axes merged in), so the immutable log + audit reflect the real authorization context.
+      Scope: scope,
       ControlMode: rule.ControlMode,
       Action: ActionCode.Override,
       ReasonCodeId: reasonCodeId,
