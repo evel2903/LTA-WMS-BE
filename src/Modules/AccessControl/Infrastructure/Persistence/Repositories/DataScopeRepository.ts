@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, EntityManager, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import { PrincipalType } from '@modules/AccessControl/Domain/Enums/PrincipalType';
 import { DataScopeEntity } from '@modules/AccessControl/Domain/Entities/DataScopeEntity';
@@ -36,9 +36,10 @@ export class DataScopeRepository implements IDataScopeRepository {
     return entities.map(DataScopeOrmMapper.ToDomain);
   }
 
-  public async Create(scope: DataScopeEntity): Promise<DataScopeEntity> {
+  public async Create(scope: DataScopeEntity, manager?: EntityManager): Promise<DataScopeEntity> {
+    const repo = manager ? manager.getRepository(DataScopeOrmEntity) : this.scopes;
     try {
-      const created = await this.scopes.save(DataScopeOrmMapper.ToOrm(scope));
+      const created = await repo.save(DataScopeOrmMapper.ToOrm(scope));
       return DataScopeOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -46,8 +47,9 @@ export class DataScopeRepository implements IDataScopeRepository {
     }
   }
 
-  public async Delete(id: string): Promise<void> {
-    await this.scopes.delete({ Id: id });
+  public async Delete(id: string, manager?: EntityManager): Promise<void> {
+    const repo = manager ? manager.getRepository(DataScopeOrmEntity) : this.scopes;
+    await repo.delete({ Id: id });
   }
 
   private HandleUniqueViolation(error: unknown): void {
