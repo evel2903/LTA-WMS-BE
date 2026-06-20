@@ -8,7 +8,6 @@ import { IOwnerRepository } from '@modules/MasterData/Application/Interfaces/IOw
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
 import { IZoneRepository } from '@modules/MasterData/Application/Interfaces/IZoneRepository';
-import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 import { WarehouseEntity } from '@modules/MasterData/Domain/Entities/WarehouseEntity';
 import { ActivateWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/ActivateWarehouseProfileUseCase';
 import { AddWarehouseProfileRuleUseCase } from '@modules/WarehouseProfile/Application/UseCases/AddWarehouseProfileRuleUseCase';
