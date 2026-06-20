@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { RuleControlMode } from '@modules/WarehouseProfile/Domain/Enums/RuleControlMode';
 import { RulePrecedenceTier } from '@modules/WarehouseProfile/Domain/Enums/RulePrecedenceTier';
 import { RuleStatus } from '@modules/WarehouseProfile/Domain/Enums/RuleStatus';
@@ -17,7 +18,7 @@ export type RuleDefinitionListFilter = {
 export interface IRuleDefinitionRepository {
   FindById(id: string): Promise<RuleDefinitionEntity | null>;
   FindByCode(ruleCode: string): Promise<RuleDefinitionEntity | null>;
-  Create(definition: RuleDefinitionEntity): Promise<RuleDefinitionEntity>;
+  Create(definition: RuleDefinitionEntity, manager?: EntityManager): Promise<RuleDefinitionEntity>;
   List(
     skip: number,
     take: number,

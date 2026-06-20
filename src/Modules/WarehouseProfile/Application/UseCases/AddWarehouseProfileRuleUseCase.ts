@@ -1,5 +1,13 @@
 import { randomUUID } from 'crypto';
 import { ConflictException, NotFoundException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { CreateWarehouseProfileRuleDto } from '@modules/WarehouseProfile/Application/DTOs/CreateWarehouseProfileRuleDto';
 import { WarehouseProfileRuleDto } from '@modules/WarehouseProfile/Application/DTOs/WarehouseProfileRuleDto';
 import { IRuleDefinitionRepository } from '@modules/WarehouseProfile/Application/Interfaces/IRuleDefinitionRepository';
@@ -9,13 +17,19 @@ import { WarehouseProfileRuleDtoMapper } from '@modules/WarehouseProfile/Applica
 import { WarehouseProfileRuleEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileRuleEntity';
 
 export class AddWarehouseProfileRuleUseCase {
+  // auditedTransaction is optional only so fixture-setup tests can construct the use case
+  // bare; the module always wires it. This is AUDIT-ONLY (no ownership policy / reason-code).
   constructor(
     private readonly bindingRepository: IWarehouseProfileRuleRepository,
     private readonly profileRepository: IWarehouseProfileRepository,
     private readonly definitionRepository: IRuleDefinitionRepository,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {}
 
-  public async Execute(request: CreateWarehouseProfileRuleDto): Promise<WarehouseProfileRuleDto> {
+  public async Execute(
+    request: CreateWarehouseProfileRuleDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<WarehouseProfileRuleDto> {
     const profile = await this.profileRepository.FindById(request.WarehouseProfileId);
     if (!profile) {
       throw new NotFoundException('Warehouse profile not found');
@@ -47,7 +61,24 @@ export class AddWarehouseProfileRuleUseCase {
       UpdatedBy: request.CreatedBy ?? null,
     });
 
-    const created = await this.bindingRepository.Create(binding);
-    return WarehouseProfileRuleDtoMapper.ToDto(created);
+    const buildEntry = (created: WarehouseProfileRuleEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Create,
+        ObjectType: ObjectType.Rule,
+        ObjectId: created.Id,
+        ObjectCode: null,
+        AfterJson: WarehouseProfileRuleDtoMapper.ToDto(created) as unknown as Record<string, unknown>,
+        WarehouseId: null,
+        OwnerId: null,
+      });
+
+    if (!this.auditedTransaction) {
+      const created = await this.bindingRepository.Create(binding);
+      return WarehouseProfileRuleDtoMapper.ToDto(created);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const created = await this.bindingRepository.Create(binding, manager);
+      return { result: WarehouseProfileRuleDtoMapper.ToDto(created), entry: buildEntry(created) };
+    });
   }
 }

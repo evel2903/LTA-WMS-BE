@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import { ReasonCodeEntity } from '@modules/AccessControl/Domain/Entities/ReasonCodeEntity';
 import {
@@ -27,9 +27,10 @@ export class ReasonCodeRepository implements IReasonCodeRepository {
     return entity ? ReasonCodeOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(reasonCode: ReasonCodeEntity): Promise<ReasonCodeEntity> {
+  public async Create(reasonCode: ReasonCodeEntity, manager?: EntityManager): Promise<ReasonCodeEntity> {
+    const repo = manager ? manager.getRepository(ReasonCodeOrmEntity) : this.reasonCodes;
     try {
-      const created = await this.reasonCodes.save(ReasonCodeOrmMapper.ToOrm(reasonCode));
+      const created = await repo.save(ReasonCodeOrmMapper.ToOrm(reasonCode));
       return ReasonCodeOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -37,9 +38,10 @@ export class ReasonCodeRepository implements IReasonCodeRepository {
     }
   }
 
-  public async Update(reasonCode: ReasonCodeEntity): Promise<ReasonCodeEntity> {
+  public async Update(reasonCode: ReasonCodeEntity, manager?: EntityManager): Promise<ReasonCodeEntity> {
+    const repo = manager ? manager.getRepository(ReasonCodeOrmEntity) : this.reasonCodes;
     try {
-      const updated = await this.reasonCodes.save(ReasonCodeOrmMapper.ToOrm(reasonCode));
+      const updated = await repo.save(ReasonCodeOrmMapper.ToOrm(reasonCode));
       return ReasonCodeOrmMapper.ToDomain(updated);
     } catch (error) {
       this.HandleUniqueViolation(error);

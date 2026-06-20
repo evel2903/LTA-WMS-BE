@@ -112,8 +112,9 @@ import { AuditLogController } from '@modules/AccessControl/Presentation/Controll
     },
     {
       provide: CreateReasonCodeUseCase,
-      useFactory: (reasonCodes: IReasonCodeRepository) => new CreateReasonCodeUseCase(reasonCodes),
-      inject: [REASON_CODE_REPOSITORY],
+      useFactory: (reasonCodes: IReasonCodeRepository, audited: AuditedTransaction) =>
+        new CreateReasonCodeUseCase(reasonCodes, audited),
+      inject: [REASON_CODE_REPOSITORY, AuditedTransaction],
     },
     {
       provide: GetReasonCodeUseCase,
@@ -127,8 +128,9 @@ import { AuditLogController } from '@modules/AccessControl/Presentation/Controll
     },
     {
       provide: UpdateReasonCodeUseCase,
-      useFactory: (reasonCodes: IReasonCodeRepository) => new UpdateReasonCodeUseCase(reasonCodes),
-      inject: [REASON_CODE_REPOSITORY],
+      useFactory: (reasonCodes: IReasonCodeRepository, audited: AuditedTransaction) =>
+        new UpdateReasonCodeUseCase(reasonCodes, audited),
+      inject: [REASON_CODE_REPOSITORY, AuditedTransaction],
     },
     {
       provide: PERMISSION_CHECKER,
@@ -171,15 +173,15 @@ import { AuditLogController } from '@modules/AccessControl/Presentation/Controll
     },
     {
       provide: AssignRoleToUserUseCase,
-      useFactory: (roles: IRoleRepository, userRoles: IUserRoleRepository) =>
-        new AssignRoleToUserUseCase(roles, userRoles),
-      inject: [ROLE_REPOSITORY, USER_ROLE_REPOSITORY],
+      useFactory: (roles: IRoleRepository, userRoles: IUserRoleRepository, audited: AuditedTransaction) =>
+        new AssignRoleToUserUseCase(roles, userRoles, audited),
+      inject: [ROLE_REPOSITORY, USER_ROLE_REPOSITORY, AuditedTransaction],
     },
     {
       provide: RemoveRoleFromUserUseCase,
-      useFactory: (roles: IRoleRepository, userRoles: IUserRoleRepository) =>
-        new RemoveRoleFromUserUseCase(roles, userRoles),
-      inject: [ROLE_REPOSITORY, USER_ROLE_REPOSITORY],
+      useFactory: (roles: IRoleRepository, userRoles: IUserRoleRepository, audited: AuditedTransaction) =>
+        new RemoveRoleFromUserUseCase(roles, userRoles, audited),
+      inject: [ROLE_REPOSITORY, USER_ROLE_REPOSITORY, AuditedTransaction],
     },
   ],
   exports: [

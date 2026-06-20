@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   IRuleDefinitionRepository,
@@ -27,9 +27,10 @@ export class RuleDefinitionRepository implements IRuleDefinitionRepository {
     return entity ? RuleDefinitionOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(definition: RuleDefinitionEntity): Promise<RuleDefinitionEntity> {
+  public async Create(definition: RuleDefinitionEntity, manager?: EntityManager): Promise<RuleDefinitionEntity> {
+    const repo = manager ? manager.getRepository(RuleDefinitionOrmEntity) : this.definitions;
     try {
-      const created = await this.definitions.save(RuleDefinitionOrmMapper.ToOrm(definition));
+      const created = await repo.save(RuleDefinitionOrmMapper.ToOrm(definition));
       return RuleDefinitionOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);

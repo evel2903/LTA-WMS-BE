@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   IRuleGroupRepository,
@@ -27,9 +27,10 @@ export class RuleGroupRepository implements IRuleGroupRepository {
     return entity ? RuleGroupOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(group: RuleGroupEntity): Promise<RuleGroupEntity> {
+  public async Create(group: RuleGroupEntity, manager?: EntityManager): Promise<RuleGroupEntity> {
+    const repo = manager ? manager.getRepository(RuleGroupOrmEntity) : this.groups;
     try {
-      const created = await this.groups.save(RuleGroupOrmMapper.ToOrm(group));
+      const created = await repo.save(RuleGroupOrmMapper.ToOrm(group));
       return RuleGroupOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);

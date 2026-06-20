@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   IWarehouseProfileAssignmentRepository,
@@ -22,9 +22,13 @@ export class WarehouseProfileAssignmentRepository implements IWarehouseProfileAs
     return entity ? WarehouseProfileAssignmentOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(assignment: WarehouseProfileAssignmentEntity): Promise<WarehouseProfileAssignmentEntity> {
+  public async Create(
+    assignment: WarehouseProfileAssignmentEntity,
+    manager?: EntityManager,
+  ): Promise<WarehouseProfileAssignmentEntity> {
+    const repo = manager ? manager.getRepository(WarehouseProfileAssignmentOrmEntity) : this.assignments;
     try {
-      const created = await this.assignments.save(WarehouseProfileAssignmentOrmMapper.ToOrm(assignment));
+      const created = await repo.save(WarehouseProfileAssignmentOrmMapper.ToOrm(assignment));
       return WarehouseProfileAssignmentOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);

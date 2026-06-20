@@ -1,5 +1,13 @@
 import { randomUUID } from 'crypto';
 import { BusinessRuleException, ConflictException, NotFoundException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { IOwnerRepository } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
@@ -28,6 +36,7 @@ export class CreateRuleDefinitionUseCase {
     skuRepository: ISkuRepository,
     private readonly scopeKeyService: ScopeKeyService,
     private readonly payloadValidator: RulePayloadValidator,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {
     this.scopeReferenceValidator = new ScopeReferenceValidator(
       warehouseRepository,
@@ -37,7 +46,10 @@ export class CreateRuleDefinitionUseCase {
     );
   }
 
-  public async Execute(request: CreateRuleDefinitionDto): Promise<RuleDefinitionDto> {
+  public async Execute(
+    request: CreateRuleDefinitionDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<RuleDefinitionDto> {
     const ruleCode = this.AssertNonEmpty(request.RuleCode, 'RuleCode');
     const ruleName = this.AssertNonEmpty(request.RuleName, 'RuleName');
 
@@ -120,8 +132,25 @@ export class CreateRuleDefinitionUseCase {
       UpdatedBy: request.CreatedBy ?? null,
     });
 
-    const created = await this.definitionRepository.Create(definition);
-    return RuleDefinitionDtoMapper.ToDto(created);
+    const buildEntry = (created: RuleDefinitionEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Create,
+        ObjectType: ObjectType.Rule,
+        ObjectId: created.Id,
+        ObjectCode: created.RuleCode,
+        AfterJson: RuleDefinitionDtoMapper.ToDto(created) as unknown as Record<string, unknown>,
+        WarehouseId: created.WarehouseId,
+        OwnerId: created.OwnerId,
+      });
+
+    if (!this.auditedTransaction) {
+      const created = await this.definitionRepository.Create(definition);
+      return RuleDefinitionDtoMapper.ToDto(created);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const created = await this.definitionRepository.Create(definition, manager);
+      return { result: RuleDefinitionDtoMapper.ToDto(created), entry: buildEntry(created) };
+    });
   }
 
   private AssertNonEmpty(value: string | undefined, label: string): string {

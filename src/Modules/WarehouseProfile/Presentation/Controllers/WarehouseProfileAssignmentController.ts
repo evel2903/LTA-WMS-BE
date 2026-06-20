@@ -4,6 +4,8 @@ import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { CurrentAuditContext } from '@modules/AccessControl/Presentation/Decorators/CurrentAuditContext';
+import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { CreateWarehouseProfileAssignmentUseCase } from '@modules/WarehouseProfile/Application/UseCases/CreateWarehouseProfileAssignmentUseCase';
 import { ListWarehouseProfileAssignmentsUseCase } from '@modules/WarehouseProfile/Application/UseCases/ListWarehouseProfileAssignmentsUseCase';
 import { CreateWarehouseProfileAssignmentRequest } from '@modules/WarehouseProfile/Presentation/Requests/CreateWarehouseProfileAssignmentRequest';
@@ -19,8 +21,12 @@ export class WarehouseProfileAssignmentController {
 
   @Post()
   @RequirePermission(ActionCode.Update, ObjectType.WarehouseProfile)
-  public async Create(@Param('id') id: string, @Body() request: CreateWarehouseProfileAssignmentRequest) {
-    return await this.createWarehouseProfileAssignmentUseCase.Execute({ WarehouseProfileId: id, ...request });
+  public async Create(
+    @Param('id') id: string,
+    @Body() request: CreateWarehouseProfileAssignmentRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.createWarehouseProfileAssignmentUseCase.Execute({ WarehouseProfileId: id, ...request }, context);
   }
 
   @Get()
