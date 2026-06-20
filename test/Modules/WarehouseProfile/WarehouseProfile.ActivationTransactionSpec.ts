@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import { ActivateWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/ActivateWarehouseProfileUseCase';
 import { PreviewRuleResolutionUseCase } from '@modules/WarehouseProfile/Application/UseCases/PreviewRuleResolutionUseCase';
@@ -75,11 +76,13 @@ class TransactionTrackingRepository extends InMemoryWarehouseProfileRepository {
   public OverlapCheckedInsideTransaction = false;
   private insideTransaction = false;
 
-  public async RunInTransaction<T>(work: (txRepo: IWarehouseProfileRepository) => Promise<T>): Promise<T> {
+  public async RunInTransaction<T>(
+    work: (txRepo: IWarehouseProfileRepository, manager: EntityManager) => Promise<T>,
+  ): Promise<T> {
     this.TransactionCount += 1;
     this.insideTransaction = true;
     try {
-      return await work(this);
+      return await work(this, undefined as unknown as EntityManager);
     } finally {
       this.insideTransaction = false;
     }
