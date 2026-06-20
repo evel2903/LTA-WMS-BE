@@ -3,6 +3,18 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccessControlModule } from '@modules/AccessControl/AccessControlModule';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { IAuditWriter, AUDIT_WRITER } from '@modules/AccessControl/Application/Interfaces/IAuditWriter';
+import {
+  IPermissionChecker,
+  PERMISSION_CHECKER,
+} from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import {
+  IReasonCodeCatalog,
+  REASON_CODE_CATALOG,
+} from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
+import {
+  IApprovalRequestRepository,
+  APPROVAL_REQUEST_REPOSITORY,
+} from '@modules/AccessControl/Application/Interfaces/IApprovalRequestRepository';
 import { IOwnerRepository, OWNER_REPOSITORY } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { ISkuRepository, SKU_REPOSITORY } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import {
@@ -32,6 +44,10 @@ import {
   WAREHOUSE_PROFILE_RULE_REPOSITORY,
 } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRuleRepository';
 import { IRuleResolver, RULE_RESOLVER } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
+import {
+  IOverrideLogRepository,
+  OVERRIDE_LOG_REPOSITORY,
+} from '@modules/WarehouseProfile/Application/Interfaces/IOverrideLogRepository';
 import { ScopeKeyService } from '@modules/WarehouseProfile/Application/Services/ScopeKeyService';
 import { RuleResolver } from '@modules/WarehouseProfile/Application/Services/RuleResolver';
 import { RuleConflictDetector } from '@modules/WarehouseProfile/Application/Services/RuleConflictDetector';
@@ -59,16 +75,21 @@ import { RemoveWarehouseProfileRuleUseCase } from '@modules/WarehouseProfile/App
 import { PreviewRuleResolutionUseCase } from '@modules/WarehouseProfile/Application/UseCases/PreviewRuleResolutionUseCase';
 import { WarehouseProfileChecklistService } from '@modules/WarehouseProfile/Application/Services/WarehouseProfileChecklistService';
 import { VerifyWarehouseProfileChecklistUseCase } from '@modules/WarehouseProfile/Application/UseCases/VerifyWarehouseProfileChecklistUseCase';
+import { RequestOverrideUseCase } from '@modules/WarehouseProfile/Application/UseCases/RequestOverrideUseCase';
+import { GetOverrideLogUseCase } from '@modules/WarehouseProfile/Application/UseCases/GetOverrideLogUseCase';
+import { ListOverrideLogsUseCase } from '@modules/WarehouseProfile/Application/UseCases/ListOverrideLogsUseCase';
 import { WarehouseProfileOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileOrmEntity';
 import { WarehouseProfileAssignmentOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileAssignmentOrmEntity';
 import { RuleGroupOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/RuleGroupOrmEntity';
 import { RuleDefinitionOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/RuleDefinitionOrmEntity';
 import { WarehouseProfileRuleOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileRuleOrmEntity';
+import { OverrideLogOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/OverrideLogOrmEntity';
 import { WarehouseProfileRepository } from '@modules/WarehouseProfile/Infrastructure/Persistence/Repositories/WarehouseProfileRepository';
 import { WarehouseProfileAssignmentRepository } from '@modules/WarehouseProfile/Infrastructure/Persistence/Repositories/WarehouseProfileAssignmentRepository';
 import { RuleGroupRepository } from '@modules/WarehouseProfile/Infrastructure/Persistence/Repositories/RuleGroupRepository';
 import { RuleDefinitionRepository } from '@modules/WarehouseProfile/Infrastructure/Persistence/Repositories/RuleDefinitionRepository';
 import { WarehouseProfileRuleRepository } from '@modules/WarehouseProfile/Infrastructure/Persistence/Repositories/WarehouseProfileRuleRepository';
+import { OverrideLogRepository } from '@modules/WarehouseProfile/Infrastructure/Persistence/Repositories/OverrideLogRepository';
 import { WarehouseProfileController } from '@modules/WarehouseProfile/Presentation/Controllers/WarehouseProfileController';
 import { WarehouseProfileAssignmentController } from '@modules/WarehouseProfile/Presentation/Controllers/WarehouseProfileAssignmentController';
 import { RuleGroupController } from '@modules/WarehouseProfile/Presentation/Controllers/RuleGroupController';
@@ -76,6 +97,7 @@ import { RuleDefinitionController } from '@modules/WarehouseProfile/Presentation
 import { WarehouseProfileRuleController } from '@modules/WarehouseProfile/Presentation/Controllers/WarehouseProfileRuleController';
 import { RulePreviewController } from '@modules/WarehouseProfile/Presentation/Controllers/RulePreviewController';
 import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/Presentation/Controllers/WarehouseProfileChecklistController';
+import { OverrideController } from '@modules/WarehouseProfile/Presentation/Controllers/OverrideController';
 
 @Module({
   imports: [
@@ -85,6 +107,7 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
       RuleGroupOrmEntity,
       RuleDefinitionOrmEntity,
       WarehouseProfileRuleOrmEntity,
+      OverrideLogOrmEntity,
     ]),
     MasterDataModule,
     AccessControlModule,
@@ -97,9 +120,11 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
     WarehouseProfileRuleController,
     RulePreviewController,
     WarehouseProfileChecklistController,
+    OverrideController,
   ],
   providers: [
     { provide: WAREHOUSE_PROFILE_REPOSITORY, useClass: WarehouseProfileRepository },
+    { provide: OVERRIDE_LOG_REPOSITORY, useClass: OverrideLogRepository },
     { provide: WAREHOUSE_PROFILE_ASSIGNMENT_REPOSITORY, useClass: WarehouseProfileAssignmentRepository },
     { provide: RULE_GROUP_REPOSITORY, useClass: RuleGroupRepository },
     { provide: RULE_DEFINITION_REPOSITORY, useClass: RuleDefinitionRepository },
@@ -371,6 +396,43 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
       ) => new VerifyWarehouseProfileChecklistUseCase(profiles, resolver, checklistService),
       inject: [WAREHOUSE_PROFILE_REPOSITORY, RULE_RESOLVER, WarehouseProfileChecklistService],
     },
+    {
+      provide: RequestOverrideUseCase,
+      useFactory: (
+        definitions: IRuleDefinitionRepository,
+        overrideLogs: IOverrideLogRepository,
+        permissionChecker: IPermissionChecker,
+        reasonCatalog: IReasonCodeCatalog,
+        approvalRequests: IApprovalRequestRepository,
+        audited: AuditedTransaction,
+      ) =>
+        new RequestOverrideUseCase(
+          definitions,
+          overrideLogs,
+          permissionChecker,
+          reasonCatalog,
+          approvalRequests,
+          audited,
+        ),
+      inject: [
+        RULE_DEFINITION_REPOSITORY,
+        OVERRIDE_LOG_REPOSITORY,
+        PERMISSION_CHECKER,
+        REASON_CODE_CATALOG,
+        APPROVAL_REQUEST_REPOSITORY,
+        AuditedTransaction,
+      ],
+    },
+    {
+      provide: GetOverrideLogUseCase,
+      useFactory: (overrideLogs: IOverrideLogRepository) => new GetOverrideLogUseCase(overrideLogs),
+      inject: [OVERRIDE_LOG_REPOSITORY],
+    },
+    {
+      provide: ListOverrideLogsUseCase,
+      useFactory: (overrideLogs: IOverrideLogRepository) => new ListOverrideLogsUseCase(overrideLogs),
+      inject: [OVERRIDE_LOG_REPOSITORY],
+    },
   ],
   exports: [
     WAREHOUSE_PROFILE_REPOSITORY,
@@ -379,6 +441,7 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
     RULE_DEFINITION_REPOSITORY,
     WAREHOUSE_PROFILE_RULE_REPOSITORY,
     RULE_RESOLVER,
+    OVERRIDE_LOG_REPOSITORY,
     VerifyWarehouseProfileChecklistUseCase,
   ],
 })

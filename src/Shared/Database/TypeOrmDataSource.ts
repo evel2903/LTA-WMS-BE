@@ -25,6 +25,7 @@ import { WarehouseProfileAssignmentOrmEntity } from '@modules/WarehouseProfile/I
 import { RuleGroupOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/RuleGroupOrmEntity';
 import { RuleDefinitionOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/RuleDefinitionOrmEntity';
 import { WarehouseProfileRuleOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileRuleOrmEntity';
+import { OverrideLogOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/OverrideLogOrmEntity';
 import { RoleOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/RoleOrmEntity';
 import { PermissionOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/PermissionOrmEntity';
 import { RolePermissionOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/RolePermissionOrmEntity';
@@ -70,6 +71,7 @@ export default new DataSource({
     RuleGroupOrmEntity,
     RuleDefinitionOrmEntity,
     WarehouseProfileRuleOrmEntity,
+    OverrideLogOrmEntity,
     RoleOrmEntity,
     PermissionOrmEntity,
     RolePermissionOrmEntity,

@@ -9,9 +9,14 @@ import {
 } from '@modules/WarehouseProfile/Application/Interfaces/IRuleDefinitionRepository';
 import { IWarehouseProfileRuleRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRuleRepository';
 import { IRuleResolver } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
+import {
+  IOverrideLogRepository,
+  OverrideLogListFilter,
+} from '@modules/WarehouseProfile/Application/Interfaces/IOverrideLogRepository';
 import { RuleGroupEntity } from '@modules/WarehouseProfile/Domain/Entities/RuleGroupEntity';
 import { RuleDefinitionEntity } from '@modules/WarehouseProfile/Domain/Entities/RuleDefinitionEntity';
 import { WarehouseProfileRuleEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileRuleEntity';
+import { OverrideLogEntity } from '@modules/WarehouseProfile/Domain/Entities/OverrideLogEntity';
 import { RuleDecision } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleDecision';
 import { RuleEvaluationContext } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleEvaluationContext';
 
@@ -139,6 +144,40 @@ export class InMemoryWarehouseProfileRuleRepository implements IWarehouseProfile
     take: number,
   ): Promise<{ Items: WarehouseProfileRuleEntity[]; TotalItems: number }> {
     const items = [...this.bindings.values()].filter((binding) => binding.WarehouseProfileId === warehouseProfileId);
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+}
+
+/** Append-only in-memory override_logs double (C7): no Update/Delete, frequency-filtered List. */
+export class InMemoryOverrideLogRepository implements IOverrideLogRepository {
+  private readonly logs = new Map<string, OverrideLogEntity>();
+
+  public async Seed(log: OverrideLogEntity): Promise<void> {
+    this.logs.set(log.Id, log);
+  }
+
+  public async Create(entity: OverrideLogEntity): Promise<OverrideLogEntity> {
+    this.logs.set(entity.Id, entity);
+    return entity;
+  }
+
+  public async FindById(id: string): Promise<OverrideLogEntity | null> {
+    return this.logs.get(id) ?? null;
+  }
+
+  public async List(
+    skip: number,
+    take: number,
+    filter: OverrideLogListFilter = {},
+  ): Promise<{ Items: OverrideLogEntity[]; TotalItems: number }> {
+    let items = [...this.logs.values()];
+    if (filter.RuleId) items = items.filter((log) => log.RuleId === filter.RuleId);
+    if (filter.ActorUserId) items = items.filter((log) => log.ActorUserId === filter.ActorUserId);
+    if (filter.TargetObjectType) items = items.filter((log) => log.TargetObjectType === filter.TargetObjectType);
+    if (filter.TargetObjectId) items = items.filter((log) => log.TargetObjectId === filter.TargetObjectId);
+    if (filter.From) items = items.filter((log) => log.CreatedAt.getTime() >= filter.From!.getTime());
+    if (filter.To) items = items.filter((log) => log.CreatedAt.getTime() <= filter.To!.getTime());
+    items.sort((a, b) => b.CreatedAt.getTime() - a.CreatedAt.getTime());
     return { Items: items.slice(skip, skip + take), TotalItems: items.length };
   }
 }
