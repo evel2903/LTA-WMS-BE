@@ -471,8 +471,9 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: GetSkuUseCase,
-      useFactory: (skus: ISkuRepository) => new GetSkuUseCase(skus),
-      inject: [SKU_REPOSITORY],
+      useFactory: (skus: ISkuRepository, ownership: MasterDataOwnershipPolicyService, audited: AuditedTransaction) =>
+        new GetSkuUseCase(skus, ownership, audited),
+      inject: [SKU_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: GetSkuRuleFactsUseCase,

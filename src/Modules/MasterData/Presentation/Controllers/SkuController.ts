@@ -40,8 +40,8 @@ export class SkuController {
 
   @Get(':id')
   @RequirePermission(ActionCode.Read, ObjectType.Sku)
-  public async GetById(@Param('id') id: string) {
-    return await this.getSkuUseCase.Execute(id);
+  public async GetById(@Param('id') id: string, @CurrentAuditContext() context: AuditContext) {
+    return await this.getSkuUseCase.Execute(id, context);
   }
 
   @Get()

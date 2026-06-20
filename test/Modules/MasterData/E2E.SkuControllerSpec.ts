@@ -109,7 +109,7 @@ describe('E2E SkuController (no DB)', () => {
     await request(app.getHttpServer()).get('/skus/sku-1/rule-facts').expect(200);
     await request(app.getHttpServer()).patch('/skus/sku-1').send({ SkuName: 'Updated' }).expect(200);
 
-    expect(getExecute).toHaveBeenCalledWith('sku-1');
+    expect(getExecute).toHaveBeenCalledWith('sku-1', expect.objectContaining({ ActorUserId: 'test-admin' }));
     expect(getRuleFactsExecute).toHaveBeenCalledWith('sku-1');
     expect(updateExecute).toHaveBeenCalledWith(
       { Id: 'sku-1', SkuName: 'Updated' },
