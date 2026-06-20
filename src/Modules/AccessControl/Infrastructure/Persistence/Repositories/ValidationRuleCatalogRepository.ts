@@ -31,7 +31,21 @@ export class ValidationRuleCatalogRepository implements IValidationRuleCatalogRe
       orm.Id = existing.Id;
       orm.CreatedAt = existing.CreatedAt;
     }
-    const saved = await this.catalog.save(orm);
-    return ValidationRuleCatalogOrmMapper.ToDomain(saved);
+    try {
+      const saved = await this.catalog.save(orm);
+      return ValidationRuleCatalogOrmMapper.ToDomain(saved);
+    } catch (error) {
+      // Concurrent seed lost the find-then-insert race on UNIQUE(code): re-read and update in place.
+      if ((error as { code?: string }).code === '23505') {
+        const current = await this.catalog.findOne({ where: { Code: entity.Code } });
+        if (current) {
+          orm.Id = current.Id;
+          orm.CreatedAt = current.CreatedAt;
+          const saved = await this.catalog.save(orm);
+          return ValidationRuleCatalogOrmMapper.ToDomain(saved);
+        }
+      }
+      throw error;
+    }
   }
 }

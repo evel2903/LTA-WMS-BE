@@ -165,6 +165,11 @@ describe('SeedValidationRuleCatalog (C8 AC1 / AC4)', () => {
       if (val.ControlExceptionCode === null) continue;
       const ex = await exRepo.FindByCode(val.ControlExceptionCode);
       expect(ex).not.toBeNull();
+      // A required (Implemented/DeferredToC9) validation rule must NOT link to a DeferredV1Plus
+      // control exception — that rule claims V0 enforcement against a type V0 refuses to raise.
+      if (val.IsRequiredForV0()) {
+        expect(ex!.IsDeferredV1Plus()).toBe(false);
+      }
     }
   });
 });

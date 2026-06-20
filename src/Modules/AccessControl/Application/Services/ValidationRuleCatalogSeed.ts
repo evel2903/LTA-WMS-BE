@@ -74,7 +74,7 @@ export const ValidationRuleCatalogEntries: ReadonlyArray<ValidationRuleCatalogEn
     Trigger: 'Adjustment/override/disposition theo profile',
     ExpectedResult: 'Chặn nếu chưa đủ cấp duyệt',
     OwnerModule: 'C6',
-    ControlExceptionCode: 'CTRL-EX-06',
+    ControlExceptionCode: null,
     ImplementationStatus: CatalogImplementationStatus.Implemented,
   },
   {
@@ -101,7 +101,7 @@ export const ValidationRuleCatalogEntries: ReadonlyArray<ValidationRuleCatalogEn
     Trigger: 'Mọi audit',
     ExpectedResult: 'Không sửa/xóa; chỉ thêm đính chính',
     OwnerModule: 'C4',
-    ControlExceptionCode: 'CTRL-EX-08',
+    ControlExceptionCode: null,
     ImplementationStatus: CatalogImplementationStatus.Implemented,
   },
   {

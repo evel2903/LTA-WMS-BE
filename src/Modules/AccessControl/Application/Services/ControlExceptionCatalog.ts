@@ -21,12 +21,18 @@ export class ControlExceptionCatalog implements IControlExceptionCatalog {
   }
 
   public async ValidateExceptionType(code: string): Promise<ControlExceptionCatalogEntity> {
-    const entry = await this.repository.FindByCode(code);
-    if (!entry) {
-      throw new BusinessRuleException(`Unknown control exception code: ${code}`);
+    const normalized = (code ?? '').trim();
+    if (normalized.length === 0) {
+      throw new BusinessRuleException('Control exception code is required');
     }
-    if (entry.IsDeferredV1Plus()) {
-      throw new BusinessRuleException(`Control exception code is deferred to V1+ and not raisable in V0: ${code}`);
+    const entry = await this.repository.FindByCode(normalized);
+    if (!entry) {
+      throw new BusinessRuleException(`Unknown control exception code: ${normalized}`);
+    }
+    // Allowlist: only V0-raisable items (Implemented or DeferredToC9). Deny DeferredV1Plus and any
+    // future/unrecognized status by default rather than admitting it.
+    if (!entry.IsRequiredForV0()) {
+      throw new BusinessRuleException(`Control exception code is not raisable in V0 (deferred): ${normalized}`);
     }
     return entry;
   }

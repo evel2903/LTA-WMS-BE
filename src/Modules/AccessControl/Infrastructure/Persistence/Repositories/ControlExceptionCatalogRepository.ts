@@ -31,7 +31,21 @@ export class ControlExceptionCatalogRepository implements IControlExceptionCatal
       orm.Id = existing.Id;
       orm.CreatedAt = existing.CreatedAt;
     }
-    const saved = await this.catalog.save(orm);
-    return ControlExceptionCatalogOrmMapper.ToDomain(saved);
+    try {
+      const saved = await this.catalog.save(orm);
+      return ControlExceptionCatalogOrmMapper.ToDomain(saved);
+    } catch (error) {
+      // Concurrent seed lost the find-then-insert race on UNIQUE(code): re-read and update in place.
+      if ((error as { code?: string }).code === '23505') {
+        const current = await this.catalog.findOne({ where: { Code: entity.Code } });
+        if (current) {
+          orm.Id = current.Id;
+          orm.CreatedAt = current.CreatedAt;
+          const saved = await this.catalog.save(orm);
+          return ControlExceptionCatalogOrmMapper.ToDomain(saved);
+        }
+      }
+      throw error;
+    }
   }
 }
