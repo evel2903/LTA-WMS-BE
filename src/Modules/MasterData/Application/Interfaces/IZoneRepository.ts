@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { ZoneEntity } from '@modules/MasterData/Domain/Entities/ZoneEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
@@ -12,7 +13,7 @@ export type ZoneListFilter = {
 export interface IZoneRepository {
   FindById(id: string): Promise<ZoneEntity | null>;
   FindByWarehouseAndCode(warehouseId: string, zoneCode: string): Promise<ZoneEntity | null>;
-  Create(zone: ZoneEntity): Promise<ZoneEntity>;
-  Update(zone: ZoneEntity): Promise<ZoneEntity>;
+  Create(zone: ZoneEntity, manager?: EntityManager): Promise<ZoneEntity>;
+  Update(zone: ZoneEntity, manager?: EntityManager): Promise<ZoneEntity>;
   List(skip: number, take: number, filter?: ZoneListFilter): Promise<{ Items: ZoneEntity[]; TotalItems: number }>;
 }

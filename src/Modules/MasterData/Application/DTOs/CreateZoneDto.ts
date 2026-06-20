@@ -11,4 +11,5 @@ export class CreateZoneDto {
   public ComplianceFlags?: Record<string, unknown>;
   public SourceSystem?: string;
   public ReferenceId?: string;
+  public ReasonCode?: string | null;
 }

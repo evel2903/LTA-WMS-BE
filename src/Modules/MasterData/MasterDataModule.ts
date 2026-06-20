@@ -286,9 +286,13 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: CreateZoneUseCase,
-      useFactory: (zones: IZoneRepository, warehouses: IWarehouseRepository) =>
-        new CreateZoneUseCase(zones, warehouses),
-      inject: [ZONE_REPOSITORY, WAREHOUSE_REPOSITORY],
+      useFactory: (
+        zones: IZoneRepository,
+        warehouses: IWarehouseRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new CreateZoneUseCase(zones, warehouses, ownership, audited),
+      inject: [ZONE_REPOSITORY, WAREHOUSE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: GetZoneByIdUseCase,
@@ -302,9 +306,20 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateZoneUseCase,
-      useFactory: (zones: IZoneRepository, warehouses: IWarehouseRepository, checker: IPermissionChecker) =>
-        new UpdateZoneUseCase(zones, warehouses, checker),
-      inject: [ZONE_REPOSITORY, WAREHOUSE_REPOSITORY, PERMISSION_CHECKER],
+      useFactory: (
+        zones: IZoneRepository,
+        warehouses: IWarehouseRepository,
+        checker: IPermissionChecker,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdateZoneUseCase(zones, warehouses, checker, ownership, audited),
+      inject: [
+        ZONE_REPOSITORY,
+        WAREHOUSE_REPOSITORY,
+        PERMISSION_CHECKER,
+        MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+        AuditedTransaction,
+      ],
     },
     {
       provide: CreateLocationProfileUseCase,
@@ -685,6 +700,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
         inventoryStatuses: IInventoryStatusRepository,
         uoms: IUomRepository,
         keyService: InventoryDimensionKeyService,
+        audited: AuditedTransaction,
       ) =>
         new CreateInventoryDimensionUseCase(
           inventoryDimensions,
@@ -695,6 +711,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
           inventoryStatuses,
           uoms,
           keyService,
+          audited,
         ),
       inject: [
         INVENTORY_DIMENSION_REPOSITORY,
@@ -705,6 +722,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
         INVENTORY_STATUS_REPOSITORY,
         UOM_REPOSITORY,
         InventoryDimensionKeyService,
+        AuditedTransaction,
       ],
     },
     {
@@ -724,8 +742,9 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
       useFactory: (
         inventoryBalances: IInventoryBalanceRepository,
         inventoryDimensions: IInventoryDimensionRepository,
-      ) => new InitializeInventoryBalanceUseCase(inventoryBalances, inventoryDimensions),
-      inject: [INVENTORY_BALANCE_REPOSITORY, INVENTORY_DIMENSION_REPOSITORY],
+        audited: AuditedTransaction,
+      ) => new InitializeInventoryBalanceUseCase(inventoryBalances, inventoryDimensions, audited),
+      inject: [INVENTORY_BALANCE_REPOSITORY, INVENTORY_DIMENSION_REPOSITORY, AuditedTransaction],
     },
     {
       provide: GetInventoryBalanceUseCase,

@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { InventoryDimensionEntity } from '@modules/MasterData/Domain/Entities/InventoryDimensionEntity';
 
 export const INVENTORY_DIMENSION_REPOSITORY = Symbol('INVENTORY_DIMENSION_REPOSITORY');
@@ -14,7 +15,7 @@ export interface InventoryDimensionListFilter {
 export interface IInventoryDimensionRepository {
   FindById(id: string): Promise<InventoryDimensionEntity | null>;
   FindByHash(dimensionKeyHash: string): Promise<InventoryDimensionEntity | null>;
-  Create(dimension: InventoryDimensionEntity): Promise<InventoryDimensionEntity>;
+  Create(dimension: InventoryDimensionEntity, manager?: EntityManager): Promise<InventoryDimensionEntity>;
   List(
     skip: number,
     take: number,

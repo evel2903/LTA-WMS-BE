@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   IInventoryBalanceRepository,
@@ -27,9 +27,10 @@ export class InventoryBalanceRepository implements IInventoryBalanceRepository {
     return entity ? InventoryBalanceOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(balance: InventoryBalanceEntity): Promise<InventoryBalanceEntity> {
+  public async Create(balance: InventoryBalanceEntity, manager?: EntityManager): Promise<InventoryBalanceEntity> {
+    const repo = manager ? manager.getRepository(InventoryBalanceOrmEntity) : this.inventoryBalances;
     try {
-      const created = await this.inventoryBalances.save(InventoryBalanceOrmMapper.ToOrm(balance));
+      const created = await repo.save(InventoryBalanceOrmMapper.ToOrm(balance));
       return InventoryBalanceOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);

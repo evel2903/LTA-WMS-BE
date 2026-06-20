@@ -1,5 +1,13 @@
 import { randomUUID } from 'crypto';
 import { ConflictException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { CreateInventoryDimensionDto } from '@modules/MasterData/Application/DTOs/CreateInventoryDimensionDto';
 import { InventoryDimensionDto } from '@modules/MasterData/Application/DTOs/InventoryDimensionDto';
 import { IInventoryDimensionRepository } from '@modules/MasterData/Application/Interfaces/IInventoryDimensionRepository';
@@ -15,6 +23,9 @@ import { InventoryIdentityPolicyValidator } from '@modules/MasterData/Applicatio
 import { InventoryDimensionEntity } from '@modules/MasterData/Domain/Entities/InventoryDimensionEntity';
 
 export class CreateInventoryDimensionUseCase {
+  // Inventory dimension is an operational record (not in the A6 master-data ownership
+  // catalog) → audit-only: no ownership enforcement, just an in-transaction audit record.
+  // auditedTransaction is optional so fixture-setup tests construct bare; module wires it.
   constructor(
     private readonly inventoryDimensions: IInventoryDimensionRepository,
     private readonly owners: IOwnerRepository,
@@ -24,9 +35,13 @@ export class CreateInventoryDimensionUseCase {
     private readonly inventoryStatuses: IInventoryStatusRepository,
     private readonly uoms: IUomRepository,
     private readonly keyService: InventoryDimensionKeyService,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {}
 
-  public async Execute(request: CreateInventoryDimensionDto): Promise<InventoryDimensionDto> {
+  public async Execute(
+    request: CreateInventoryDimensionDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<InventoryDimensionDto> {
     const normalized = {
       OwnerId: request.OwnerId,
       SkuId: request.SkuId,
@@ -61,8 +76,25 @@ export class CreateInventoryDimensionUseCase {
       UpdatedAt: now,
     });
 
-    const created = await this.inventoryDimensions.Create(dimension);
-    return InventoryDimensionMapper.ToDto(created);
+    const buildEntry = (created: InventoryDimensionEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Create,
+        ObjectType: ObjectType.InventoryStatus,
+        ObjectId: created.Id,
+        ObjectCode: created.DimensionKeyHash,
+        AfterJson: InventoryDimensionMapper.ToDto(created) as unknown as Record<string, unknown>,
+        WarehouseId: created.WarehouseId,
+        OwnerId: created.OwnerId,
+      });
+
+    if (!this.auditedTransaction) {
+      const created = await this.inventoryDimensions.Create(dimension);
+      return InventoryDimensionMapper.ToDto(created);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const created = await this.inventoryDimensions.Create(dimension, manager);
+      return { result: InventoryDimensionMapper.ToDto(created), entry: buildEntry(created) };
+    });
   }
 
   private async ValidateReferences(input: {

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, IsNull, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, IsNull, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   IInventoryDimensionRepository,
@@ -27,9 +27,10 @@ export class InventoryDimensionRepository implements IInventoryDimensionReposito
     return entity ? InventoryDimensionOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(dimension: InventoryDimensionEntity): Promise<InventoryDimensionEntity> {
+  public async Create(dimension: InventoryDimensionEntity, manager?: EntityManager): Promise<InventoryDimensionEntity> {
+    const repo = manager ? manager.getRepository(InventoryDimensionOrmEntity) : this.inventoryDimensions;
     try {
-      const created = await this.inventoryDimensions.save(InventoryDimensionOrmMapper.ToOrm(dimension));
+      const created = await repo.save(InventoryDimensionOrmMapper.ToOrm(dimension));
       return InventoryDimensionOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
