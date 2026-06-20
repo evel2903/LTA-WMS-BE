@@ -306,6 +306,26 @@ describe('Approval workflow use cases (C6)', () => {
     await expect(useCase.Execute({ Id: request.Id }, ctx(APPROVER))).rejects.toBeInstanceOf(BusinessRuleException);
   });
 
+  it('AC4: concurrent decide is blocked by the in-transaction locked re-check (TOCTOU race)', async () => {
+    const repo = new InMemoryApprovalRequestRepository();
+    const request = await seedPending(repo);
+    // Simulate a decision that commits between the pre-check and the locked read: FindById still
+    // sees PENDING, but the locked in-transaction read (FindByIdForUpdate) sees it APPROVED. The
+    // authoritative in-tx guard must reject and write NO audit entry.
+    repo.FindByIdForUpdate = async () =>
+      new ApprovalRequestEntity({ ...request, Decision: ApprovalDecision.Approved, DecidedByUserId: 'racer' });
+    const stub = new StubAuditedTransaction();
+    const useCase = new ApproveApprovalRequestUseCase(
+      repo,
+      new FakePermissionChecker(true),
+      new FakeReasonCatalog(),
+      stub as unknown as AuditedTransaction,
+    );
+
+    await expect(useCase.Execute({ Id: request.Id }, ctx(APPROVER))).rejects.toBeInstanceOf(BusinessRuleException);
+    expect(stub.Entries).toHaveLength(0);
+  });
+
   // ---- Get/List ----
   it('Get returns the request DTO; List filters by Decision', async () => {
     const repo = new InMemoryApprovalRequestRepository();

@@ -12,6 +12,10 @@ import { ListApprovalRequestsUseCase } from '@modules/AccessControl/Application/
 import { ApproveApprovalRequestUseCase } from '@modules/AccessControl/Application/UseCases/ApproveApprovalRequestUseCase';
 import { RejectApprovalRequestUseCase } from '@modules/AccessControl/Application/UseCases/RejectApprovalRequestUseCase';
 import { ApprovalRequestController } from '@modules/AccessControl/Presentation/Controllers/ApprovalRequestController';
+import {
+  REQUIRE_PERMISSION_KEY,
+  RequirePermissionMetadata,
+} from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
 
 describe('E2E ApprovalRequestController (no DB)', () => {
   let app: INestApplication;
@@ -95,5 +99,26 @@ describe('E2E ApprovalRequestController (no DB)', () => {
       { Id: 'ar-1', ReasonNote: 'no' },
       expect.objectContaining({ ActorUserId: 'test-admin' }),
     );
+  });
+});
+
+describe('ApprovalRequestController C2 permission binding (no DB)', () => {
+  const meta = (method: keyof ApprovalRequestController): RequirePermissionMetadata =>
+    Reflect.getMetadata(
+      REQUIRE_PERMISSION_KEY,
+      ApprovalRequestController.prototype[method],
+    ) as RequirePermissionMetadata;
+
+  // AC4: approve/reject MUST require (Approve, ApprovalRequest) — guards against a regression that
+  // downgrades the decision routes to Read (which would let any reader decide approvals).
+  it('binds Approve/ApprovalRequest on approve and reject', () => {
+    expect(meta('Approve')).toMatchObject({ Action: ActionCode.Approve, ObjectType: ObjectType.ApprovalRequest });
+    expect(meta('Reject')).toMatchObject({ Action: ActionCode.Approve, ObjectType: ObjectType.ApprovalRequest });
+  });
+
+  it('binds Create/Read on the write + read routes', () => {
+    expect(meta('Create')).toMatchObject({ Action: ActionCode.Create, ObjectType: ObjectType.ApprovalRequest });
+    expect(meta('GetById')).toMatchObject({ Action: ActionCode.Read, ObjectType: ObjectType.ApprovalRequest });
+    expect(meta('List')).toMatchObject({ Action: ActionCode.Read, ObjectType: ObjectType.ApprovalRequest });
   });
 });

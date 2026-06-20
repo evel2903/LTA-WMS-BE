@@ -258,6 +258,10 @@ export class InMemoryApprovalRequestRepository implements IApprovalRequestReposi
     return this.requests.get(id) ?? null;
   }
 
+  public async FindByIdForUpdate(id: string): Promise<ApprovalRequestEntity | null> {
+    return this.requests.get(id) ?? null;
+  }
+
   public async Create(request: ApprovalRequestEntity): Promise<ApprovalRequestEntity> {
     this.requests.set(request.Id, request);
     return request;

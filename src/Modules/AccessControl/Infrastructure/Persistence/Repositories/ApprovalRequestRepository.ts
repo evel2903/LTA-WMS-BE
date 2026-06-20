@@ -22,6 +22,13 @@ export class ApprovalRequestRepository implements IApprovalRequestRepository {
     return entity ? ApprovalRequestOrmMapper.ToDomain(entity) : null;
   }
 
+  public async FindByIdForUpdate(id: string, manager: EntityManager): Promise<ApprovalRequestEntity | null> {
+    const entity = await manager
+      .getRepository(ApprovalRequestOrmEntity)
+      .findOne({ where: { Id: id }, lock: { mode: 'pessimistic_write' } });
+    return entity ? ApprovalRequestOrmMapper.ToDomain(entity) : null;
+  }
+
   public async Create(request: ApprovalRequestEntity, manager?: EntityManager): Promise<ApprovalRequestEntity> {
     const repo = manager ? manager.getRepository(ApprovalRequestOrmEntity) : this.approvalRequests;
     const created = await repo.save(ApprovalRequestOrmMapper.ToOrm(request));

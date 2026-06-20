@@ -23,8 +23,8 @@ import { ApprovalRequestDtoMapper } from '@modules/AccessControl/Application/Map
  * Creates a PENDING approval request for an APPROVAL_REQUIRED action (architecture 6.7).
  * Guards that a valid approver exists for `(Approve, ApprovalRequest)` (AC2) so a request
  * is never created for an action no one can ever approve. The request reason (when given)
- * is validated against the catalog for `(Create, ApprovalRequest)`. The create + its
- * Create audit row commit in one transaction (AC5).
+ * is validated against the catalog for the REQUESTED `(Action, TargetObjectType)`. The create
+ * + its Create audit row commit in one transaction (AC5).
  */
 export class CreateApprovalRequestUseCase {
   // auditedTransaction is optional only so fixture-setup tests can construct the use case
@@ -52,10 +52,13 @@ export class CreateApprovalRequestUseCase {
 
     let requestReasonCodeId: string | null = null;
     if (request.ReasonCode) {
+      // The request reason justifies the REQUESTED action on its target object, so validate it
+      // against (request.Action, request.TargetObjectType) — NOT (Create, ApprovalRequest), which
+      // no catalog entry can ever satisfy (that would reject every reason supplied at create).
       const validated = await this.reasonCatalog.ValidateReason({
         ReasonCode: request.ReasonCode,
-        Action: ActionCode.Create,
-        ObjectType: ObjectType.ApprovalRequest,
+        Action: request.Action,
+        ObjectType: request.TargetObjectType,
       });
       requestReasonCodeId = validated.ReasonCodeId;
     }

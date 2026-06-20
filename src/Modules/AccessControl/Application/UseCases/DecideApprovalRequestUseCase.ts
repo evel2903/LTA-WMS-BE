@@ -87,15 +87,17 @@ export abstract class DecideApprovalRequestUseCase {
       }
     }
 
-    // (e) capture before-image, then apply the decision.
+    // (e) capture before-image (pending snapshot) for the audit record.
     const before = ApprovalRequestDtoMapper.ToDto(entity) as unknown as Record<string, unknown>;
-    entity.Decision = this.TargetDecision;
-    entity.DecidedByUserId = actorUserId;
-    entity.DecisionReasonCodeId = decisionReasonCodeId;
-    entity.DecisionNote = request.ReasonNote ?? null;
-    entity.DecidedAt = new Date();
-    entity.UpdatedAt = new Date();
-    entity.UpdatedBy = actorUserId;
+    const applyDecision = (target: ApprovalRequestEntity): void => {
+      target.Decision = this.TargetDecision;
+      target.DecidedByUserId = actorUserId;
+      target.DecisionReasonCodeId = decisionReasonCodeId;
+      target.DecisionNote = request.ReasonNote ?? null;
+      target.DecidedAt = new Date();
+      target.UpdatedAt = new Date();
+      target.UpdatedBy = actorUserId;
+    };
 
     const buildEntry = (updated: ApprovalRequestEntity) =>
       MergeAuditContext(context, {
@@ -114,11 +116,22 @@ export abstract class DecideApprovalRequestUseCase {
       });
 
     if (!this.auditedTransaction) {
+      applyDecision(entity);
       const updated = await this.approvalRequests.Update(entity);
       return ApprovalRequestDtoMapper.ToDto(updated);
     }
+    // Authoritative guard: re-load with a write lock INSIDE the transaction and re-check PENDING,
+    // closing the read-check-write race so one request can never be decided twice concurrently.
     return this.auditedTransaction.Run(async (manager) => {
-      const updated = await this.approvalRequests.Update(entity, manager);
+      const locked = await this.approvalRequests.FindByIdForUpdate(request.Id, manager);
+      if (!locked) {
+        throw new NotFoundException('Approval request not found');
+      }
+      if (!locked.IsPending()) {
+        throw new BusinessRuleException('Request already decided');
+      }
+      applyDecision(locked);
+      const updated = await this.approvalRequests.Update(locked, manager);
       return { result: ApprovalRequestDtoMapper.ToDto(updated), entry: buildEntry(updated) };
     });
   }

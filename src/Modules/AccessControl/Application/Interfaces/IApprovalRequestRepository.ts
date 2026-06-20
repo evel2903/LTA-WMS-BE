@@ -16,6 +16,8 @@ export interface ApprovalRequestListFilter {
 
 export interface IApprovalRequestRepository {
   FindById(id: string, manager?: EntityManager): Promise<ApprovalRequestEntity | null>;
+  /** Locked read (pessimistic_write) for the decide transaction — closes the decide race. */
+  FindByIdForUpdate(id: string, manager: EntityManager): Promise<ApprovalRequestEntity | null>;
   Create(request: ApprovalRequestEntity, manager?: EntityManager): Promise<ApprovalRequestEntity>;
   Update(request: ApprovalRequestEntity, manager?: EntityManager): Promise<ApprovalRequestEntity>;
   List(
