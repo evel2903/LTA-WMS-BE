@@ -26,6 +26,13 @@ export class ExceptionCaseRepository implements IExceptionCaseRepository {
     return entity ? ExceptionCaseOrmMapper.ToDomain(entity) : null;
   }
 
+  public async FindByIdForUpdate(id: string, manager: EntityManager): Promise<ExceptionCaseEntity | null> {
+    const entity = await manager
+      .getRepository(ExceptionCaseOrmEntity)
+      .findOne({ where: { Id: id }, lock: { mode: 'pessimistic_write' } });
+    return entity ? ExceptionCaseOrmMapper.ToDomain(entity) : null;
+  }
+
   public async Create(entity: ExceptionCaseEntity, manager?: EntityManager): Promise<ExceptionCaseEntity> {
     const repo = manager ? manager.getRepository(ExceptionCaseOrmEntity) : this.cases;
     const created = await repo.save(ExceptionCaseOrmMapper.ToOrm(entity));

@@ -1,4 +1,6 @@
 import { BusinessRuleException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ApprovalDecision } from '@modules/AccessControl/Domain/Enums/ApprovalDecision';
 import { ExceptionState } from '@modules/AccessControl/Domain/Enums/ExceptionState';
 import { ExceptionCaseEntity } from '@modules/AccessControl/Domain/Entities/ExceptionCaseEntity';
@@ -28,16 +30,28 @@ export class CloseExceptionUseCase extends TransitionExceptionUseCase<CloseExcep
   }
 
   protected async ApplyTransition(target: ExceptionCaseEntity): Promise<void> {
-    const catalogEntry = await this.controlExceptionCatalog.ValidateExceptionType(target.ExceptionType);
+    // Tolerant catalog lookup (don't trap a case whose type later became DeferredV1Plus/removed).
+    const catalogEntry = await this.controlExceptionCatalog.FindByCode(target.ExceptionType);
+    const evidenceRequired = catalogEntry?.EvidenceRequired ?? false;
+    const approvalRequired = catalogEntry?.ApprovalRequired ?? false;
 
-    if (catalogEntry.EvidenceRequired && !target.HasEvidence()) {
+    if (evidenceRequired && !target.HasEvidence()) {
       throw new BusinessRuleException('Close blocked: evidence is required and missing for this exception type');
     }
 
-    if (target.ApprovalRequestId) {
+    if (approvalRequired || target.ApprovalRequestId) {
+      if (!target.ApprovalRequestId) {
+        throw new BusinessRuleException('Close blocked: this exception type requires an approved approval request');
+      }
       const approval = await this.approvalRequests.FindById(target.ApprovalRequestId);
-      if (!approval || approval.Decision !== ApprovalDecision.Approved) {
-        throw new BusinessRuleException('Close blocked: the linked approval request is not APPROVED');
+      const approved =
+        approval !== null &&
+        approval.Decision === ApprovalDecision.Approved &&
+        approval.Action === ActionCode.Approve &&
+        approval.TargetObjectType === ObjectType.ExceptionCase &&
+        approval.TargetObjectId === target.Id;
+      if (!approved) {
+        throw new BusinessRuleException('Close blocked: no APPROVED approval request matching this case');
       }
     }
 

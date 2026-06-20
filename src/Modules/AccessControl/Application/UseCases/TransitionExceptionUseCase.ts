@@ -1,4 +1,4 @@
-import { NotFoundException } from '@common/Exceptions/AppException';
+import { BusinessRuleException, NotFoundException } from '@common/Exceptions/AppException';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ExceptionState } from '@modules/AccessControl/Domain/Enums/ExceptionState';
@@ -52,11 +52,15 @@ export abstract class TransitionExceptionUseCase<TRequest extends { Id: string }
     ExceptionStateMachine.AssertTransition(entity.State, this.TargetState);
 
     const before = ExceptionCaseDtoMapper.ToDto(entity) as unknown as Record<string, unknown>;
+    const fromState = entity.State;
 
     await this.ApplyTransition(entity, request, context);
-    entity.State = this.TargetState;
-    entity.UpdatedAt = new Date();
-    entity.UpdatedBy = context.ActorUserId;
+
+    const applyTargetState = (): void => {
+      entity.State = this.TargetState;
+      entity.UpdatedAt = new Date();
+      entity.UpdatedBy = context.ActorUserId;
+    };
 
     const buildEntry = (updated: ExceptionCaseEntity) =>
       MergeAuditContext(context, {
@@ -76,10 +80,23 @@ export abstract class TransitionExceptionUseCase<TRequest extends { Id: string }
       });
 
     if (!this.auditedTransaction) {
+      applyTargetState();
       const updated = await this.cases.Update(entity);
       return ExceptionCaseDtoMapper.ToDto(updated);
     }
     return this.auditedTransaction.Run(async (manager) => {
+      // Authoritative re-check under a write lock: if the case state changed between the initial read
+      // and this transaction, abort — closing the read-check-write race so a case is transitioned once.
+      const locked = await this.cases.FindByIdForUpdate(entity.Id, manager);
+      if (!locked) {
+        throw new NotFoundException('Exception case not found');
+      }
+      if (locked.State !== fromState) {
+        throw new BusinessRuleException(
+          `INVALID_EXCEPTION_TRANSITION: case state changed concurrently (now ${locked.State})`,
+        );
+      }
+      applyTargetState();
       const updated = await this.cases.Update(entity, manager);
       return { result: ExceptionCaseDtoMapper.ToDto(updated), entry: buildEntry(updated) };
     });

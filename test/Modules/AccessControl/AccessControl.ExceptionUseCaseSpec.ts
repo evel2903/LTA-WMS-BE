@@ -431,18 +431,19 @@ describe('Exception lifecycle use cases (C9)', () => {
       const repo = new InMemoryExceptionCaseRepository();
       const approvalRepo = new InMemoryApprovalRequestRepository();
       const now = new Date();
+      const approvalId = randomUUID();
+      const entity = await seedCase(repo, ExceptionState.InReviewPendingApproval, { ApprovalRequestId: approvalId });
       const approved = new ApprovalRequestEntity({
-        Id: randomUUID(),
+        Id: approvalId,
         RequesterUserId: ACTOR,
         Action: ActionCode.Approve,
         TargetObjectType: ObjectType.ExceptionCase,
-        TargetObjectId: 'x',
+        TargetObjectId: entity.Id,
         Decision: ApprovalDecision.Approved,
         CreatedAt: now,
         UpdatedAt: now,
       });
       await approvalRepo.Seed(approved);
-      const entity = await seedCase(repo, ExceptionState.InReviewPendingApproval, { ApprovalRequestId: approved.Id });
       const useCase = buildResolve(repo, approvalRepo, new FakeReasonCatalog());
       const dto = await useCase.Execute({ Id: entity.Id }, ctx());
       expect(dto.State).toBe(ExceptionState.Resolved);
@@ -508,6 +509,22 @@ describe('Exception lifecycle use cases (C9)', () => {
     it('Get throws NotFound for a missing case', async () => {
       const repo = new InMemoryExceptionCaseRepository();
       await expect(new GetExceptionUseCase(repo).Execute('missing')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  // ---------- AC2/AC4: concurrency guard (TOCTOU) ----------
+  describe('transition concurrency guard (TOCTOU)', () => {
+    it('aborts when the case state changed concurrently — locked in-tx re-check, no audit row', async () => {
+      const repo = new InMemoryExceptionCaseRepository();
+      const entity = await seedCase(repo, ExceptionState.Detected);
+      const stub = new StubAuditedTransaction();
+      // Simulate a concurrent transition committed first: the locked in-transaction read sees a
+      // state other than the one asserted before the transaction opened.
+      repo.FindByIdForUpdate = async () => new ExceptionCaseEntity({ ...entity, State: ExceptionState.Logged });
+      const useCase = new LogExceptionUseCase(repo, stub as unknown as AuditedTransaction);
+
+      await expect(useCase.Execute({ Id: entity.Id }, ctx())).rejects.toBeInstanceOf(BusinessRuleException);
+      expect(stub.Entries).toHaveLength(0);
     });
   });
 });

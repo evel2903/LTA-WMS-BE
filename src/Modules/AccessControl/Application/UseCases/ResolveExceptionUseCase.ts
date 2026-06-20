@@ -36,7 +36,12 @@ export class ResolveExceptionUseCase extends TransitionExceptionUseCase<ResolveE
   }
 
   protected async ApplyTransition(target: ExceptionCaseEntity, request: ResolveExceptionDto): Promise<void> {
-    const catalogEntry = await this.controlExceptionCatalog.ValidateExceptionType(target.ExceptionType);
+    // Use FindByCode (tolerant) not ValidateExceptionType: a case validly created earlier must stay
+    // resolvable even if its type was later flipped to DeferredV1Plus/removed (don't trap the case).
+    const catalogEntry = await this.controlExceptionCatalog.FindByCode(target.ExceptionType);
+    const reasonRequired = catalogEntry?.ReasonRequired ?? false;
+    const evidenceRequired = catalogEntry?.EvidenceRequired ?? false;
+    const approvalRequired = catalogEntry?.ApprovalRequired ?? false;
 
     // Merge any evidence supplied at resolve onto the case.
     if (request.EvidenceRefs && request.EvidenceRefs.length > 0) {
@@ -44,7 +49,7 @@ export class ResolveExceptionUseCase extends TransitionExceptionUseCase<ResolveE
     }
 
     // Reason guard (validated against the seed-satisfiable (Update, ExceptionCase) pair).
-    if (catalogEntry.ReasonRequired) {
+    if (reasonRequired) {
       if (!request.ReasonCode) {
         throw new BusinessRuleException('Resolve requires a reason for this exception type');
       }
@@ -64,15 +69,25 @@ export class ResolveExceptionUseCase extends TransitionExceptionUseCase<ResolveE
     }
 
     // Evidence guard.
-    if (catalogEntry.EvidenceRequired && !target.HasEvidence()) {
+    if (evidenceRequired && !target.HasEvidence()) {
       throw new BusinessRuleException('Resolve requires evidence for this exception type');
     }
 
-    // Approval guard: if an approval request is linked, it must be APPROVED.
-    if (target.ApprovalRequestId) {
+    // Approval guard: when the catalog requires approval OR one is linked, a matching APPROVED request
+    // for THIS case must exist — match decision + action + target, not the id alone (C7 lesson).
+    if (approvalRequired || target.ApprovalRequestId) {
+      if (!target.ApprovalRequestId) {
+        throw new BusinessRuleException('Resolve blocked: this exception type requires an approved approval request');
+      }
       const approval = await this.approvalRequests.FindById(target.ApprovalRequestId);
-      if (!approval || approval.Decision !== ApprovalDecision.Approved) {
-        throw new BusinessRuleException('Resolve blocked: the linked approval request is not APPROVED');
+      const approved =
+        approval !== null &&
+        approval.Decision === ApprovalDecision.Approved &&
+        approval.Action === ActionCode.Approve &&
+        approval.TargetObjectType === ObjectType.ExceptionCase &&
+        approval.TargetObjectId === target.Id;
+      if (!approved) {
+        throw new BusinessRuleException('Resolve blocked: no APPROVED approval request matching this case');
       }
     }
 

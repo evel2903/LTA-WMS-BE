@@ -352,6 +352,10 @@ export class InMemoryExceptionCaseRepository implements IExceptionCaseRepository
     return this.cases.get(id) ?? null;
   }
 
+  public async FindByIdForUpdate(id: string): Promise<ExceptionCaseEntity | null> {
+    return this.cases.get(id) ?? null;
+  }
+
   public async Create(entity: ExceptionCaseEntity): Promise<ExceptionCaseEntity> {
     this.cases.set(entity.Id, entity);
     return entity;

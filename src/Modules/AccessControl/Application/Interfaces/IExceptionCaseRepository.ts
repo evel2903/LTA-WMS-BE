@@ -23,6 +23,8 @@ export interface ExceptionCaseListFilter {
  */
 export interface IExceptionCaseRepository {
   FindById(id: string, manager?: EntityManager): Promise<ExceptionCaseEntity | null>;
+  /** Locked read (pessimistic_write) for the transition transaction — closes the transition race. */
+  FindByIdForUpdate(id: string, manager: EntityManager): Promise<ExceptionCaseEntity | null>;
   Create(entity: ExceptionCaseEntity, manager?: EntityManager): Promise<ExceptionCaseEntity>;
   Update(entity: ExceptionCaseEntity, manager?: EntityManager): Promise<ExceptionCaseEntity>;
   List(
