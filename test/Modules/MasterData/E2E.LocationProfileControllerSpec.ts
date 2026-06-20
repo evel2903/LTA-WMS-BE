@@ -123,4 +123,18 @@ describe('E2E LocationProfileController (no DB)', () => {
 
     expect(updateExecute).not.toHaveBeenCalled();
   });
+
+  it('PATCH /location-profiles/:id forwards the body + audit context to the update use case', async () => {
+    updateExecute.mockResolvedValue({ Id: 'profile-1', ProfileName: 'Updated' });
+
+    await request(app.getHttpServer())
+      .patch('/location-profiles/profile-1')
+      .send({ ProfileName: 'Updated' })
+      .expect(200);
+
+    expect(updateExecute).toHaveBeenCalledWith(
+      { Id: 'profile-1', ProfileName: 'Updated' },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+  });
 });

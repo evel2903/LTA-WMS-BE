@@ -135,4 +135,15 @@ describe('E2E LocationController (no DB)', () => {
 
     expect(updateExecute).not.toHaveBeenCalled();
   });
+
+  it('PATCH /locations/:id forwards the body + audit context to the update use case', async () => {
+    updateExecute.mockResolvedValue({ Id: 'location-1', LocationName: 'Updated' });
+
+    await request(app.getHttpServer()).patch('/locations/location-1').send({ LocationName: 'Updated' }).expect(200);
+
+    expect(updateExecute).toHaveBeenCalledWith(
+      { Id: 'location-1', LocationName: 'Updated' },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+  });
 });
