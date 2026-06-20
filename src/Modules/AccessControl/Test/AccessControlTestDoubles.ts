@@ -26,6 +26,11 @@ import {
 } from '@modules/AccessControl/Application/Interfaces/IAuditLogRepository';
 import { IAuditWriter } from '@modules/AccessControl/Application/Interfaces/IAuditWriter';
 import { AuditEntry } from '@modules/AccessControl/Application/DTOs/AuditEntry';
+import { ApprovalRequestEntity } from '@modules/AccessControl/Domain/Entities/ApprovalRequestEntity';
+import {
+  ApprovalRequestListFilter,
+  IApprovalRequestRepository,
+} from '@modules/AccessControl/Application/Interfaces/IApprovalRequestRepository';
 
 export class InMemoryRoleRepository implements IRoleRepository {
   private readonly roles = new Map<string, RoleEntity>();
@@ -109,6 +114,10 @@ export class InMemoryRolePermissionRepository implements IRolePermissionReposito
   public async FindByRoleIds(roleIds: string[]): Promise<RolePermissionEntity[]> {
     const set = new Set(roleIds);
     return [...this.rolePermissions.values()].filter((rp) => set.has(rp.RoleId));
+  }
+
+  public async FindByPermissionId(permissionId: string): Promise<RolePermissionEntity[]> {
+    return [...this.rolePermissions.values()].filter((rp) => rp.PermissionId === permissionId);
   }
 
   public async Create(rolePermission: RolePermissionEntity): Promise<RolePermissionEntity> {
@@ -234,6 +243,46 @@ export class InMemoryAuditLogRepository implements IAuditLogRepository {
     if (filter.From) items = items.filter((l) => l.OccurredAt.getTime() >= filter.From!.getTime());
     if (filter.To) items = items.filter((l) => l.OccurredAt.getTime() <= filter.To!.getTime());
     items.sort((a, b) => b.OccurredAt.getTime() - a.OccurredAt.getTime());
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+}
+
+export class InMemoryApprovalRequestRepository implements IApprovalRequestRepository {
+  private readonly requests = new Map<string, ApprovalRequestEntity>();
+
+  public async Seed(request: ApprovalRequestEntity): Promise<void> {
+    this.requests.set(request.Id, request);
+  }
+
+  public async FindById(id: string): Promise<ApprovalRequestEntity | null> {
+    return this.requests.get(id) ?? null;
+  }
+
+  public async FindByIdForUpdate(id: string): Promise<ApprovalRequestEntity | null> {
+    return this.requests.get(id) ?? null;
+  }
+
+  public async Create(request: ApprovalRequestEntity): Promise<ApprovalRequestEntity> {
+    this.requests.set(request.Id, request);
+    return request;
+  }
+
+  public async Update(request: ApprovalRequestEntity): Promise<ApprovalRequestEntity> {
+    this.requests.set(request.Id, request);
+    return request;
+  }
+
+  public async List(
+    skip: number,
+    take: number,
+    filter: ApprovalRequestListFilter = {},
+  ): Promise<{ Items: ApprovalRequestEntity[]; TotalItems: number }> {
+    let items = [...this.requests.values()];
+    if (filter.Decision) items = items.filter((r) => r.Decision === filter.Decision);
+    if (filter.RequesterUserId) items = items.filter((r) => r.RequesterUserId === filter.RequesterUserId);
+    if (filter.TargetObjectType) items = items.filter((r) => r.TargetObjectType === filter.TargetObjectType);
+    if (filter.TargetObjectId) items = items.filter((r) => r.TargetObjectId === filter.TargetObjectId);
+    if (filter.Action) items = items.filter((r) => r.Action === filter.Action);
     return { Items: items.slice(skip, skip + take), TotalItems: items.length };
   }
 }

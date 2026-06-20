@@ -30,6 +30,11 @@ export class RolePermissionRepository implements IRolePermissionRepository {
     return entities.map(RolePermissionOrmMapper.ToDomain);
   }
 
+  public async FindByPermissionId(permissionId: string): Promise<RolePermissionEntity[]> {
+    const entities = await this.rolePermissions.find({ where: { PermissionId: permissionId } });
+    return entities.map(RolePermissionOrmMapper.ToDomain);
+  }
+
   public async Create(rolePermission: RolePermissionEntity): Promise<RolePermissionEntity> {
     try {
       const created = await this.rolePermissions.save(RolePermissionOrmMapper.ToOrm(rolePermission));

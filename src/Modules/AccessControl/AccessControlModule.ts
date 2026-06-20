@@ -67,6 +67,21 @@ import { AuditLogOrmEntity } from '@modules/AccessControl/Infrastructure/Persist
 import { QueryAuditLogsUseCase } from '@modules/AccessControl/Application/UseCases/QueryAuditLogsUseCase';
 import { GetAuditLogUseCase } from '@modules/AccessControl/Application/UseCases/GetAuditLogUseCase';
 import { AuditLogController } from '@modules/AccessControl/Presentation/Controllers/AuditLogController';
+import {
+  IApprovalRequestRepository,
+  APPROVAL_REQUEST_REPOSITORY,
+} from '@modules/AccessControl/Application/Interfaces/IApprovalRequestRepository';
+import { ApprovalRequestRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/ApprovalRequestRepository';
+import { ApprovalRequestOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ApprovalRequestOrmEntity';
+import { ApproverDirectory } from '@modules/AccessControl/Application/Services/ApproverDirectory';
+import { IReasonCodeCatalog } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
+import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import { CreateApprovalRequestUseCase } from '@modules/AccessControl/Application/UseCases/CreateApprovalRequestUseCase';
+import { ApproveApprovalRequestUseCase } from '@modules/AccessControl/Application/UseCases/ApproveApprovalRequestUseCase';
+import { RejectApprovalRequestUseCase } from '@modules/AccessControl/Application/UseCases/RejectApprovalRequestUseCase';
+import { GetApprovalRequestUseCase } from '@modules/AccessControl/Application/UseCases/GetApprovalRequestUseCase';
+import { ListApprovalRequestsUseCase } from '@modules/AccessControl/Application/UseCases/ListApprovalRequestsUseCase';
+import { ApprovalRequestController } from '@modules/AccessControl/Presentation/Controllers/ApprovalRequestController';
 
 @Module({
   imports: [
@@ -80,9 +95,17 @@ import { AuditLogController } from '@modules/AccessControl/Presentation/Controll
       DataScopeOrmEntity,
       ReasonCodeOrmEntity,
       AuditLogOrmEntity,
+      ApprovalRequestOrmEntity,
     ]),
   ],
-  controllers: [RoleController, PermissionController, UserRoleController, ReasonCodeController, AuditLogController],
+  controllers: [
+    RoleController,
+    PermissionController,
+    UserRoleController,
+    ReasonCodeController,
+    AuditLogController,
+    ApprovalRequestController,
+  ],
   providers: [
     { provide: ROLE_REPOSITORY, useClass: RoleRepository },
     { provide: PERMISSION_REPOSITORY, useClass: PermissionRepository },
@@ -183,6 +206,53 @@ import { AuditLogController } from '@modules/AccessControl/Presentation/Controll
         new RemoveRoleFromUserUseCase(roles, userRoles, audited),
       inject: [ROLE_REPOSITORY, USER_ROLE_REPOSITORY, AuditedTransaction],
     },
+    { provide: APPROVAL_REQUEST_REPOSITORY, useClass: ApprovalRequestRepository },
+    {
+      provide: ApproverDirectory,
+      useFactory: (permissions: IPermissionRepository, rolePermissions: IRolePermissionRepository) =>
+        new ApproverDirectory(permissions, rolePermissions),
+      inject: [PERMISSION_REPOSITORY, ROLE_PERMISSION_REPOSITORY],
+    },
+    {
+      provide: CreateApprovalRequestUseCase,
+      useFactory: (
+        approvalRequests: IApprovalRequestRepository,
+        approverDirectory: ApproverDirectory,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+      ) => new CreateApprovalRequestUseCase(approvalRequests, approverDirectory, reasonCatalog, audited),
+      inject: [APPROVAL_REQUEST_REPOSITORY, ApproverDirectory, REASON_CODE_CATALOG, AuditedTransaction],
+    },
+    {
+      provide: ApproveApprovalRequestUseCase,
+      useFactory: (
+        approvalRequests: IApprovalRequestRepository,
+        permissionChecker: IPermissionChecker,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+      ) => new ApproveApprovalRequestUseCase(approvalRequests, permissionChecker, reasonCatalog, audited),
+      inject: [APPROVAL_REQUEST_REPOSITORY, PERMISSION_CHECKER, REASON_CODE_CATALOG, AuditedTransaction],
+    },
+    {
+      provide: RejectApprovalRequestUseCase,
+      useFactory: (
+        approvalRequests: IApprovalRequestRepository,
+        permissionChecker: IPermissionChecker,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+      ) => new RejectApprovalRequestUseCase(approvalRequests, permissionChecker, reasonCatalog, audited),
+      inject: [APPROVAL_REQUEST_REPOSITORY, PERMISSION_CHECKER, REASON_CODE_CATALOG, AuditedTransaction],
+    },
+    {
+      provide: GetApprovalRequestUseCase,
+      useFactory: (approvalRequests: IApprovalRequestRepository) => new GetApprovalRequestUseCase(approvalRequests),
+      inject: [APPROVAL_REQUEST_REPOSITORY],
+    },
+    {
+      provide: ListApprovalRequestsUseCase,
+      useFactory: (approvalRequests: IApprovalRequestRepository) => new ListApprovalRequestsUseCase(approvalRequests),
+      inject: [APPROVAL_REQUEST_REPOSITORY],
+    },
   ],
   exports: [
     ROLE_REPOSITORY,
@@ -199,6 +269,8 @@ import { AuditLogController } from '@modules/AccessControl/Presentation/Controll
     AUDIT_LOG_REPOSITORY,
     AuditedTransaction,
     GetUserEffectivePermissionsUseCase,
+    APPROVAL_REQUEST_REPOSITORY,
+    CreateApprovalRequestUseCase,
   ],
 })
 export class AccessControlModule {}
