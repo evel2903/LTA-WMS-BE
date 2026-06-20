@@ -1,5 +1,14 @@
 import { NotFoundException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import { ReasonCodeEntity } from '@modules/AccessControl/Domain/Entities/ReasonCodeEntity';
 import { IReasonCodeRepository } from '@modules/AccessControl/Application/Interfaces/IReasonCodeRepository';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { UpdateReasonCodeDto, ReasonCodeDto } from '@modules/AccessControl/Application/DTOs/ReasonCodeDto';
 import { ReasonCodeDtoMapper } from '@modules/AccessControl/Application/Mappers/ReasonCodeDtoMapper';
 import { ReasonCodePayloadValidator } from '@modules/AccessControl/Application/Services/ReasonCodePayloadValidator';
@@ -10,13 +19,23 @@ import { ReasonCodePayloadValidator } from '@modules/AccessControl/Application/S
  * hard-deleted). `reason_code` and `reason_group` identity are not re-keyable here.
  */
 export class UpdateReasonCodeUseCase {
-  constructor(private readonly reasonCodeRepository: IReasonCodeRepository) {}
+  // auditedTransaction is optional only so fixture-setup tests can construct the use case
+  // bare; the module always wires it. ReasonCode is AUDIT-ONLY (no ownership group), so
+  // there is no ownership policy or reason-code handling here.
+  constructor(
+    private readonly reasonCodeRepository: IReasonCodeRepository,
+    private readonly auditedTransaction?: AuditedTransaction,
+  ) {}
 
-  public async Execute(request: UpdateReasonCodeDto): Promise<ReasonCodeDto> {
+  public async Execute(
+    request: UpdateReasonCodeDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<ReasonCodeDto> {
     const reason = await this.reasonCodeRepository.FindById(request.Id);
     if (!reason) {
       throw new NotFoundException('Reason code not found');
     }
+    const before = ReasonCodeDtoMapper.ToDto(reason) as unknown as Record<string, unknown>;
 
     if (request.ReasonGroup !== undefined) reason.ReasonGroup = request.ReasonGroup;
     if (request.Description !== undefined) reason.Description = request.Description;
@@ -45,7 +64,24 @@ export class UpdateReasonCodeUseCase {
     reason.Version += 1;
     reason.UpdatedAt = new Date();
     reason.UpdatedBy = request.ActorUserId ?? reason.UpdatedBy;
-    const updated = await this.reasonCodeRepository.Update(reason);
-    return ReasonCodeDtoMapper.ToDto(updated);
+
+    const buildEntry = (updated: ReasonCodeEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Update,
+        ObjectType: ObjectType.ReasonCode,
+        ObjectId: updated.Id,
+        ObjectCode: updated.ReasonCode,
+        BeforeJson: before,
+        AfterJson: ReasonCodeDtoMapper.ToDto(updated) as unknown as Record<string, unknown>,
+      });
+
+    if (!this.auditedTransaction) {
+      const updated = await this.reasonCodeRepository.Update(reason);
+      return ReasonCodeDtoMapper.ToDto(updated);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const updated = await this.reasonCodeRepository.Update(reason, manager);
+      return { result: ReasonCodeDtoMapper.ToDto(updated), entry: buildEntry(updated) };
+    });
   }
 }

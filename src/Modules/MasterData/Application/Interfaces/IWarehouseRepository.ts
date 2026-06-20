@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { WarehouseEntity } from '@modules/MasterData/Domain/Entities/WarehouseEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
@@ -12,8 +13,8 @@ export type WarehouseListFilter = {
 export interface IWarehouseRepository {
   FindById(id: string): Promise<WarehouseEntity | null>;
   FindByCode(warehouseCode: string): Promise<WarehouseEntity | null>;
-  Create(warehouse: WarehouseEntity): Promise<WarehouseEntity>;
-  Update(warehouse: WarehouseEntity): Promise<WarehouseEntity>;
+  Create(warehouse: WarehouseEntity, manager?: EntityManager): Promise<WarehouseEntity>;
+  Update(warehouse: WarehouseEntity, manager?: EntityManager): Promise<WarehouseEntity>;
   List(
     skip: number,
     take: number,

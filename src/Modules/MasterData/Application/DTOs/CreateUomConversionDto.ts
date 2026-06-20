@@ -10,4 +10,5 @@ export interface CreateUomConversionDto {
   Status: MasterDataStatus;
   SourceSystem?: string | null;
   ReferenceId?: string | null;
+  ReasonCode?: string | null;
 }

@@ -6,22 +6,48 @@ import {
 } from '@common/Exceptions/AppException';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import { MasterDataOwnershipPolicyService } from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
+import { MasterDataObjectGroup } from '@modules/MasterData/Domain/Enums/MasterDataObjectGroup';
 import { UpdateZoneDto } from '@modules/MasterData/Application/DTOs/UpdateZoneDto';
 import { ZoneDto } from '@modules/MasterData/Application/DTOs/ZoneDto';
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
 import { IZoneRepository } from '@modules/MasterData/Application/Interfaces/IZoneRepository';
 import { ZoneDtoMapper } from '@modules/MasterData/Application/Mappers/ZoneDtoMapper';
+import { ZoneEntity } from '@modules/MasterData/Domain/Entities/ZoneEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
 export class UpdateZoneUseCase {
+  // permissionChecker is required (C2 data-scope re-check). ownershipPolicy + auditedTransaction
+  // are optional only so fixture-setup tests can construct bare; the module always wires them.
   constructor(
     private readonly zoneRepository: IZoneRepository,
     private readonly warehouseRepository: IWarehouseRepository,
     private readonly permissionChecker: IPermissionChecker,
+    private readonly ownershipPolicy?: MasterDataOwnershipPolicyService,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {}
 
-  public async Execute(request: UpdateZoneDto): Promise<ZoneDto> {
+  public async Execute(request: UpdateZoneDto, context: AuditContext = SystemAuditContext): Promise<ZoneDto> {
+    let reasonCodeId: string | null = null;
+    if (this.ownershipPolicy) {
+      const decision = await this.ownershipPolicy.Enforce({
+        ObjectGroup: MasterDataObjectGroup.WarehouseLocation,
+        ObjectType: ObjectType.Zone,
+        Action: ActionCode.Update,
+        ReasonCode: request.ReasonCode ?? null,
+        SourceSystem: request.SourceSystem ?? null,
+        ReferenceId: request.ReferenceId ?? null,
+      });
+      reasonCodeId = decision.ReasonCodeId ?? null;
+    }
+
     const zone = await this.zoneRepository.FindById(request.Id);
     if (!zone) {
       throw new NotFoundException('Zone not found');
@@ -41,6 +67,8 @@ export class UpdateZoneUseCase {
         throw new ForbiddenAppException(`Access denied (${decision.Reason})`, { Reason: decision.Reason });
       }
     }
+
+    const before = ZoneDtoMapper.ToDto(zone) as unknown as Record<string, unknown>;
 
     const targetWarehouseId = request.WarehouseId ?? zone.WarehouseId;
     if (request.WarehouseId !== undefined) {
@@ -73,7 +101,25 @@ export class UpdateZoneUseCase {
     zone.ReferenceId = request.ReferenceId !== undefined ? request.ReferenceId : zone.ReferenceId;
     zone.UpdatedAt = new Date();
 
-    const updated = await this.zoneRepository.Update(zone);
-    return ZoneDtoMapper.ToDto(updated);
+    const buildEntry = (updated: ZoneEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Update,
+        ObjectType: ObjectType.Zone,
+        ObjectId: updated.Id,
+        ObjectCode: updated.ZoneCode,
+        BeforeJson: before,
+        AfterJson: ZoneDtoMapper.ToDto(updated) as unknown as Record<string, unknown>,
+        ReasonCodeId: reasonCodeId,
+        WarehouseId: updated.WarehouseId,
+      });
+
+    if (!this.auditedTransaction) {
+      const updated = await this.zoneRepository.Update(zone);
+      return ZoneDtoMapper.ToDto(updated);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const updated = await this.zoneRepository.Update(zone, manager);
+      return { result: ZoneDtoMapper.ToDto(updated), entry: buildEntry(updated) };
+    });
   }
 }

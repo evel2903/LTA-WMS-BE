@@ -76,7 +76,7 @@ describe('E2E SkuController (no DB)', () => {
 
     const response = await request(app.getHttpServer()).post('/skus').send(body).expect(201);
 
-    expect(createExecute).toHaveBeenCalledWith(body);
+    expect(createExecute).toHaveBeenCalledWith(body, expect.objectContaining({ ActorUserId: 'test-admin' }));
     expect(response.body.Success).toBe(true);
     expect(response.body.Data.SkuCode).toBe('SKU-001');
   });
@@ -109,9 +109,12 @@ describe('E2E SkuController (no DB)', () => {
     await request(app.getHttpServer()).get('/skus/sku-1/rule-facts').expect(200);
     await request(app.getHttpServer()).patch('/skus/sku-1').send({ SkuName: 'Updated' }).expect(200);
 
-    expect(getExecute).toHaveBeenCalledWith('sku-1');
+    expect(getExecute).toHaveBeenCalledWith('sku-1', expect.objectContaining({ ActorUserId: 'test-admin' }));
     expect(getRuleFactsExecute).toHaveBeenCalledWith('sku-1');
-    expect(updateExecute).toHaveBeenCalledWith({ Id: 'sku-1', SkuName: 'Updated' });
+    expect(updateExecute).toHaveBeenCalledWith(
+      { Id: 'sku-1', SkuName: 'Updated' },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 
   it('PATCH /skus/:id rejects empty required business fields', async () => {

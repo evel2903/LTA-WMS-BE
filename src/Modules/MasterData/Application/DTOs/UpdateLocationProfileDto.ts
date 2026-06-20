@@ -14,4 +14,5 @@ export class UpdateLocationProfileDto {
   public OperationPolicy?: Record<string, unknown> | null;
   public SourceSystem?: string | null;
   public ReferenceId?: string | null;
+  public ReasonCode?: string | null;
 }

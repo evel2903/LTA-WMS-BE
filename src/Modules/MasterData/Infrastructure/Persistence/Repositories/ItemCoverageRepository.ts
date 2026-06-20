@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, IsNull, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, IsNull, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   IItemCoverageRepository,
@@ -33,9 +33,10 @@ export class ItemCoverageRepository implements IItemCoverageRepository {
     return entity ? ItemCoverageOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(itemCoverage: ItemCoverageEntity): Promise<ItemCoverageEntity> {
+  public async Create(itemCoverage: ItemCoverageEntity, manager?: EntityManager): Promise<ItemCoverageEntity> {
+    const repo = manager ? manager.getRepository(ItemCoverageOrmEntity) : this.itemCoverages;
     try {
-      const created = await this.itemCoverages.save(ItemCoverageOrmMapper.ToOrm(itemCoverage));
+      const created = await repo.save(ItemCoverageOrmMapper.ToOrm(itemCoverage));
       return ItemCoverageOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -43,9 +44,10 @@ export class ItemCoverageRepository implements IItemCoverageRepository {
     }
   }
 
-  public async Update(itemCoverage: ItemCoverageEntity): Promise<ItemCoverageEntity> {
+  public async Update(itemCoverage: ItemCoverageEntity, manager?: EntityManager): Promise<ItemCoverageEntity> {
+    const repo = manager ? manager.getRepository(ItemCoverageOrmEntity) : this.itemCoverages;
     try {
-      const updated = await this.itemCoverages.save(ItemCoverageOrmMapper.ToOrm(itemCoverage));
+      const updated = await repo.save(ItemCoverageOrmMapper.ToOrm(itemCoverage));
       return ItemCoverageOrmMapper.ToDomain(updated);
     } catch (error) {
       this.HandleUniqueViolation(error);

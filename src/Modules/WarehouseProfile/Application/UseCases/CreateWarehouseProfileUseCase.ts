@@ -1,5 +1,13 @@
 import { randomUUID } from 'crypto';
 import { ConflictException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { IOwnerRepository } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
@@ -26,6 +34,7 @@ export class CreateWarehouseProfileUseCase {
     skuRepository: ISkuRepository,
     private readonly scopeKeyService: ScopeKeyService,
     private readonly policyValidator: WarehouseProfilePolicyValidator,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {
     this.scopeReferenceValidator = new ScopeReferenceValidator(
       warehouseRepository,
@@ -35,7 +44,10 @@ export class CreateWarehouseProfileUseCase {
     );
   }
 
-  public async Execute(request: CreateWarehouseProfileDto): Promise<WarehouseProfileDto> {
+  public async Execute(
+    request: CreateWarehouseProfileDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<WarehouseProfileDto> {
     const warehouseTypeCode = this.policyValidator.AssertWarehouseTypeCode(request.WarehouseTypeCode);
     // Minimum scope readiness gate (B1 validates readiness; B5 enforces activation).
     this.policyValidator.AssertScopeReadiness({ WarehouseTypeCode: warehouseTypeCode });
@@ -102,7 +114,23 @@ export class CreateWarehouseProfileUseCase {
       UpdatedBy: request.CreatedBy ?? null,
     });
 
-    const created = await this.profileRepository.Create(profile);
-    return WarehouseProfileDtoMapper.ToDto(created);
+    const buildEntry = (saved: WarehouseProfileEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Create,
+        ObjectType: ObjectType.WarehouseProfile,
+        ObjectId: saved.Id,
+        ObjectCode: saved.ProfileCode,
+        AfterJson: WarehouseProfileDtoMapper.ToDto(saved) as unknown as Record<string, unknown>,
+        WarehouseId: saved.WarehouseId ?? null,
+      });
+
+    if (!this.auditedTransaction) {
+      const created = await this.profileRepository.Create(profile);
+      return WarehouseProfileDtoMapper.ToDto(created);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const created = await this.profileRepository.Create(profile, manager);
+      return { result: WarehouseProfileDtoMapper.ToDto(created), entry: buildEntry(created) };
+    });
   }
 }

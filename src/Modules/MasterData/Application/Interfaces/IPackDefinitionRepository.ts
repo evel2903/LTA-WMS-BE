@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { PackDefinitionEntity } from '@modules/MasterData/Domain/Entities/PackDefinitionEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
@@ -14,8 +15,8 @@ export interface IPackDefinitionRepository {
   FindById(id: string): Promise<PackDefinitionEntity | null>;
   FindBySkuAndPackCode(skuId: string, packCode: string): Promise<PackDefinitionEntity | null>;
   FindActiveDefaultBySkuId(skuId: string): Promise<PackDefinitionEntity | null>;
-  Create(packDefinition: PackDefinitionEntity): Promise<PackDefinitionEntity>;
-  Update(packDefinition: PackDefinitionEntity): Promise<PackDefinitionEntity>;
+  Create(packDefinition: PackDefinitionEntity, manager?: EntityManager): Promise<PackDefinitionEntity>;
+  Update(packDefinition: PackDefinitionEntity, manager?: EntityManager): Promise<PackDefinitionEntity>;
   List(
     skip: number,
     take: number,

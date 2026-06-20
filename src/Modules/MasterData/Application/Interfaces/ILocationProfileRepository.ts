@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { LocationProfileEntity } from '@modules/MasterData/Domain/Entities/LocationProfileEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
@@ -12,8 +13,8 @@ export type LocationProfileListFilter = {
 export interface ILocationProfileRepository {
   FindById(id: string): Promise<LocationProfileEntity | null>;
   FindByCode(profileCode: string): Promise<LocationProfileEntity | null>;
-  Create(profile: LocationProfileEntity): Promise<LocationProfileEntity>;
-  Update(profile: LocationProfileEntity): Promise<LocationProfileEntity>;
+  Create(profile: LocationProfileEntity, manager?: EntityManager): Promise<LocationProfileEntity>;
+  Update(profile: LocationProfileEntity, manager?: EntityManager): Promise<LocationProfileEntity>;
   List(
     skip: number,
     take: number,

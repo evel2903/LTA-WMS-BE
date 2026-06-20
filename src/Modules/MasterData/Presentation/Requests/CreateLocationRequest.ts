@@ -121,4 +121,9 @@ export class CreateLocationRequest {
   @IsString()
   @MaxLength(100)
   public ReferenceId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  public ReasonCode?: string;
 }

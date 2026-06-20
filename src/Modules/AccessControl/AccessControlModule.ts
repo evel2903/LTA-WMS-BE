@@ -61,6 +61,7 @@ import {
   AUDIT_LOG_REPOSITORY,
 } from '@modules/AccessControl/Application/Interfaces/IAuditLogRepository';
 import { AuditWriter } from '@modules/AccessControl/Infrastructure/Audit/AuditWriter';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { AuditLogRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/AuditLogRepository';
 import { AuditLogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/AuditLogOrmEntity';
 import { QueryAuditLogsUseCase } from '@modules/AccessControl/Application/UseCases/QueryAuditLogsUseCase';
@@ -91,6 +92,7 @@ import { AuditLogController } from '@modules/AccessControl/Presentation/Controll
     { provide: REASON_CODE_REPOSITORY, useClass: ReasonCodeRepository },
     { provide: AUDIT_LOG_REPOSITORY, useClass: AuditLogRepository },
     { provide: AUDIT_WRITER, useClass: AuditWriter },
+    AuditedTransaction,
     {
       provide: QueryAuditLogsUseCase,
       useFactory: (auditLogs: IAuditLogRepository) => new QueryAuditLogsUseCase(auditLogs),
@@ -110,8 +112,9 @@ import { AuditLogController } from '@modules/AccessControl/Presentation/Controll
     },
     {
       provide: CreateReasonCodeUseCase,
-      useFactory: (reasonCodes: IReasonCodeRepository) => new CreateReasonCodeUseCase(reasonCodes),
-      inject: [REASON_CODE_REPOSITORY],
+      useFactory: (reasonCodes: IReasonCodeRepository, audited: AuditedTransaction) =>
+        new CreateReasonCodeUseCase(reasonCodes, audited),
+      inject: [REASON_CODE_REPOSITORY, AuditedTransaction],
     },
     {
       provide: GetReasonCodeUseCase,
@@ -125,8 +128,9 @@ import { AuditLogController } from '@modules/AccessControl/Presentation/Controll
     },
     {
       provide: UpdateReasonCodeUseCase,
-      useFactory: (reasonCodes: IReasonCodeRepository) => new UpdateReasonCodeUseCase(reasonCodes),
-      inject: [REASON_CODE_REPOSITORY],
+      useFactory: (reasonCodes: IReasonCodeRepository, audited: AuditedTransaction) =>
+        new UpdateReasonCodeUseCase(reasonCodes, audited),
+      inject: [REASON_CODE_REPOSITORY, AuditedTransaction],
     },
     {
       provide: PERMISSION_CHECKER,
@@ -169,15 +173,15 @@ import { AuditLogController } from '@modules/AccessControl/Presentation/Controll
     },
     {
       provide: AssignRoleToUserUseCase,
-      useFactory: (roles: IRoleRepository, userRoles: IUserRoleRepository) =>
-        new AssignRoleToUserUseCase(roles, userRoles),
-      inject: [ROLE_REPOSITORY, USER_ROLE_REPOSITORY],
+      useFactory: (roles: IRoleRepository, userRoles: IUserRoleRepository, audited: AuditedTransaction) =>
+        new AssignRoleToUserUseCase(roles, userRoles, audited),
+      inject: [ROLE_REPOSITORY, USER_ROLE_REPOSITORY, AuditedTransaction],
     },
     {
       provide: RemoveRoleFromUserUseCase,
-      useFactory: (roles: IRoleRepository, userRoles: IUserRoleRepository) =>
-        new RemoveRoleFromUserUseCase(roles, userRoles),
-      inject: [ROLE_REPOSITORY, USER_ROLE_REPOSITORY],
+      useFactory: (roles: IRoleRepository, userRoles: IUserRoleRepository, audited: AuditedTransaction) =>
+        new RemoveRoleFromUserUseCase(roles, userRoles, audited),
+      inject: [ROLE_REPOSITORY, USER_ROLE_REPOSITORY, AuditedTransaction],
     },
   ],
   exports: [
@@ -193,6 +197,7 @@ import { AuditLogController } from '@modules/AccessControl/Presentation/Controll
     REASON_CODE_REPOSITORY,
     AUDIT_WRITER,
     AUDIT_LOG_REPOSITORY,
+    AuditedTransaction,
     GetUserEffectivePermissionsUseCase,
   ],
 })

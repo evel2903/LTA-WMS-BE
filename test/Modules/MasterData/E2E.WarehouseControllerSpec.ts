@@ -78,14 +78,17 @@ describe('E2E WarehouseController (no DB)', () => {
       })
       .expect(201);
 
-    expect(createExecute).toHaveBeenCalledWith({
-      SiteId: 'site-1',
-      WarehouseCode: 'WH-HCM',
-      WarehouseName: 'Ho Chi Minh DC',
-      WarehouseTypeCode: 'DC',
-      Status: MasterDataStatus.Active,
-      Timezone: 'Asia/Ho_Chi_Minh',
-    });
+    expect(createExecute).toHaveBeenCalledWith(
+      {
+        SiteId: 'site-1',
+        WarehouseCode: 'WH-HCM',
+        WarehouseName: 'Ho Chi Minh DC',
+        WarehouseTypeCode: 'DC',
+        Status: MasterDataStatus.Active,
+        Timezone: 'Asia/Ho_Chi_Minh',
+      },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 
   it('GET /warehouses rejects invalid query and calls list use case for valid query', async () => {
@@ -113,7 +116,10 @@ describe('E2E WarehouseController (no DB)', () => {
     await request(app.getHttpServer()).patch('/warehouses/warehouse-1').send({ WarehouseName: 'Updated' }).expect(200);
 
     expect(getByIdExecute).toHaveBeenCalledWith('warehouse-1');
-    expect(updateExecute).toHaveBeenCalledWith({ Id: 'warehouse-1', WarehouseName: 'Updated' });
+    expect(updateExecute).toHaveBeenCalledWith(
+      { Id: 'warehouse-1', WarehouseName: 'Updated' },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 
   it('PATCH /warehouses/:id rejects empty required fields when provided', async () => {

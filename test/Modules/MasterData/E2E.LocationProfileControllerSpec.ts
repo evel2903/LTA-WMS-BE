@@ -101,17 +101,20 @@ describe('E2E LocationProfileController (no DB)', () => {
       })
       .expect(201);
 
-    expect(createExecute).toHaveBeenCalledWith({
-      ProfileCode: 'BIN-DRY',
-      ProfileName: 'Dry Bin',
-      LocationType: 'BIN',
-      Status: MasterDataStatus.Active,
-      CapacityPolicy: { RequireCapacityQty: true },
-      EligibilityPolicy: {},
-      MixPolicy: {},
-      CompliancePolicy: {},
-      OperationPolicy: {},
-    });
+    expect(createExecute).toHaveBeenCalledWith(
+      {
+        ProfileCode: 'BIN-DRY',
+        ProfileName: 'Dry Bin',
+        LocationType: 'BIN',
+        Status: MasterDataStatus.Active,
+        CapacityPolicy: { RequireCapacityQty: true },
+        EligibilityPolicy: {},
+        MixPolicy: {},
+        CompliancePolicy: {},
+        OperationPolicy: {},
+      },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 
   it('PATCH /location-profiles/:id rejects empty required business fields', async () => {
@@ -119,5 +122,19 @@ describe('E2E LocationProfileController (no DB)', () => {
     await request(app.getHttpServer()).patch('/location-profiles/profile-1').send({ ProfileName: '' }).expect(400);
 
     expect(updateExecute).not.toHaveBeenCalled();
+  });
+
+  it('PATCH /location-profiles/:id forwards the body + audit context to the update use case', async () => {
+    updateExecute.mockResolvedValue({ Id: 'profile-1', ProfileName: 'Updated' });
+
+    await request(app.getHttpServer())
+      .patch('/location-profiles/profile-1')
+      .send({ ProfileName: 'Updated' })
+      .expect(200);
+
+    expect(updateExecute).toHaveBeenCalledWith(
+      { Id: 'profile-1', ProfileName: 'Updated' },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 });

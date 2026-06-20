@@ -24,4 +24,5 @@ export interface CreateSkuDto {
   MinRemainingShelfLifeDays?: number | null;
   SourceSystem?: string;
   ReferenceId?: string;
+  ReasonCode?: string | null;
 }

@@ -11,4 +11,5 @@ export interface CreateSkuBarcodeDto {
   Status: MasterDataStatus;
   SourceSystem?: string | null;
   ReferenceId?: string | null;
+  ReasonCode?: string | null;
 }

@@ -1,5 +1,15 @@
 import { randomUUID } from 'crypto';
 import { BusinessRuleException, ConflictException, NotFoundException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { MasterDataOwnershipPolicyService } from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
+import { MasterDataObjectGroup } from '@modules/MasterData/Domain/Enums/MasterDataObjectGroup';
 import { CreateLocationDto } from '@modules/MasterData/Application/DTOs/CreateLocationDto';
 import { LocationDto } from '@modules/MasterData/Application/DTOs/LocationDto';
 import { ILocationProfileRepository } from '@modules/MasterData/Application/Interfaces/ILocationProfileRepository';
@@ -17,9 +27,24 @@ export class CreateLocationUseCase {
     private readonly locationProfileRepository: ILocationProfileRepository,
     private readonly warehouseRepository: IWarehouseRepository,
     private readonly zoneRepository: IZoneRepository,
+    private readonly ownershipPolicy?: MasterDataOwnershipPolicyService,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {}
 
-  public async Execute(request: CreateLocationDto): Promise<LocationDto> {
+  public async Execute(request: CreateLocationDto, context: AuditContext = SystemAuditContext): Promise<LocationDto> {
+    let reasonCodeId: string | null = null;
+    if (this.ownershipPolicy) {
+      const decision = await this.ownershipPolicy.Enforce({
+        ObjectGroup: MasterDataObjectGroup.WarehouseLocation,
+        ObjectType: ObjectType.Location,
+        Action: ActionCode.Create,
+        ReasonCode: request.ReasonCode ?? null,
+        SourceSystem: request.SourceSystem ?? null,
+        ReferenceId: request.ReferenceId ?? null,
+      });
+      reasonCodeId = decision.ReasonCodeId ?? null;
+    }
+
     const warehouse = await this.warehouseRepository.FindById(request.WarehouseId);
     if (!warehouse) {
       throw new NotFoundException('Warehouse not found');
@@ -94,8 +119,25 @@ export class CreateLocationUseCase {
 
     LocationPolicyValidator.Validate(location, profile);
 
-    const created = await this.locationRepository.Create(location);
-    return LocationDtoMapper.ToDto(created);
+    const buildEntry = (created: LocationEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Create,
+        ObjectType: ObjectType.Location,
+        ObjectId: created.Id,
+        ObjectCode: created.LocationCode,
+        ReasonCodeId: reasonCodeId,
+        AfterJson: LocationDtoMapper.ToDto(created) as unknown as Record<string, unknown>,
+        WarehouseId: created.WarehouseId,
+      });
+
+    if (!this.auditedTransaction) {
+      const created = await this.locationRepository.Create(location);
+      return LocationDtoMapper.ToDto(created);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const created = await this.locationRepository.Create(location, manager);
+      return { result: LocationDtoMapper.ToDto(created), entry: buildEntry(created) };
+    });
   }
 
   private ValidateParentScope(parent: LocationEntity, warehouseId: string, zoneId: string): void {

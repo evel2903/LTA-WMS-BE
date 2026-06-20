@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { WarehouseProfileRuleEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileRuleEntity';
 
 export const WAREHOUSE_PROFILE_RULE_REPOSITORY = Symbol('IWarehouseProfileRuleRepository');
@@ -8,8 +9,8 @@ export interface IWarehouseProfileRuleRepository {
     warehouseProfileId: string,
     ruleDefinitionId: string,
   ): Promise<WarehouseProfileRuleEntity | null>;
-  Create(binding: WarehouseProfileRuleEntity): Promise<WarehouseProfileRuleEntity>;
-  Delete(id: string): Promise<void>;
+  Create(binding: WarehouseProfileRuleEntity, manager?: EntityManager): Promise<WarehouseProfileRuleEntity>;
+  Delete(id: string, manager?: EntityManager): Promise<void>;
   ListByProfile(
     warehouseProfileId: string,
     skip: number,

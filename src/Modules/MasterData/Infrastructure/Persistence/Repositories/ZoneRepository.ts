@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import { IZoneRepository, ZoneListFilter } from '@modules/MasterData/Application/Interfaces/IZoneRepository';
 import { ZoneEntity } from '@modules/MasterData/Domain/Entities/ZoneEntity';
@@ -24,9 +24,10 @@ export class ZoneRepository implements IZoneRepository {
     return entity ? ZoneOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(zone: ZoneEntity): Promise<ZoneEntity> {
+  public async Create(zone: ZoneEntity, manager?: EntityManager): Promise<ZoneEntity> {
+    const repo = manager ? manager.getRepository(ZoneOrmEntity) : this.zones;
     try {
-      const created = await this.zones.save(ZoneOrmMapper.ToOrm(zone));
+      const created = await repo.save(ZoneOrmMapper.ToOrm(zone));
       return ZoneOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -34,9 +35,10 @@ export class ZoneRepository implements IZoneRepository {
     }
   }
 
-  public async Update(zone: ZoneEntity): Promise<ZoneEntity> {
+  public async Update(zone: ZoneEntity, manager?: EntityManager): Promise<ZoneEntity> {
+    const repo = manager ? manager.getRepository(ZoneOrmEntity) : this.zones;
     try {
-      const updated = await this.zones.save(ZoneOrmMapper.ToOrm(zone));
+      const updated = await repo.save(ZoneOrmMapper.ToOrm(zone));
       return ZoneOrmMapper.ToDomain(updated);
     } catch (error) {
       this.HandleUniqueViolation(error);

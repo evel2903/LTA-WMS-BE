@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileEntity';
 import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/WarehouseProfileStatus';
 
@@ -12,8 +13,8 @@ export type WarehouseProfileListFilter = {
 export interface IWarehouseProfileRepository {
   FindById(id: string): Promise<WarehouseProfileEntity | null>;
   FindByCode(profileCode: string): Promise<WarehouseProfileEntity | null>;
-  Create(profile: WarehouseProfileEntity): Promise<WarehouseProfileEntity>;
-  Update(profile: WarehouseProfileEntity): Promise<WarehouseProfileEntity>;
+  Create(profile: WarehouseProfileEntity, manager?: EntityManager): Promise<WarehouseProfileEntity>;
+  Update(profile: WarehouseProfileEntity, manager?: EntityManager): Promise<WarehouseProfileEntity>;
   List(
     skip: number,
     take: number,
@@ -45,5 +46,7 @@ export interface IWarehouseProfileRepository {
    * activations at the same ScopeKey. The non-transactional methods above remain available for
    * single reads/writes that do not need atomicity.
    */
-  RunInTransaction<T>(work: (txRepository: IWarehouseProfileRepository) => Promise<T>): Promise<T>;
+  RunInTransaction<T>(
+    work: (txRepository: IWarehouseProfileRepository, manager: EntityManager) => Promise<T>,
+  ): Promise<T>;
 }

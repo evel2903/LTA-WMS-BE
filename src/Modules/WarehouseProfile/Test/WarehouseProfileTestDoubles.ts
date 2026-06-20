@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import { IOwnerRepository } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
@@ -90,8 +91,10 @@ export class InMemoryWarehouseProfileRepository implements IWarehouseProfileRepo
 
   // Single-threaded in-memory double: the same store is the "transaction-scoped" repository, so the
   // unit of work simply runs against `this`. Subclasses may override to observe the boundary.
-  public async RunInTransaction<T>(work: (txRepository: IWarehouseProfileRepository) => Promise<T>): Promise<T> {
-    return work(this);
+  public async RunInTransaction<T>(
+    work: (txRepository: IWarehouseProfileRepository, manager: EntityManager) => Promise<T>,
+  ): Promise<T> {
+    return work(this, undefined as unknown as EntityManager);
   }
 }
 

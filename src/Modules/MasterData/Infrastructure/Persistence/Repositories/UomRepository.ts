@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import { IUomRepository, UomListFilter } from '@modules/MasterData/Application/Interfaces/IUomRepository';
 import { UomEntity } from '@modules/MasterData/Domain/Entities/UomEntity';
@@ -24,9 +24,10 @@ export class UomRepository implements IUomRepository {
     return entity ? UomOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(uom: UomEntity): Promise<UomEntity> {
+  public async Create(uom: UomEntity, manager?: EntityManager): Promise<UomEntity> {
+    const repo = manager ? manager.getRepository(UomOrmEntity) : this.uoms;
     try {
-      const created = await this.uoms.save(UomOrmMapper.ToOrm(uom));
+      const created = await repo.save(UomOrmMapper.ToOrm(uom));
       return UomOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -34,9 +35,10 @@ export class UomRepository implements IUomRepository {
     }
   }
 
-  public async Update(uom: UomEntity): Promise<UomEntity> {
+  public async Update(uom: UomEntity, manager?: EntityManager): Promise<UomEntity> {
+    const repo = manager ? manager.getRepository(UomOrmEntity) : this.uoms;
     try {
-      const updated = await this.uoms.save(UomOrmMapper.ToOrm(uom));
+      const updated = await repo.save(UomOrmMapper.ToOrm(uom));
       return UomOrmMapper.ToDomain(updated);
     } catch (error) {
       this.HandleUniqueViolation(error);

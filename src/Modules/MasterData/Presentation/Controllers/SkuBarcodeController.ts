@@ -4,6 +4,8 @@ import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { CurrentAuditContext } from '@modules/AccessControl/Presentation/Decorators/CurrentAuditContext';
+import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { CreateSkuBarcodeUseCase } from '@modules/MasterData/Application/UseCases/CreateSkuBarcodeUseCase';
 import { GetSkuBarcodeUseCase } from '@modules/MasterData/Application/UseCases/GetSkuBarcodeUseCase';
 import { ListSkuBarcodesUseCase } from '@modules/MasterData/Application/UseCases/ListSkuBarcodesUseCase';
@@ -27,8 +29,8 @@ export class SkuBarcodeController {
 
   @Post()
   @RequirePermission(ActionCode.Create, ObjectType.Sku)
-  public async Create(@Body() request: CreateSkuBarcodeRequest) {
-    return await this.createSkuBarcodeUseCase.Execute(request);
+  public async Create(@Body() request: CreateSkuBarcodeRequest, @CurrentAuditContext() context: AuditContext) {
+    return await this.createSkuBarcodeUseCase.Execute(request, context);
   }
 
   @Get('resolve')
@@ -51,7 +53,11 @@ export class SkuBarcodeController {
 
   @Patch(':id')
   @RequirePermission(ActionCode.Update, ObjectType.Sku)
-  public async Update(@Param('id') id: string, @Body() request: UpdateSkuBarcodeRequest) {
-    return await this.updateSkuBarcodeUseCase.Execute({ Id: id, ...request });
+  public async Update(
+    @Param('id') id: string,
+    @Body() request: UpdateSkuBarcodeRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.updateSkuBarcodeUseCase.Execute({ Id: id, ...request }, context);
   }
 }

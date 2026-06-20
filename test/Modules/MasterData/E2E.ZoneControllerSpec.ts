@@ -88,15 +88,18 @@ describe('E2E ZoneController (no DB)', () => {
       })
       .expect(201);
 
-    expect(createExecute).toHaveBeenCalledWith({
-      WarehouseId: 'warehouse-1',
-      ZoneCode: 'PICK',
-      ZoneName: 'Picking Zone',
-      ZoneType: 'PICKING',
-      Status: MasterDataStatus.Active,
-      Sequence: 10,
-      ComplianceFlags: { Hazmat: false },
-    });
+    expect(createExecute).toHaveBeenCalledWith(
+      {
+        WarehouseId: 'warehouse-1',
+        ZoneCode: 'PICK',
+        ZoneName: 'Picking Zone',
+        ZoneType: 'PICKING',
+        Status: MasterDataStatus.Active,
+        Sequence: 10,
+        ComplianceFlags: { Hazmat: false },
+      },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 
   it('GET /zones rejects invalid query and calls list use case for valid query', async () => {
@@ -124,7 +127,10 @@ describe('E2E ZoneController (no DB)', () => {
     await request(app.getHttpServer()).patch('/zones/zone-1').send({ ZoneName: 'Updated' }).expect(200);
 
     expect(getByIdExecute).toHaveBeenCalledWith('zone-1');
-    expect(updateExecute).toHaveBeenCalledWith({ Id: 'zone-1', ZoneName: 'Updated', ActorUserId: 'test-admin' });
+    expect(updateExecute).toHaveBeenCalledWith(
+      { Id: 'zone-1', ZoneName: 'Updated', ActorUserId: 'test-admin' },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 
   it('PATCH /zones/:id rejects empty required fields when provided', async () => {

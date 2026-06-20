@@ -87,7 +87,10 @@ describe('E2E PackDefinitionController (no DB)', () => {
     await request(app.getHttpServer()).get('/pack-definitions/pack-1').expect(200);
     await request(app.getHttpServer()).patch('/pack-definitions/pack-1').send({ PackName: 'Updated' }).expect(200);
 
-    expect(createExecute).toHaveBeenCalledWith(body);
-    expect(updateExecute).toHaveBeenCalledWith({ Id: 'pack-1', PackName: 'Updated' });
+    expect(createExecute).toHaveBeenCalledWith(body, expect.objectContaining({ ActorUserId: 'test-admin' }));
+    expect(updateExecute).toHaveBeenCalledWith(
+      { Id: 'pack-1', PackName: 'Updated' },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 });

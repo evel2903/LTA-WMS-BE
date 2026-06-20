@@ -90,7 +90,13 @@ describe('E2E UomConversionController (no DB)', () => {
     await request(app.getHttpServer()).get('/uom-conversions/conversion-1').expect(200);
     await request(app.getHttpServer()).patch('/uom-conversions/conversion-1').send({ Factor: 24 }).expect(200);
 
-    expect(createExecute).toHaveBeenCalledWith({ ...body, EffectiveFrom: new Date('2026-01-01T00:00:00.000Z') });
-    expect(updateExecute).toHaveBeenCalledWith({ Id: 'conversion-1', Factor: 24 });
+    expect(createExecute).toHaveBeenCalledWith(
+      { ...body, EffectiveFrom: new Date('2026-01-01T00:00:00.000Z') },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(updateExecute).toHaveBeenCalledWith(
+      { Id: 'conversion-1', Factor: 24 },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 });

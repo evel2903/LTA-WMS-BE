@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import { IWarehouseProfileRuleRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRuleRepository';
 import { WarehouseProfileRuleEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileRuleEntity';
@@ -29,9 +29,13 @@ export class WarehouseProfileRuleRepository implements IWarehouseProfileRuleRepo
     return entity ? WarehouseProfileRuleOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(binding: WarehouseProfileRuleEntity): Promise<WarehouseProfileRuleEntity> {
+  public async Create(
+    binding: WarehouseProfileRuleEntity,
+    manager?: EntityManager,
+  ): Promise<WarehouseProfileRuleEntity> {
+    const repo = manager ? manager.getRepository(WarehouseProfileRuleOrmEntity) : this.bindings;
     try {
-      const created = await this.bindings.save(WarehouseProfileRuleOrmMapper.ToOrm(binding));
+      const created = await repo.save(WarehouseProfileRuleOrmMapper.ToOrm(binding));
       return WarehouseProfileRuleOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -39,8 +43,9 @@ export class WarehouseProfileRuleRepository implements IWarehouseProfileRuleRepo
     }
   }
 
-  public async Delete(id: string): Promise<void> {
-    await this.bindings.delete({ Id: id });
+  public async Delete(id: string, manager?: EntityManager): Promise<void> {
+    const repo = manager ? manager.getRepository(WarehouseProfileRuleOrmEntity) : this.bindings;
+    await repo.delete({ Id: id });
   }
 
   public async ListByProfile(

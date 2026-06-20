@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, IsNull, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, IsNull, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   ISkuBarcodeRepository,
@@ -31,9 +31,10 @@ export class SkuBarcodeRepository implements ISkuBarcodeRepository {
     return entity ? SkuBarcodeOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(skuBarcode: SkuBarcodeEntity): Promise<SkuBarcodeEntity> {
+  public async Create(skuBarcode: SkuBarcodeEntity, manager?: EntityManager): Promise<SkuBarcodeEntity> {
+    const repo = manager ? manager.getRepository(SkuBarcodeOrmEntity) : this.skuBarcodes;
     try {
-      const created = await this.skuBarcodes.save(SkuBarcodeOrmMapper.ToOrm(skuBarcode));
+      const created = await repo.save(SkuBarcodeOrmMapper.ToOrm(skuBarcode));
       return SkuBarcodeOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -41,9 +42,10 @@ export class SkuBarcodeRepository implements ISkuBarcodeRepository {
     }
   }
 
-  public async Update(skuBarcode: SkuBarcodeEntity): Promise<SkuBarcodeEntity> {
+  public async Update(skuBarcode: SkuBarcodeEntity, manager?: EntityManager): Promise<SkuBarcodeEntity> {
+    const repo = manager ? manager.getRepository(SkuBarcodeOrmEntity) : this.skuBarcodes;
     try {
-      const updated = await this.skuBarcodes.save(SkuBarcodeOrmMapper.ToOrm(skuBarcode));
+      const updated = await repo.save(SkuBarcodeOrmMapper.ToOrm(skuBarcode));
       return SkuBarcodeOrmMapper.ToDomain(updated);
     } catch (error) {
       this.HandleUniqueViolation(error);

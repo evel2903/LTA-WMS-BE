@@ -1,5 +1,13 @@
 import { randomUUID } from 'crypto';
 import { ConflictException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { CreateItemCoverageDto } from '@modules/MasterData/Application/DTOs/CreateItemCoverageDto';
 import { ItemCoverageDto } from '@modules/MasterData/Application/DTOs/ItemCoverageDto';
 import { IItemCoverageRepository } from '@modules/MasterData/Application/Interfaces/IItemCoverageRepository';
@@ -12,14 +20,21 @@ import { ItemCoverageEntity } from '@modules/MasterData/Domain/Entities/ItemCove
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
 export class CreateItemCoverageUseCase {
+  // auditedTransaction is optional only so fixture-setup tests can construct the use case
+  // bare; the module always wires it. ItemCoverage is AUDIT-ONLY (no A6 ownership group),
+  // so there is no ownership policy or reason-code handling here.
   constructor(
     private readonly itemCoverages: IItemCoverageRepository,
     private readonly skus: ISkuRepository,
     private readonly warehouses: IWarehouseRepository,
     private readonly owners: IOwnerRepository,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {}
 
-  public async Execute(request: CreateItemCoverageDto): Promise<ItemCoverageDto> {
+  public async Execute(
+    request: CreateItemCoverageDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<ItemCoverageDto> {
     const ownerId = request.OwnerId ?? null;
     const duplicate = await this.itemCoverages.FindBySkuWarehouseOwner(request.SkuId, request.WarehouseId, ownerId);
     if (duplicate) {
@@ -63,8 +78,25 @@ export class CreateItemCoverageUseCase {
       UpdatedAt: now,
     });
 
-    const created = await this.itemCoverages.Create(coverage);
-    return ItemCoverageMapper.ToDto(created);
+    const buildEntry = (created: ItemCoverageEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Create,
+        ObjectType: ObjectType.ItemCoverage,
+        ObjectId: created.Id,
+        ObjectCode: null,
+        AfterJson: ItemCoverageMapper.ToDto(created) as unknown as Record<string, unknown>,
+        WarehouseId: created.WarehouseId,
+        OwnerId: created.OwnerId,
+      });
+
+    if (!this.auditedTransaction) {
+      const created = await this.itemCoverages.Create(coverage);
+      return ItemCoverageMapper.ToDto(created);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const created = await this.itemCoverages.Create(coverage, manager);
+      return { result: ItemCoverageMapper.ToDto(created), entry: buildEntry(created) };
+    });
   }
 
   private async ValidateReferences(

@@ -1,4 +1,12 @@
 import { ConflictException, NotFoundException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { SkuBarcodeDto } from '@modules/MasterData/Application/DTOs/SkuBarcodeDto';
 import { UpdateSkuBarcodeDto } from '@modules/MasterData/Application/DTOs/UpdateSkuBarcodeDto';
 import { IOwnerRepository } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
@@ -7,23 +15,46 @@ import { ISkuBarcodeRepository } from '@modules/MasterData/Application/Interface
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { IUomRepository } from '@modules/MasterData/Application/Interfaces/IUomRepository';
 import { SkuBarcodeMapper } from '@modules/MasterData/Application/Mappers/SkuBarcodeMapper';
+import { MasterDataOwnershipPolicyService } from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
 import { SkuSupportPolicyValidator } from '@modules/MasterData/Application/Services/SkuSupportPolicyValidator';
+import { SkuBarcodeEntity } from '@modules/MasterData/Domain/Entities/SkuBarcodeEntity';
+import { MasterDataObjectGroup } from '@modules/MasterData/Domain/Enums/MasterDataObjectGroup';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
 export class UpdateSkuBarcodeUseCase {
+  // Optional audit deps: see CreateSkuBarcodeUseCase — module always wires them.
   constructor(
     private readonly skuBarcodes: ISkuBarcodeRepository,
     private readonly packDefinitions: IPackDefinitionRepository,
     private readonly skus: ISkuRepository,
     private readonly owners: IOwnerRepository,
     private readonly uoms: IUomRepository,
+    private readonly ownershipPolicy?: MasterDataOwnershipPolicyService,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {}
 
-  public async Execute(request: UpdateSkuBarcodeDto): Promise<SkuBarcodeDto> {
+  public async Execute(
+    request: UpdateSkuBarcodeDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<SkuBarcodeDto> {
+    let reasonCodeId: string | null = null;
+    if (this.ownershipPolicy) {
+      const decision = await this.ownershipPolicy.Enforce({
+        ObjectGroup: MasterDataObjectGroup.BarcodeAlias,
+        ObjectType: ObjectType.Sku,
+        Action: ActionCode.Update,
+        ReasonCode: request.ReasonCode ?? null,
+        SourceSystem: request.SourceSystem ?? null,
+        ReferenceId: request.ReferenceId ?? null,
+      });
+      reasonCodeId = decision.ReasonCodeId ?? null;
+    }
+
     const barcode = await this.skuBarcodes.FindById(request.Id);
     if (!barcode) {
       throw new NotFoundException('SKU barcode not found');
     }
+    const before = SkuBarcodeMapper.ToDto(barcode) as unknown as Record<string, unknown>;
 
     const targetSkuId = request.SkuId ?? barcode.SkuId;
     const targetOwnerId = request.OwnerId !== undefined ? request.OwnerId : barcode.OwnerId;
@@ -59,8 +90,25 @@ export class UpdateSkuBarcodeUseCase {
     barcode.ReferenceId = request.ReferenceId !== undefined ? request.ReferenceId : barcode.ReferenceId;
     barcode.UpdatedAt = new Date();
 
-    const updated = await this.skuBarcodes.Update(barcode);
-    return SkuBarcodeMapper.ToDto(updated);
+    const buildEntry = (updated: SkuBarcodeEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Update,
+        ObjectType: ObjectType.Sku,
+        ObjectId: updated.Id,
+        ObjectCode: updated.BarcodeValue,
+        BeforeJson: before,
+        AfterJson: SkuBarcodeMapper.ToDto(updated) as unknown as Record<string, unknown>,
+        ReasonCodeId: reasonCodeId,
+      });
+
+    if (!this.auditedTransaction) {
+      const updated = await this.skuBarcodes.Update(barcode);
+      return SkuBarcodeMapper.ToDto(updated);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const updated = await this.skuBarcodes.Update(barcode, manager);
+      return { result: SkuBarcodeMapper.ToDto(updated), entry: buildEntry(updated) };
+    });
   }
 
   private async ValidateReferences(

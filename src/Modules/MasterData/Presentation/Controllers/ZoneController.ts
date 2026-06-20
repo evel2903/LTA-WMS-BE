@@ -5,6 +5,8 @@ import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
 import { AuthUser, CurrentUser } from '@modules/AccessControl/Presentation/Decorators/CurrentUser';
+import { CurrentAuditContext } from '@modules/AccessControl/Presentation/Decorators/CurrentAuditContext';
+import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { CreateZoneUseCase } from '@modules/MasterData/Application/UseCases/CreateZoneUseCase';
 import { GetZoneByIdUseCase } from '@modules/MasterData/Application/UseCases/GetZoneByIdUseCase';
 import { ListZonesUseCase } from '@modules/MasterData/Application/UseCases/ListZonesUseCase';
@@ -25,8 +27,8 @@ export class ZoneController {
 
   @Post()
   @RequirePermission(ActionCode.Create, ObjectType.Zone, { WarehouseId: { In: 'body', Key: 'WarehouseId' } })
-  public async Create(@Body() request: CreateZoneRequest) {
-    return await this.createZoneUseCase.Execute(request);
+  public async Create(@Body() request: CreateZoneRequest, @CurrentAuditContext() context: AuditContext) {
+    return await this.createZoneUseCase.Execute(request, context);
   }
 
   @Get(':id')
@@ -43,7 +45,12 @@ export class ZoneController {
 
   @Patch(':id')
   @RequirePermission(ActionCode.Update, ObjectType.Zone)
-  public async Update(@Param('id') id: string, @Body() request: UpdateZoneRequest, @CurrentUser() user?: AuthUser) {
-    return await this.updateZoneUseCase.Execute({ Id: id, ...request, ActorUserId: user?.UserId });
+  public async Update(
+    @Param('id') id: string,
+    @Body() request: UpdateZoneRequest,
+    @CurrentAuditContext() context: AuditContext,
+    @CurrentUser() user?: AuthUser,
+  ) {
+    return await this.updateZoneUseCase.Execute({ Id: id, ...request, ActorUserId: user?.UserId }, context);
   }
 }

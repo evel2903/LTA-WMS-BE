@@ -4,6 +4,8 @@ import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { CurrentAuditContext } from '@modules/AccessControl/Presentation/Decorators/CurrentAuditContext';
+import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { CreateWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/CreateWarehouseProfileUseCase';
 import { GetWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/GetWarehouseProfileUseCase';
 import { ListWarehouseProfilesUseCase } from '@modules/WarehouseProfile/Application/UseCases/ListWarehouseProfilesUseCase';
@@ -34,8 +36,8 @@ export class WarehouseProfileController {
     ZoneId: { In: 'body', Key: 'ZoneId' },
     OwnerId: { In: 'body', Key: 'OwnerId' },
   })
-  public async Create(@Body() request: CreateWarehouseProfileRequest) {
-    return await this.createWarehouseProfileUseCase.Execute(request);
+  public async Create(@Body() request: CreateWarehouseProfileRequest, @CurrentAuditContext() context: AuditContext) {
+    return await this.createWarehouseProfileUseCase.Execute(request, context);
   }
 
   @Get(':id')
@@ -52,19 +54,31 @@ export class WarehouseProfileController {
 
   @Patch(':id')
   @RequirePermission(ActionCode.Update, ObjectType.WarehouseProfile)
-  public async Update(@Param('id') id: string, @Body() request: UpdateWarehouseProfileRequest) {
-    return await this.updateWarehouseProfileUseCase.Execute({ Id: id, ...request });
+  public async Update(
+    @Param('id') id: string,
+    @Body() request: UpdateWarehouseProfileRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.updateWarehouseProfileUseCase.Execute({ Id: id, ...request }, context);
   }
 
   @Post(':id/activate')
   @RequirePermission(ActionCode.Update, ObjectType.WarehouseProfile)
-  public async Activate(@Param('id') id: string, @Body() request: ActivateWarehouseProfileRequest) {
-    return await this.activateWarehouseProfileUseCase.Execute({ Id: id, ...request });
+  public async Activate(
+    @Param('id') id: string,
+    @Body() request: ActivateWarehouseProfileRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.activateWarehouseProfileUseCase.Execute({ Id: id, ...request }, context);
   }
 
   @Post(':id/deactivate')
   @RequirePermission(ActionCode.Update, ObjectType.WarehouseProfile)
-  public async Deactivate(@Param('id') id: string, @Body() request: DeactivateWarehouseProfileRequest) {
-    return await this.deactivateWarehouseProfileUseCase.Execute({ Id: id, ...request });
+  public async Deactivate(
+    @Param('id') id: string,
+    @Body() request: DeactivateWarehouseProfileRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.deactivateWarehouseProfileUseCase.Execute({ Id: id, ...request }, context);
   }
 }

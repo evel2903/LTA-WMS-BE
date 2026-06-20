@@ -1,4 +1,12 @@
 import { BusinessRuleException, NotFoundException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { IAuditWriter } from '@modules/AccessControl/Application/Interfaces/IAuditWriter';
 import { ActivateWarehouseProfileDto } from '@modules/WarehouseProfile/Application/DTOs/ActivateWarehouseProfileDto';
 import { WarehouseProfileDto } from '@modules/WarehouseProfile/Application/DTOs/WarehouseProfileDto';
 import { IWarehouseProfileRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
@@ -18,21 +26,29 @@ import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/W
  *   4. set ACTIVE + store activation actor/reason context (audit_policy.LastActivation) + audit meta,
  *   5. inside ONE transaction (architecture 5.2): re-check overlap-by-window against other ACTIVE
  *      profiles of the same ScopeKey, then persist — atomic read-then-write closing the race.
+ * C5: the immutable audit record (IAuditWriter) is appended inside the SAME transaction via the
+ * manager, so a rolled-back activation rolls back its audit too. auditWriter is optional only so
+ * fixture-setup tests construct bare; the module always wires it.
  */
 export class ActivateWarehouseProfileUseCase {
   constructor(
     private readonly profileRepository: IWarehouseProfileRepository,
     private readonly policyValidator: WarehouseProfilePolicyValidator,
     private readonly activationGuard: ProfileActivationGuard,
+    private readonly auditWriter?: IAuditWriter,
   ) {}
 
-  public async Execute(request: ActivateWarehouseProfileDto): Promise<WarehouseProfileDto> {
+  public async Execute(
+    request: ActivateWarehouseProfileDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<WarehouseProfileDto> {
     const profile = await this.profileRepository.FindById(request.Id);
     if (!profile) {
       throw new NotFoundException('Warehouse profile not found');
     }
 
     this.AssertActivatableTransition(profile);
+    const before = WarehouseProfileDtoMapper.ToDto(profile) as unknown as Record<string, unknown>;
 
     // Optional effective-window override at activation; otherwise keep the existing window.
     if (request.EffectiveFrom !== undefined) {
@@ -51,8 +67,9 @@ export class ActivateWarehouseProfileUseCase {
     // architecture 5.2: the overlap check and the status write MUST be atomic so two concurrent
     // activations at the same ScopeKey cannot both pass the overlap read before either writes. The
     // overlap re-check runs FIRST inside the transaction; the entity is only mutated to ACTIVE once
-    // the check passes, so a blocked activation leaves the profile untouched (still DRAFT).
-    const updated = await this.profileRepository.RunInTransaction(async (txRepository) => {
+    // the check passes, so a blocked activation leaves the profile untouched (still DRAFT). The audit
+    // record is appended in the same transaction (C5), so it rolls back with a failed activation.
+    const updated = await this.profileRepository.RunInTransaction(async (txRepository, manager) => {
       await this.activationGuard.AssertNoOverlap(profile, txRepository);
 
       const now = new Date();
@@ -63,7 +80,23 @@ export class ActivateWarehouseProfileUseCase {
       }
       profile.UpdatedAt = now;
 
-      return txRepository.Update(profile);
+      const saved = await txRepository.Update(profile);
+      if (this.auditWriter) {
+        await this.auditWriter.Append(
+          MergeAuditContext(context, {
+            Action: ActionCode.Update,
+            ObjectType: ObjectType.WarehouseProfile,
+            ObjectId: saved.Id,
+            ObjectCode: saved.ProfileCode,
+            BeforeJson: before,
+            AfterJson: WarehouseProfileDtoMapper.ToDto(saved) as unknown as Record<string, unknown>,
+            ReasonNote: request.ReasonNote ?? request.ReasonCode ?? null,
+            WarehouseId: saved.WarehouseId ?? null,
+          }),
+          manager,
+        );
+      }
+      return saved;
     });
     return WarehouseProfileDtoMapper.ToDto(updated);
   }

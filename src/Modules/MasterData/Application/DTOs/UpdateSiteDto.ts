@@ -7,4 +7,5 @@ export class UpdateSiteDto {
   public Status?: MasterDataStatus;
   public SourceSystem?: string | null;
   public ReferenceId?: string | null;
+  public ReasonCode?: string | null;
 }

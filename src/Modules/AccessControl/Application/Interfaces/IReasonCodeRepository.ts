@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ReasonCodeStatus } from '@modules/AccessControl/Domain/Enums/ReasonCodeStatus';
 import { ReasonGroup } from '@modules/AccessControl/Domain/Enums/ReasonGroup';
@@ -14,8 +15,8 @@ export interface ReasonCodeListFilter {
 export interface IReasonCodeRepository {
   FindById(id: string): Promise<ReasonCodeEntity | null>;
   FindByCode(reasonCode: string): Promise<ReasonCodeEntity | null>;
-  Create(reasonCode: ReasonCodeEntity): Promise<ReasonCodeEntity>;
-  Update(reasonCode: ReasonCodeEntity): Promise<ReasonCodeEntity>;
+  Create(reasonCode: ReasonCodeEntity, manager?: EntityManager): Promise<ReasonCodeEntity>;
+  Update(reasonCode: ReasonCodeEntity, manager?: EntityManager): Promise<ReasonCodeEntity>;
   List(
     skip: number,
     take: number,

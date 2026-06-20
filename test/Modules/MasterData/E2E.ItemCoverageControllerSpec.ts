@@ -89,7 +89,10 @@ describe('E2E ItemCoverageController (no DB)', () => {
     await request(app.getHttpServer()).get('/item-coverages/coverage-1').expect(200);
     await request(app.getHttpServer()).patch('/item-coverages/coverage-1').send({ StopShipping: true }).expect(200);
 
-    expect(createExecute).toHaveBeenCalledWith(body);
-    expect(updateExecute).toHaveBeenCalledWith({ Id: 'coverage-1', StopShipping: true });
+    expect(createExecute).toHaveBeenCalledWith(body, expect.objectContaining({ ActorUserId: 'test-admin' }));
+    expect(updateExecute).toHaveBeenCalledWith(
+      { Id: 'coverage-1', StopShipping: true },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 });

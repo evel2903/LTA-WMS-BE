@@ -4,6 +4,8 @@ import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { CurrentAuditContext } from '@modules/AccessControl/Presentation/Decorators/CurrentAuditContext';
+import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { CreateSkuUseCase } from '@modules/MasterData/Application/UseCases/CreateSkuUseCase';
 import { GetSkuUseCase } from '@modules/MasterData/Application/UseCases/GetSkuUseCase';
 import { GetSkuRuleFactsUseCase } from '@modules/MasterData/Application/UseCases/GetSkuRuleFactsUseCase';
@@ -26,8 +28,8 @@ export class SkuController {
 
   @Post()
   @RequirePermission(ActionCode.Create, ObjectType.Sku)
-  public async Create(@Body() request: CreateSkuRequest) {
-    return await this.createSkuUseCase.Execute(request);
+  public async Create(@Body() request: CreateSkuRequest, @CurrentAuditContext() context: AuditContext) {
+    return await this.createSkuUseCase.Execute(request, context);
   }
 
   @Get(':id/rule-facts')
@@ -38,8 +40,8 @@ export class SkuController {
 
   @Get(':id')
   @RequirePermission(ActionCode.Read, ObjectType.Sku)
-  public async GetById(@Param('id') id: string) {
-    return await this.getSkuUseCase.Execute(id);
+  public async GetById(@Param('id') id: string, @CurrentAuditContext() context: AuditContext) {
+    return await this.getSkuUseCase.Execute(id, context);
   }
 
   @Get()
@@ -50,7 +52,11 @@ export class SkuController {
 
   @Patch(':id')
   @RequirePermission(ActionCode.Update, ObjectType.Sku)
-  public async Update(@Param('id') id: string, @Body() request: UpdateSkuRequest) {
-    return await this.updateSkuUseCase.Execute({ Id: id, ...request });
+  public async Update(
+    @Param('id') id: string,
+    @Body() request: UpdateSkuRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.updateSkuUseCase.Execute({ Id: id, ...request }, context);
   }
 }

@@ -1,4 +1,14 @@
 import { BusinessRuleException, ConflictException, NotFoundException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { MasterDataOwnershipPolicyService } from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
+import { MasterDataObjectGroup } from '@modules/MasterData/Domain/Enums/MasterDataObjectGroup';
 import { UpdateLocationDto } from '@modules/MasterData/Application/DTOs/UpdateLocationDto';
 import { LocationDto } from '@modules/MasterData/Application/DTOs/LocationDto';
 import { ILocationProfileRepository } from '@modules/MasterData/Application/Interfaces/ILocationProfileRepository';
@@ -16,13 +26,29 @@ export class UpdateLocationUseCase {
     private readonly locationProfileRepository: ILocationProfileRepository,
     private readonly warehouseRepository: IWarehouseRepository,
     private readonly zoneRepository: IZoneRepository,
+    private readonly ownershipPolicy?: MasterDataOwnershipPolicyService,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {}
 
-  public async Execute(request: UpdateLocationDto): Promise<LocationDto> {
+  public async Execute(request: UpdateLocationDto, context: AuditContext = SystemAuditContext): Promise<LocationDto> {
+    let reasonCodeId: string | null = null;
+    if (this.ownershipPolicy) {
+      const decision = await this.ownershipPolicy.Enforce({
+        ObjectGroup: MasterDataObjectGroup.WarehouseLocation,
+        ObjectType: ObjectType.Location,
+        Action: ActionCode.Update,
+        ReasonCode: request.ReasonCode ?? null,
+        SourceSystem: request.SourceSystem ?? null,
+        ReferenceId: request.ReferenceId ?? null,
+      });
+      reasonCodeId = decision.ReasonCodeId ?? null;
+    }
+
     const location = await this.locationRepository.FindById(request.Id);
     if (!location) {
       throw new NotFoundException('Location not found');
     }
+    const before = LocationDtoMapper.ToDto(location) as unknown as Record<string, unknown>;
 
     const targetWarehouseId = request.WarehouseId ?? location.WarehouseId;
     const targetZoneId = request.ZoneId ?? location.ZoneId;
@@ -102,8 +128,26 @@ export class UpdateLocationUseCase {
 
     LocationPolicyValidator.Validate(location, profile);
 
-    const updated = await this.locationRepository.Update(location);
-    return LocationDtoMapper.ToDto(updated);
+    const buildEntry = (updated: LocationEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Update,
+        ObjectType: ObjectType.Location,
+        ObjectId: updated.Id,
+        ObjectCode: updated.LocationCode,
+        ReasonCodeId: reasonCodeId,
+        BeforeJson: before,
+        AfterJson: LocationDtoMapper.ToDto(updated) as unknown as Record<string, unknown>,
+        WarehouseId: updated.WarehouseId,
+      });
+
+    if (!this.auditedTransaction) {
+      const updated = await this.locationRepository.Update(location);
+      return LocationDtoMapper.ToDto(updated);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const updated = await this.locationRepository.Update(location, manager);
+      return { result: LocationDtoMapper.ToDto(updated), entry: buildEntry(updated) };
+    });
   }
 
   private async ValidateParent(

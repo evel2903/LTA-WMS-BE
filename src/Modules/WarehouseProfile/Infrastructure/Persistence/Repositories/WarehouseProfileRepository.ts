@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, IsNull, LessThan, LessThanOrEqual, MoreThan, Not, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, IsNull, LessThan, LessThanOrEqual, MoreThan, Not, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   IWarehouseProfileRepository,
@@ -28,9 +28,10 @@ export class WarehouseProfileRepository implements IWarehouseProfileRepository {
     return entity ? WarehouseProfileOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(profile: WarehouseProfileEntity): Promise<WarehouseProfileEntity> {
+  public async Create(profile: WarehouseProfileEntity, manager?: EntityManager): Promise<WarehouseProfileEntity> {
+    const repo = manager ? manager.getRepository(WarehouseProfileOrmEntity) : this.profiles;
     try {
-      const created = await this.profiles.save(WarehouseProfileOrmMapper.ToOrm(profile));
+      const created = await repo.save(WarehouseProfileOrmMapper.ToOrm(profile));
       return WarehouseProfileOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -38,9 +39,10 @@ export class WarehouseProfileRepository implements IWarehouseProfileRepository {
     }
   }
 
-  public async Update(profile: WarehouseProfileEntity): Promise<WarehouseProfileEntity> {
+  public async Update(profile: WarehouseProfileEntity, manager?: EntityManager): Promise<WarehouseProfileEntity> {
+    const repo = manager ? manager.getRepository(WarehouseProfileOrmEntity) : this.profiles;
     try {
-      const updated = await this.profiles.save(WarehouseProfileOrmMapper.ToOrm(profile));
+      const updated = await repo.save(WarehouseProfileOrmMapper.ToOrm(profile));
       return WarehouseProfileOrmMapper.ToDomain(updated);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -117,13 +119,15 @@ export class WarehouseProfileRepository implements IWarehouseProfileRepository {
     return items.map(WarehouseProfileOrmMapper.ToDomain);
   }
 
-  public async RunInTransaction<T>(work: (txRepository: IWarehouseProfileRepository) => Promise<T>): Promise<T> {
+  public async RunInTransaction<T>(
+    work: (txRepository: IWarehouseProfileRepository, manager: EntityManager) => Promise<T>,
+  ): Promise<T> {
     // architecture 5.2 / 4.7: open a real DB transaction (DataSource.transaction) and hand the unit
     // of work a repository bound to that transaction's EntityManager, so the activation overlap
     // re-check and the status write are atomic against concurrent activations at the same scope.
     return this.profiles.manager.transaction(async (manager) => {
       const txRepository = new WarehouseProfileRepository(manager.getRepository(WarehouseProfileOrmEntity));
-      return work(txRepository);
+      return work(txRepository, manager);
     });
   }
 

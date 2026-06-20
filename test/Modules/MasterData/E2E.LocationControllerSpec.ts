@@ -85,17 +85,20 @@ describe('E2E LocationController (no DB)', () => {
       })
       .expect(201);
 
-    expect(createExecute).toHaveBeenCalledWith({
-      WarehouseId: 'warehouse-1',
-      ZoneId: 'zone-1',
-      LocationProfileId: 'profile-1',
-      LocationCode: 'BIN-001',
-      LocationName: 'Bin 001',
-      LocationType: 'BIN',
-      LocationStatus: LocationStatus.Active,
-      CapacityQty: 100,
-      BondedFlag: false,
-    });
+    expect(createExecute).toHaveBeenCalledWith(
+      {
+        WarehouseId: 'warehouse-1',
+        ZoneId: 'zone-1',
+        LocationProfileId: 'profile-1',
+        LocationCode: 'BIN-001',
+        LocationName: 'Bin 001',
+        LocationType: 'BIN',
+        LocationStatus: LocationStatus.Active,
+        CapacityQty: 100,
+        BondedFlag: false,
+      },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 
   it('POST /locations rejects empty ParentLocationId', async () => {
@@ -131,5 +134,16 @@ describe('E2E LocationController (no DB)', () => {
     await request(app.getHttpServer()).patch('/locations/location-1').send({ ParentLocationId: '' }).expect(400);
 
     expect(updateExecute).not.toHaveBeenCalled();
+  });
+
+  it('PATCH /locations/:id forwards the body + audit context to the update use case', async () => {
+    updateExecute.mockResolvedValue({ Id: 'location-1', LocationName: 'Updated' });
+
+    await request(app.getHttpServer()).patch('/locations/location-1').send({ LocationName: 'Updated' }).expect(200);
+
+    expect(updateExecute).toHaveBeenCalledWith(
+      { Id: 'location-1', LocationName: 'Updated' },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 });

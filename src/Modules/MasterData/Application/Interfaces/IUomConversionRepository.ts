@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { UomConversionEntity } from '@modules/MasterData/Domain/Entities/UomConversionEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
@@ -27,8 +28,8 @@ export interface IUomConversionRepository {
     effectiveTo: Date | null,
     excludeId?: string,
   ): Promise<UomConversionEntity | null>;
-  Create(uomConversion: UomConversionEntity): Promise<UomConversionEntity>;
-  Update(uomConversion: UomConversionEntity): Promise<UomConversionEntity>;
+  Create(uomConversion: UomConversionEntity, manager?: EntityManager): Promise<UomConversionEntity>;
+  Update(uomConversion: UomConversionEntity, manager?: EntityManager): Promise<UomConversionEntity>;
   List(
     skip: number,
     take: number,

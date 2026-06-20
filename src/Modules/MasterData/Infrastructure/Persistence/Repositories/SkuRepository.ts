@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import { ISkuRepository, SkuListFilter } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { SkuEntity } from '@modules/MasterData/Domain/Entities/SkuEntity';
@@ -24,9 +24,10 @@ export class SkuRepository implements ISkuRepository {
     return entity ? SkuOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(sku: SkuEntity): Promise<SkuEntity> {
+  public async Create(sku: SkuEntity, manager?: EntityManager): Promise<SkuEntity> {
+    const repo = manager ? manager.getRepository(SkuOrmEntity) : this.skus;
     try {
-      const created = await this.skus.save(SkuOrmMapper.ToOrm(sku));
+      const created = await repo.save(SkuOrmMapper.ToOrm(sku));
       return SkuOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -34,9 +35,10 @@ export class SkuRepository implements ISkuRepository {
     }
   }
 
-  public async Update(sku: SkuEntity): Promise<SkuEntity> {
+  public async Update(sku: SkuEntity, manager?: EntityManager): Promise<SkuEntity> {
+    const repo = manager ? manager.getRepository(SkuOrmEntity) : this.skus;
     try {
-      const updated = await this.skus.save(SkuOrmMapper.ToOrm(sku));
+      const updated = await repo.save(SkuOrmMapper.ToOrm(sku));
       return SkuOrmMapper.ToDomain(updated);
     } catch (error) {
       this.HandleUniqueViolation(error);

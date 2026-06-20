@@ -1,5 +1,15 @@
 import { randomUUID } from 'crypto';
 import { BusinessRuleException, ConflictException, NotFoundException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { MasterDataOwnershipPolicyService } from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
+import { MasterDataObjectGroup } from '@modules/MasterData/Domain/Enums/MasterDataObjectGroup';
 import { CreateSkuDto } from '@modules/MasterData/Application/DTOs/CreateSkuDto';
 import { SkuDto } from '@modules/MasterData/Application/DTOs/SkuDto';
 import { IOwnerRepository } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
@@ -13,13 +23,32 @@ import { UomEntity } from '@modules/MasterData/Domain/Entities/UomEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
 export class CreateSkuUseCase {
+  // Sku is an external source-of-truth (A6 Sku, DirectEditAllowed=false):
+  // when wired in production the ownership policy hard-blocks this with SOURCE_OF_TRUTH_READONLY.
+  // ownershipPolicy + auditedTransaction are optional only so fixture-setup tests can construct
+  // the use case bare; the module always wires them.
   constructor(
     private readonly skuRepository: ISkuRepository,
     private readonly ownerRepository: IOwnerRepository,
     private readonly uomRepository: IUomRepository,
+    private readonly ownershipPolicy?: MasterDataOwnershipPolicyService,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {}
 
-  public async Execute(request: CreateSkuDto): Promise<SkuDto> {
+  public async Execute(request: CreateSkuDto, context: AuditContext = SystemAuditContext): Promise<SkuDto> {
+    let reasonCodeId: string | null = null;
+    if (this.ownershipPolicy) {
+      const decision = await this.ownershipPolicy.Enforce({
+        ObjectGroup: MasterDataObjectGroup.Sku,
+        ObjectType: ObjectType.Sku,
+        Action: ActionCode.Create,
+        ReasonCode: request.ReasonCode ?? null,
+        SourceSystem: request.SourceSystem ?? null,
+        ReferenceId: request.ReferenceId ?? null,
+      });
+      reasonCodeId = decision.ReasonCodeId ?? null;
+    }
+
     const existing = await this.skuRepository.FindByCode(request.SkuCode);
     if (existing) {
       throw new ConflictException('SKU code already exists');
@@ -64,8 +93,24 @@ export class CreateSkuUseCase {
 
     SkuPolicyValidator.Validate(sku);
 
-    const created = await this.skuRepository.Create(sku);
-    return SkuDtoMapper.ToDto(created);
+    const buildEntry = (created: SkuEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Create,
+        ObjectType: ObjectType.Sku,
+        ObjectId: created.Id,
+        ObjectCode: created.SkuCode,
+        ReasonCodeId: reasonCodeId,
+        AfterJson: SkuDtoMapper.ToDto(created) as unknown as Record<string, unknown>,
+      });
+
+    if (!this.auditedTransaction) {
+      const created = await this.skuRepository.Create(sku);
+      return SkuDtoMapper.ToDto(created);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const created = await this.skuRepository.Create(sku, manager);
+      return { result: SkuDtoMapper.ToDto(created), entry: buildEntry(created) };
+    });
   }
 
   private async ValidateOwner(ownerId: string): Promise<OwnerEntity> {

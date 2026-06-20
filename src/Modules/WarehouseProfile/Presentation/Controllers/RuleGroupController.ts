@@ -4,6 +4,8 @@ import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { CurrentAuditContext } from '@modules/AccessControl/Presentation/Decorators/CurrentAuditContext';
+import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { CreateRuleGroupUseCase } from '@modules/WarehouseProfile/Application/UseCases/CreateRuleGroupUseCase';
 import { GetRuleGroupUseCase } from '@modules/WarehouseProfile/Application/UseCases/GetRuleGroupUseCase';
 import { ListRuleGroupsUseCase } from '@modules/WarehouseProfile/Application/UseCases/ListRuleGroupsUseCase';
@@ -21,8 +23,8 @@ export class RuleGroupController {
 
   @Post()
   @RequirePermission(ActionCode.Create, ObjectType.Rule)
-  public async Create(@Body() request: CreateRuleGroupRequest) {
-    return await this.createRuleGroupUseCase.Execute(request);
+  public async Create(@Body() request: CreateRuleGroupRequest, @CurrentAuditContext() context: AuditContext) {
+    return await this.createRuleGroupUseCase.Execute(request, context);
   }
 
   @Get(':id')

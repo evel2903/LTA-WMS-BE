@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { RuleGroupCatalogState } from '@modules/WarehouseProfile/Domain/Enums/RuleGroupCatalogState';
 import { RuleGroupEntity } from '@modules/WarehouseProfile/Domain/Entities/RuleGroupEntity';
 
@@ -10,7 +11,7 @@ export type RuleGroupListFilter = {
 export interface IRuleGroupRepository {
   FindById(id: string): Promise<RuleGroupEntity | null>;
   FindByCode(groupCode: string): Promise<RuleGroupEntity | null>;
-  Create(group: RuleGroupEntity): Promise<RuleGroupEntity>;
+  Create(group: RuleGroupEntity, manager?: EntityManager): Promise<RuleGroupEntity>;
   List(
     skip: number,
     take: number,

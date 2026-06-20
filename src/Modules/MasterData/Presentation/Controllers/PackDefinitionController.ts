@@ -4,6 +4,8 @@ import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { CurrentAuditContext } from '@modules/AccessControl/Presentation/Decorators/CurrentAuditContext';
+import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { CreatePackDefinitionUseCase } from '@modules/MasterData/Application/UseCases/CreatePackDefinitionUseCase';
 import { GetPackDefinitionUseCase } from '@modules/MasterData/Application/UseCases/GetPackDefinitionUseCase';
 import { ListPackDefinitionsUseCase } from '@modules/MasterData/Application/UseCases/ListPackDefinitionsUseCase';
@@ -24,8 +26,8 @@ export class PackDefinitionController {
 
   @Post()
   @RequirePermission(ActionCode.Create, ObjectType.Sku)
-  public async Create(@Body() request: CreatePackDefinitionRequest) {
-    return await this.createPackDefinitionUseCase.Execute(request);
+  public async Create(@Body() request: CreatePackDefinitionRequest, @CurrentAuditContext() context: AuditContext) {
+    return await this.createPackDefinitionUseCase.Execute(request, context);
   }
 
   @Get(':id')
@@ -42,7 +44,11 @@ export class PackDefinitionController {
 
   @Patch(':id')
   @RequirePermission(ActionCode.Update, ObjectType.Sku)
-  public async Update(@Param('id') id: string, @Body() request: UpdatePackDefinitionRequest) {
-    return await this.updatePackDefinitionUseCase.Execute({ Id: id, ...request });
+  public async Update(
+    @Param('id') id: string,
+    @Body() request: UpdatePackDefinitionRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.updatePackDefinitionUseCase.Execute({ Id: id, ...request }, context);
   }
 }

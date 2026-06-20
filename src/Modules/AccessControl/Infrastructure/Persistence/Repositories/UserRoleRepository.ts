@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { ConflictException, NotFoundException } from '@common/Exceptions/AppException';
 import { UserRoleEntity } from '@modules/AccessControl/Domain/Entities/UserRoleEntity';
 import { IUserRoleRepository } from '@modules/AccessControl/Application/Interfaces/IUserRoleRepository';
@@ -24,9 +24,10 @@ export class UserRoleRepository implements IUserRoleRepository {
     return entity ? UserRoleOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(userRole: UserRoleEntity): Promise<UserRoleEntity> {
+  public async Create(userRole: UserRoleEntity, manager?: EntityManager): Promise<UserRoleEntity> {
+    const repo = manager ? manager.getRepository(UserRoleOrmEntity) : this.userRoles;
     try {
-      const created = await this.userRoles.save(UserRoleOrmMapper.ToOrm(userRole));
+      const created = await repo.save(UserRoleOrmMapper.ToOrm(userRole));
       return UserRoleOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleConstraintViolation(error);
@@ -34,8 +35,9 @@ export class UserRoleRepository implements IUserRoleRepository {
     }
   }
 
-  public async Delete(id: string): Promise<void> {
-    await this.userRoles.delete({ Id: id });
+  public async Delete(id: string, manager?: EntityManager): Promise<void> {
+    const repo = manager ? manager.getRepository(UserRoleOrmEntity) : this.userRoles;
+    await repo.delete({ Id: id });
   }
 
   private HandleConstraintViolation(error: unknown): void {

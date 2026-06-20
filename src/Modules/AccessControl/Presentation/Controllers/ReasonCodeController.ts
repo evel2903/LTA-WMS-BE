@@ -4,6 +4,8 @@ import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { CurrentAuditContext } from '@modules/AccessControl/Presentation/Decorators/CurrentAuditContext';
+import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { AuthUser, CurrentUser } from '@modules/AccessControl/Presentation/Decorators/CurrentUser';
 import { CreateReasonCodeUseCase } from '@modules/AccessControl/Application/UseCases/CreateReasonCodeUseCase';
 import { GetReasonCodeUseCase } from '@modules/AccessControl/Application/UseCases/GetReasonCodeUseCase';
@@ -25,8 +27,12 @@ export class ReasonCodeController {
 
   @Post()
   @RequirePermission(ActionCode.Create, ObjectType.ReasonCode)
-  public async Create(@Body() request: CreateReasonCodeRequest, @CurrentUser() user?: AuthUser) {
-    return await this.createReasonCodeUseCase.Execute({ ...request, ActorUserId: user?.UserId });
+  public async Create(
+    @Body() request: CreateReasonCodeRequest,
+    @CurrentAuditContext() context: AuditContext,
+    @CurrentUser() user?: AuthUser,
+  ) {
+    return await this.createReasonCodeUseCase.Execute({ ...request, ActorUserId: user?.UserId }, context);
   }
 
   @Get(':id')
@@ -46,8 +52,9 @@ export class ReasonCodeController {
   public async Update(
     @Param('id') id: string,
     @Body() request: UpdateReasonCodeRequest,
+    @CurrentAuditContext() context: AuditContext,
     @CurrentUser() user?: AuthUser,
   ) {
-    return await this.updateReasonCodeUseCase.Execute({ Id: id, ...request, ActorUserId: user?.UserId });
+    return await this.updateReasonCodeUseCase.Execute({ Id: id, ...request, ActorUserId: user?.UserId }, context);
   }
 }

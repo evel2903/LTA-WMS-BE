@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, IsNull, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, IsNull, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   ILocationRepository,
@@ -27,9 +27,10 @@ export class LocationRepository implements ILocationRepository {
     return entity ? LocationOrmMapper.ToDomain(entity) : null;
   }
 
-  public async Create(location: LocationEntity): Promise<LocationEntity> {
+  public async Create(location: LocationEntity, manager?: EntityManager): Promise<LocationEntity> {
+    const repo = manager ? manager.getRepository(LocationOrmEntity) : this.locations;
     try {
-      const created = await this.locations.save(LocationOrmMapper.ToOrm(location));
+      const created = await repo.save(LocationOrmMapper.ToOrm(location));
       return LocationOrmMapper.ToDomain(created);
     } catch (error) {
       this.HandleUniqueViolation(error);
@@ -37,9 +38,10 @@ export class LocationRepository implements ILocationRepository {
     }
   }
 
-  public async Update(location: LocationEntity): Promise<LocationEntity> {
+  public async Update(location: LocationEntity, manager?: EntityManager): Promise<LocationEntity> {
+    const repo = manager ? manager.getRepository(LocationOrmEntity) : this.locations;
     try {
-      const updated = await this.locations.save(LocationOrmMapper.ToOrm(location));
+      const updated = await repo.save(LocationOrmMapper.ToOrm(location));
       return LocationOrmMapper.ToDomain(updated);
     } catch (error) {
       this.HandleUniqueViolation(error);

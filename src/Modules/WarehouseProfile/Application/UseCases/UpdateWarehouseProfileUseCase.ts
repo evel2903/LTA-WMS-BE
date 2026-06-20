@@ -1,4 +1,12 @@
 import { BusinessRuleException, ConflictException, NotFoundException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { IOwnerRepository } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
@@ -25,6 +33,7 @@ export class UpdateWarehouseProfileUseCase {
     skuRepository: ISkuRepository,
     private readonly scopeKeyService: ScopeKeyService,
     private readonly policyValidator: WarehouseProfilePolicyValidator,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {
     this.scopeReferenceValidator = new ScopeReferenceValidator(
       warehouseRepository,
@@ -34,11 +43,15 @@ export class UpdateWarehouseProfileUseCase {
     );
   }
 
-  public async Execute(request: UpdateWarehouseProfileDto): Promise<WarehouseProfileDto> {
+  public async Execute(
+    request: UpdateWarehouseProfileDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<WarehouseProfileDto> {
     const profile = await this.profileRepository.FindById(request.Id);
     if (!profile) {
       throw new NotFoundException('Warehouse profile not found');
     }
+    const before = WarehouseProfileDtoMapper.ToDto(profile) as unknown as Record<string, unknown>;
 
     this.RejectNullRequired(request);
     await this.ApplyHeader(request, profile);
@@ -70,8 +83,25 @@ export class UpdateWarehouseProfileUseCase {
     });
     profile.UpdatedAt = new Date();
 
-    const updated = await this.profileRepository.Update(profile);
-    return WarehouseProfileDtoMapper.ToDto(updated);
+    const buildEntry = (saved: WarehouseProfileEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Update,
+        ObjectType: ObjectType.WarehouseProfile,
+        ObjectId: saved.Id,
+        ObjectCode: saved.ProfileCode,
+        BeforeJson: before,
+        AfterJson: WarehouseProfileDtoMapper.ToDto(saved) as unknown as Record<string, unknown>,
+        WarehouseId: saved.WarehouseId ?? null,
+      });
+
+    if (!this.auditedTransaction) {
+      const updated = await this.profileRepository.Update(profile);
+      return WarehouseProfileDtoMapper.ToDto(updated);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const updated = await this.profileRepository.Update(profile, manager);
+      return { result: WarehouseProfileDtoMapper.ToDto(updated), entry: buildEntry(updated) };
+    });
   }
 
   private RejectNullRequired(request: UpdateWarehouseProfileDto): void {

@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { SkuEntity } from '@modules/MasterData/Domain/Entities/SkuEntity';
 import { SkuStatus } from '@modules/MasterData/Domain/Enums/SkuStatus';
 
@@ -14,7 +15,7 @@ export interface SkuListFilter {
 export interface ISkuRepository {
   FindById(id: string): Promise<SkuEntity | null>;
   FindByCode(skuCode: string): Promise<SkuEntity | null>;
-  Create(sku: SkuEntity): Promise<SkuEntity>;
-  Update(sku: SkuEntity): Promise<SkuEntity>;
+  Create(sku: SkuEntity, manager?: EntityManager): Promise<SkuEntity>;
+  Update(sku: SkuEntity, manager?: EntityManager): Promise<SkuEntity>;
   List(skip: number, take: number, filter?: SkuListFilter): Promise<{ Items: SkuEntity[]; TotalItems: number }>;
 }

@@ -5,6 +5,8 @@ import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
 import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { CurrentAuditContext } from '@modules/AccessControl/Presentation/Decorators/CurrentAuditContext';
+import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { GetUserEffectivePermissionsUseCase } from '@modules/AccessControl/Application/UseCases/GetUserEffectivePermissionsUseCase';
 import { AssignRoleToUserUseCase } from '@modules/AccessControl/Application/UseCases/AssignRoleToUserUseCase';
 import { RemoveRoleFromUserUseCase } from '@modules/AccessControl/Application/UseCases/RemoveRoleFromUserUseCase';
@@ -33,8 +35,12 @@ export class UserRoleController {
 
   @Post(':userId/roles')
   @RequirePermission(ActionCode.Update, ObjectType.UserAssignment)
-  public async AssignRole(@Param('userId') userId: string, @Body() request: AssignRoleRequest) {
-    return await this.assignRoleToUserUseCase.Execute({ UserId: userId, RoleCode: request.RoleCode });
+  public async AssignRole(
+    @Param('userId') userId: string,
+    @Body() request: AssignRoleRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.assignRoleToUserUseCase.Execute({ UserId: userId, RoleCode: request.RoleCode }, context);
   }
 
   @Delete(':userId/roles/:roleCode')
@@ -42,7 +48,8 @@ export class UserRoleController {
   public async RemoveRole(
     @Param('userId') userId: string,
     @Param('roleCode', new ParseEnumPipe(RoleCode)) roleCode: RoleCode,
+    @CurrentAuditContext() context: AuditContext,
   ) {
-    return await this.removeRoleFromUserUseCase.Execute({ UserId: userId, RoleCode: roleCode });
+    return await this.removeRoleFromUserUseCase.Execute({ UserId: userId, RoleCode: roleCode }, context);
   }
 }

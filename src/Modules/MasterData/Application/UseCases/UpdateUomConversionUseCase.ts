@@ -1,4 +1,14 @@
 import { ConflictException, NotFoundException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { MasterDataOwnershipPolicyService } from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
+import { MasterDataObjectGroup } from '@modules/MasterData/Domain/Enums/MasterDataObjectGroup';
 import { UomConversionDto } from '@modules/MasterData/Application/DTOs/UomConversionDto';
 import { UpdateUomConversionDto } from '@modules/MasterData/Application/DTOs/UpdateUomConversionDto';
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
@@ -6,20 +16,41 @@ import { IUomConversionRepository } from '@modules/MasterData/Application/Interf
 import { IUomRepository } from '@modules/MasterData/Application/Interfaces/IUomRepository';
 import { UomConversionMapper } from '@modules/MasterData/Application/Mappers/UomConversionMapper';
 import { SkuSupportPolicyValidator } from '@modules/MasterData/Application/Services/SkuSupportPolicyValidator';
+import { UomConversionEntity } from '@modules/MasterData/Domain/Entities/UomConversionEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
 export class UpdateUomConversionUseCase {
+  // Optional audit deps: see CreateUomConversionUseCase — module always wires them.
   constructor(
     private readonly uomConversions: IUomConversionRepository,
     private readonly skus: ISkuRepository,
     private readonly uoms: IUomRepository,
+    private readonly ownershipPolicy?: MasterDataOwnershipPolicyService,
+    private readonly auditedTransaction?: AuditedTransaction,
   ) {}
 
-  public async Execute(request: UpdateUomConversionDto): Promise<UomConversionDto> {
+  public async Execute(
+    request: UpdateUomConversionDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<UomConversionDto> {
+    let reasonCodeId: string | null = null;
+    if (this.ownershipPolicy) {
+      const decision = await this.ownershipPolicy.Enforce({
+        ObjectGroup: MasterDataObjectGroup.UomPack,
+        ObjectType: ObjectType.Uom,
+        Action: ActionCode.Update,
+        ReasonCode: request.ReasonCode ?? null,
+        SourceSystem: request.SourceSystem ?? null,
+        ReferenceId: request.ReferenceId ?? null,
+      });
+      reasonCodeId = decision.ReasonCodeId ?? null;
+    }
+
     const conversion = await this.uomConversions.FindById(request.Id);
     if (!conversion) {
       throw new NotFoundException('UOM conversion not found');
     }
+    const before = UomConversionMapper.ToDto(conversion) as unknown as Record<string, unknown>;
 
     const targetSkuId = request.SkuId ?? conversion.SkuId;
     const targetFromUomId = request.FromUomId ?? conversion.FromUomId;
@@ -82,7 +113,24 @@ export class UpdateUomConversionUseCase {
     conversion.ReferenceId = request.ReferenceId !== undefined ? request.ReferenceId : conversion.ReferenceId;
     conversion.UpdatedAt = new Date();
 
-    const updated = await this.uomConversions.Update(conversion);
-    return UomConversionMapper.ToDto(updated);
+    const buildEntry = (updated: UomConversionEntity) =>
+      MergeAuditContext(context, {
+        Action: ActionCode.Update,
+        ObjectType: ObjectType.Uom,
+        ObjectId: updated.Id,
+        ObjectCode: null,
+        BeforeJson: before,
+        AfterJson: UomConversionMapper.ToDto(updated) as unknown as Record<string, unknown>,
+        ReasonCodeId: reasonCodeId,
+      });
+
+    if (!this.auditedTransaction) {
+      const updated = await this.uomConversions.Update(conversion);
+      return UomConversionMapper.ToDto(updated);
+    }
+    return this.auditedTransaction.Run(async (manager) => {
+      const updated = await this.uomConversions.Update(conversion, manager);
+      return { result: UomConversionMapper.ToDto(updated), entry: buildEntry(updated) };
+    });
   }
 }

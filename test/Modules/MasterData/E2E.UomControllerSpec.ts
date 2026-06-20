@@ -71,13 +71,16 @@ describe('E2E UomController (no DB)', () => {
       })
       .expect(201);
 
-    expect(createExecute).toHaveBeenCalledWith({
-      UomCode: 'EA',
-      UomName: 'Each',
-      UomType: 'Quantity',
-      DecimalPrecision: 0,
-      Status: MasterDataStatus.Active,
-    });
+    expect(createExecute).toHaveBeenCalledWith(
+      {
+        UomCode: 'EA',
+        UomName: 'Each',
+        UomType: 'Quantity',
+        DecimalPrecision: 0,
+        Status: MasterDataStatus.Active,
+      },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
     expect(response.body.Success).toBe(true);
   });
 
@@ -107,7 +110,10 @@ describe('E2E UomController (no DB)', () => {
     await request(app.getHttpServer()).patch('/uoms/uom-1').send({ UomName: 'Updated' }).expect(200);
 
     expect(getExecute).toHaveBeenCalledWith('uom-1');
-    expect(updateExecute).toHaveBeenCalledWith({ Id: 'uom-1', UomName: 'Updated' });
+    expect(updateExecute).toHaveBeenCalledWith(
+      { Id: 'uom-1', UomName: 'Updated' },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 
   it('PATCH /uoms/:id rejects empty required business fields', async () => {

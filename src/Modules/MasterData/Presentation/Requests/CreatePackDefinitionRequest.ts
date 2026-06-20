@@ -44,4 +44,9 @@ export class CreatePackDefinitionRequest {
   @IsString()
   @MaxLength(100)
   public ReferenceId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  public ReasonCode?: string;
 }

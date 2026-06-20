@@ -79,11 +79,14 @@ describe('E2E SiteController (no DB)', () => {
       .send({ SiteCode: 'SITE-HCM', SiteName: 'Ho Chi Minh Site', Status: MasterDataStatus.Active })
       .expect(201);
 
-    expect(createExecute).toHaveBeenCalledWith({
-      SiteCode: 'SITE-HCM',
-      SiteName: 'Ho Chi Minh Site',
-      Status: MasterDataStatus.Active,
-    });
+    expect(createExecute).toHaveBeenCalledWith(
+      {
+        SiteCode: 'SITE-HCM',
+        SiteName: 'Ho Chi Minh Site',
+        Status: MasterDataStatus.Active,
+      },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
     expect(response.body.Success).toBe(true);
     expect(response.body.Data.SiteCode).toBe('SITE-HCM');
   });
@@ -110,7 +113,10 @@ describe('E2E SiteController (no DB)', () => {
     await request(app.getHttpServer()).patch('/sites/site-1').send({ SiteName: 'Updated' }).expect(200);
 
     expect(getByIdExecute).toHaveBeenCalledWith('site-1');
-    expect(updateExecute).toHaveBeenCalledWith({ Id: 'site-1', SiteName: 'Updated' });
+    expect(updateExecute).toHaveBeenCalledWith(
+      { Id: 'site-1', SiteName: 'Updated' },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 
   it('PATCH /sites/:id rejects empty required fields when provided', async () => {

@@ -1,10 +1,19 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccessControlModule } from '@modules/AccessControl/AccessControlModule';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import {
+  MasterDataOwnershipPolicyService,
+  MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+} from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
 import {
   IPermissionChecker,
   PERMISSION_CHECKER,
 } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import {
+  IReasonCodeCatalog,
+  REASON_CODE_CATALOG,
+} from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
 import { CreateSiteUseCase } from '@modules/MasterData/Application/UseCases/CreateSiteUseCase';
 import { GetSiteByIdUseCase } from '@modules/MasterData/Application/UseCases/GetSiteByIdUseCase';
 import { ListSitesUseCase } from '@modules/MasterData/Application/UseCases/ListSitesUseCase';
@@ -215,12 +224,19 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     { provide: INVENTORY_DIMENSION_REPOSITORY, useClass: InventoryDimensionRepository },
     { provide: INVENTORY_BALANCE_REPOSITORY, useClass: InventoryBalanceRepository },
     { provide: MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY, useClass: MasterDataOwnershipPolicyRepository },
+    {
+      provide: MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+      useFactory: (policies: IMasterDataOwnershipPolicyRepository, reasonCatalog: IReasonCodeCatalog) =>
+        new MasterDataOwnershipPolicyService(policies, reasonCatalog),
+      inject: [MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY, REASON_CODE_CATALOG],
+    },
     InventoryDimensionKeyService,
     Tier1MasterDataChecklistService,
     {
       provide: CreateSiteUseCase,
-      useFactory: (sites: ISiteRepository) => new CreateSiteUseCase(sites),
-      inject: [SITE_REPOSITORY],
+      useFactory: (sites: ISiteRepository, ownership: MasterDataOwnershipPolicyService, audited: AuditedTransaction) =>
+        new CreateSiteUseCase(sites, ownership, audited),
+      inject: [SITE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: GetSiteByIdUseCase,
@@ -234,14 +250,19 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateSiteUseCase,
-      useFactory: (sites: ISiteRepository) => new UpdateSiteUseCase(sites),
-      inject: [SITE_REPOSITORY],
+      useFactory: (sites: ISiteRepository, ownership: MasterDataOwnershipPolicyService, audited: AuditedTransaction) =>
+        new UpdateSiteUseCase(sites, ownership, audited),
+      inject: [SITE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: CreateWarehouseUseCase,
-      useFactory: (warehouses: IWarehouseRepository, sites: ISiteRepository) =>
-        new CreateWarehouseUseCase(warehouses, sites),
-      inject: [WAREHOUSE_REPOSITORY, SITE_REPOSITORY],
+      useFactory: (
+        warehouses: IWarehouseRepository,
+        sites: ISiteRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new CreateWarehouseUseCase(warehouses, sites, ownership, audited),
+      inject: [WAREHOUSE_REPOSITORY, SITE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: GetWarehouseByIdUseCase,
@@ -255,15 +276,23 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateWarehouseUseCase,
-      useFactory: (warehouses: IWarehouseRepository, sites: ISiteRepository) =>
-        new UpdateWarehouseUseCase(warehouses, sites),
-      inject: [WAREHOUSE_REPOSITORY, SITE_REPOSITORY],
+      useFactory: (
+        warehouses: IWarehouseRepository,
+        sites: ISiteRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdateWarehouseUseCase(warehouses, sites, ownership, audited),
+      inject: [WAREHOUSE_REPOSITORY, SITE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: CreateZoneUseCase,
-      useFactory: (zones: IZoneRepository, warehouses: IWarehouseRepository) =>
-        new CreateZoneUseCase(zones, warehouses),
-      inject: [ZONE_REPOSITORY, WAREHOUSE_REPOSITORY],
+      useFactory: (
+        zones: IZoneRepository,
+        warehouses: IWarehouseRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new CreateZoneUseCase(zones, warehouses, ownership, audited),
+      inject: [ZONE_REPOSITORY, WAREHOUSE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: GetZoneByIdUseCase,
@@ -277,14 +306,29 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateZoneUseCase,
-      useFactory: (zones: IZoneRepository, warehouses: IWarehouseRepository, checker: IPermissionChecker) =>
-        new UpdateZoneUseCase(zones, warehouses, checker),
-      inject: [ZONE_REPOSITORY, WAREHOUSE_REPOSITORY, PERMISSION_CHECKER],
+      useFactory: (
+        zones: IZoneRepository,
+        warehouses: IWarehouseRepository,
+        checker: IPermissionChecker,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdateZoneUseCase(zones, warehouses, checker, ownership, audited),
+      inject: [
+        ZONE_REPOSITORY,
+        WAREHOUSE_REPOSITORY,
+        PERMISSION_CHECKER,
+        MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+        AuditedTransaction,
+      ],
     },
     {
       provide: CreateLocationProfileUseCase,
-      useFactory: (locationProfiles: ILocationProfileRepository) => new CreateLocationProfileUseCase(locationProfiles),
-      inject: [LOCATION_PROFILE_REPOSITORY],
+      useFactory: (
+        locationProfiles: ILocationProfileRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new CreateLocationProfileUseCase(locationProfiles, ownership, audited),
+      inject: [LOCATION_PROFILE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: GetLocationProfileUseCase,
@@ -298,8 +342,12 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateLocationProfileUseCase,
-      useFactory: (locationProfiles: ILocationProfileRepository) => new UpdateLocationProfileUseCase(locationProfiles),
-      inject: [LOCATION_PROFILE_REPOSITORY],
+      useFactory: (
+        locationProfiles: ILocationProfileRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdateLocationProfileUseCase(locationProfiles, ownership, audited),
+      inject: [LOCATION_PROFILE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: CreateLocationUseCase,
@@ -308,8 +356,17 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
         locationProfiles: ILocationProfileRepository,
         warehouses: IWarehouseRepository,
         zones: IZoneRepository,
-      ) => new CreateLocationUseCase(locations, locationProfiles, warehouses, zones),
-      inject: [LOCATION_REPOSITORY, LOCATION_PROFILE_REPOSITORY, WAREHOUSE_REPOSITORY, ZONE_REPOSITORY],
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new CreateLocationUseCase(locations, locationProfiles, warehouses, zones, ownership, audited),
+      inject: [
+        LOCATION_REPOSITORY,
+        LOCATION_PROFILE_REPOSITORY,
+        WAREHOUSE_REPOSITORY,
+        ZONE_REPOSITORY,
+        MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+        AuditedTransaction,
+      ],
     },
     {
       provide: GetLocationUseCase,
@@ -333,13 +390,26 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
         locationProfiles: ILocationProfileRepository,
         warehouses: IWarehouseRepository,
         zones: IZoneRepository,
-      ) => new UpdateLocationUseCase(locations, locationProfiles, warehouses, zones),
-      inject: [LOCATION_REPOSITORY, LOCATION_PROFILE_REPOSITORY, WAREHOUSE_REPOSITORY, ZONE_REPOSITORY],
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdateLocationUseCase(locations, locationProfiles, warehouses, zones, ownership, audited),
+      inject: [
+        LOCATION_REPOSITORY,
+        LOCATION_PROFILE_REPOSITORY,
+        WAREHOUSE_REPOSITORY,
+        ZONE_REPOSITORY,
+        MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+        AuditedTransaction,
+      ],
     },
     {
       provide: CreateOwnerUseCase,
-      useFactory: (owners: IOwnerRepository) => new CreateOwnerUseCase(owners),
-      inject: [OWNER_REPOSITORY],
+      useFactory: (
+        owners: IOwnerRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new CreateOwnerUseCase(owners, ownership, audited),
+      inject: [OWNER_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: GetOwnerUseCase,
@@ -353,13 +423,18 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateOwnerUseCase,
-      useFactory: (owners: IOwnerRepository) => new UpdateOwnerUseCase(owners),
-      inject: [OWNER_REPOSITORY],
+      useFactory: (
+        owners: IOwnerRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdateOwnerUseCase(owners, ownership, audited),
+      inject: [OWNER_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: CreateUomUseCase,
-      useFactory: (uoms: IUomRepository) => new CreateUomUseCase(uoms),
-      inject: [UOM_REPOSITORY],
+      useFactory: (uoms: IUomRepository, ownership: MasterDataOwnershipPolicyService, audited: AuditedTransaction) =>
+        new CreateUomUseCase(uoms, ownership, audited),
+      inject: [UOM_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: GetUomUseCase,
@@ -373,19 +448,32 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateUomUseCase,
-      useFactory: (uoms: IUomRepository) => new UpdateUomUseCase(uoms),
-      inject: [UOM_REPOSITORY],
+      useFactory: (uoms: IUomRepository, ownership: MasterDataOwnershipPolicyService, audited: AuditedTransaction) =>
+        new UpdateUomUseCase(uoms, ownership, audited),
+      inject: [UOM_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: CreateSkuUseCase,
-      useFactory: (skus: ISkuRepository, owners: IOwnerRepository, uoms: IUomRepository) =>
-        new CreateSkuUseCase(skus, owners, uoms),
-      inject: [SKU_REPOSITORY, OWNER_REPOSITORY, UOM_REPOSITORY],
+      useFactory: (
+        skus: ISkuRepository,
+        owners: IOwnerRepository,
+        uoms: IUomRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new CreateSkuUseCase(skus, owners, uoms, ownership, audited),
+      inject: [
+        SKU_REPOSITORY,
+        OWNER_REPOSITORY,
+        UOM_REPOSITORY,
+        MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+        AuditedTransaction,
+      ],
     },
     {
       provide: GetSkuUseCase,
-      useFactory: (skus: ISkuRepository) => new GetSkuUseCase(skus),
-      inject: [SKU_REPOSITORY],
+      useFactory: (skus: ISkuRepository, ownership: MasterDataOwnershipPolicyService, audited: AuditedTransaction) =>
+        new GetSkuUseCase(skus, ownership, audited),
+      inject: [SKU_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: GetSkuRuleFactsUseCase,
@@ -399,15 +487,37 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateSkuUseCase,
-      useFactory: (skus: ISkuRepository, owners: IOwnerRepository, uoms: IUomRepository) =>
-        new UpdateSkuUseCase(skus, owners, uoms),
-      inject: [SKU_REPOSITORY, OWNER_REPOSITORY, UOM_REPOSITORY],
+      useFactory: (
+        skus: ISkuRepository,
+        owners: IOwnerRepository,
+        uoms: IUomRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdateSkuUseCase(skus, owners, uoms, ownership, audited),
+      inject: [
+        SKU_REPOSITORY,
+        OWNER_REPOSITORY,
+        UOM_REPOSITORY,
+        MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+        AuditedTransaction,
+      ],
     },
     {
       provide: CreatePackDefinitionUseCase,
-      useFactory: (packDefinitions: IPackDefinitionRepository, skus: ISkuRepository, uoms: IUomRepository) =>
-        new CreatePackDefinitionUseCase(packDefinitions, skus, uoms),
-      inject: [PACK_DEFINITION_REPOSITORY, SKU_REPOSITORY, UOM_REPOSITORY],
+      useFactory: (
+        packDefinitions: IPackDefinitionRepository,
+        skus: ISkuRepository,
+        uoms: IUomRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new CreatePackDefinitionUseCase(packDefinitions, skus, uoms, ownership, audited),
+      inject: [
+        PACK_DEFINITION_REPOSITORY,
+        SKU_REPOSITORY,
+        UOM_REPOSITORY,
+        MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+        AuditedTransaction,
+      ],
     },
     {
       provide: GetPackDefinitionUseCase,
@@ -421,15 +531,37 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdatePackDefinitionUseCase,
-      useFactory: (packDefinitions: IPackDefinitionRepository, skus: ISkuRepository, uoms: IUomRepository) =>
-        new UpdatePackDefinitionUseCase(packDefinitions, skus, uoms),
-      inject: [PACK_DEFINITION_REPOSITORY, SKU_REPOSITORY, UOM_REPOSITORY],
+      useFactory: (
+        packDefinitions: IPackDefinitionRepository,
+        skus: ISkuRepository,
+        uoms: IUomRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdatePackDefinitionUseCase(packDefinitions, skus, uoms, ownership, audited),
+      inject: [
+        PACK_DEFINITION_REPOSITORY,
+        SKU_REPOSITORY,
+        UOM_REPOSITORY,
+        MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+        AuditedTransaction,
+      ],
     },
     {
       provide: CreateUomConversionUseCase,
-      useFactory: (uomConversions: IUomConversionRepository, skus: ISkuRepository, uoms: IUomRepository) =>
-        new CreateUomConversionUseCase(uomConversions, skus, uoms),
-      inject: [UOM_CONVERSION_REPOSITORY, SKU_REPOSITORY, UOM_REPOSITORY],
+      useFactory: (
+        uomConversions: IUomConversionRepository,
+        skus: ISkuRepository,
+        uoms: IUomRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new CreateUomConversionUseCase(uomConversions, skus, uoms, ownership, audited),
+      inject: [
+        UOM_CONVERSION_REPOSITORY,
+        SKU_REPOSITORY,
+        UOM_REPOSITORY,
+        MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+        AuditedTransaction,
+      ],
     },
     {
       provide: GetUomConversionUseCase,
@@ -443,9 +575,20 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     },
     {
       provide: UpdateUomConversionUseCase,
-      useFactory: (uomConversions: IUomConversionRepository, skus: ISkuRepository, uoms: IUomRepository) =>
-        new UpdateUomConversionUseCase(uomConversions, skus, uoms),
-      inject: [UOM_CONVERSION_REPOSITORY, SKU_REPOSITORY, UOM_REPOSITORY],
+      useFactory: (
+        uomConversions: IUomConversionRepository,
+        skus: ISkuRepository,
+        uoms: IUomRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdateUomConversionUseCase(uomConversions, skus, uoms, ownership, audited),
+      inject: [
+        UOM_CONVERSION_REPOSITORY,
+        SKU_REPOSITORY,
+        UOM_REPOSITORY,
+        MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+        AuditedTransaction,
+      ],
     },
     {
       provide: CreateSkuBarcodeUseCase,
@@ -455,8 +598,18 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
         skus: ISkuRepository,
         owners: IOwnerRepository,
         uoms: IUomRepository,
-      ) => new CreateSkuBarcodeUseCase(skuBarcodes, packDefinitions, skus, owners, uoms),
-      inject: [SKU_BARCODE_REPOSITORY, PACK_DEFINITION_REPOSITORY, SKU_REPOSITORY, OWNER_REPOSITORY, UOM_REPOSITORY],
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new CreateSkuBarcodeUseCase(skuBarcodes, packDefinitions, skus, owners, uoms, ownership, audited),
+      inject: [
+        SKU_BARCODE_REPOSITORY,
+        PACK_DEFINITION_REPOSITORY,
+        SKU_REPOSITORY,
+        OWNER_REPOSITORY,
+        UOM_REPOSITORY,
+        MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+        AuditedTransaction,
+      ],
     },
     {
       provide: GetSkuBarcodeUseCase,
@@ -481,8 +634,18 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
         skus: ISkuRepository,
         owners: IOwnerRepository,
         uoms: IUomRepository,
-      ) => new UpdateSkuBarcodeUseCase(skuBarcodes, packDefinitions, skus, owners, uoms),
-      inject: [SKU_BARCODE_REPOSITORY, PACK_DEFINITION_REPOSITORY, SKU_REPOSITORY, OWNER_REPOSITORY, UOM_REPOSITORY],
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdateSkuBarcodeUseCase(skuBarcodes, packDefinitions, skus, owners, uoms, ownership, audited),
+      inject: [
+        SKU_BARCODE_REPOSITORY,
+        PACK_DEFINITION_REPOSITORY,
+        SKU_REPOSITORY,
+        OWNER_REPOSITORY,
+        UOM_REPOSITORY,
+        MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+        AuditedTransaction,
+      ],
     },
     {
       provide: CreateItemCoverageUseCase,
@@ -491,8 +654,9 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
         skus: ISkuRepository,
         warehouses: IWarehouseRepository,
         owners: IOwnerRepository,
-      ) => new CreateItemCoverageUseCase(itemCoverages, skus, warehouses, owners),
-      inject: [ITEM_COVERAGE_REPOSITORY, SKU_REPOSITORY, WAREHOUSE_REPOSITORY, OWNER_REPOSITORY],
+        audited: AuditedTransaction,
+      ) => new CreateItemCoverageUseCase(itemCoverages, skus, warehouses, owners, audited),
+      inject: [ITEM_COVERAGE_REPOSITORY, SKU_REPOSITORY, WAREHOUSE_REPOSITORY, OWNER_REPOSITORY, AuditedTransaction],
     },
     {
       provide: GetItemCoverageUseCase,
@@ -511,8 +675,9 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
         skus: ISkuRepository,
         warehouses: IWarehouseRepository,
         owners: IOwnerRepository,
-      ) => new UpdateItemCoverageUseCase(itemCoverages, skus, warehouses, owners),
-      inject: [ITEM_COVERAGE_REPOSITORY, SKU_REPOSITORY, WAREHOUSE_REPOSITORY, OWNER_REPOSITORY],
+        audited: AuditedTransaction,
+      ) => new UpdateItemCoverageUseCase(itemCoverages, skus, warehouses, owners, audited),
+      inject: [ITEM_COVERAGE_REPOSITORY, SKU_REPOSITORY, WAREHOUSE_REPOSITORY, OWNER_REPOSITORY, AuditedTransaction],
     },
     {
       provide: GetInventoryStatusUseCase,
@@ -536,6 +701,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
         inventoryStatuses: IInventoryStatusRepository,
         uoms: IUomRepository,
         keyService: InventoryDimensionKeyService,
+        audited: AuditedTransaction,
       ) =>
         new CreateInventoryDimensionUseCase(
           inventoryDimensions,
@@ -546,6 +712,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
           inventoryStatuses,
           uoms,
           keyService,
+          audited,
         ),
       inject: [
         INVENTORY_DIMENSION_REPOSITORY,
@@ -556,6 +723,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
         INVENTORY_STATUS_REPOSITORY,
         UOM_REPOSITORY,
         InventoryDimensionKeyService,
+        AuditedTransaction,
       ],
     },
     {
@@ -575,8 +743,9 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
       useFactory: (
         inventoryBalances: IInventoryBalanceRepository,
         inventoryDimensions: IInventoryDimensionRepository,
-      ) => new InitializeInventoryBalanceUseCase(inventoryBalances, inventoryDimensions),
-      inject: [INVENTORY_BALANCE_REPOSITORY, INVENTORY_DIMENSION_REPOSITORY],
+        audited: AuditedTransaction,
+      ) => new InitializeInventoryBalanceUseCase(inventoryBalances, inventoryDimensions, audited),
+      inject: [INVENTORY_BALANCE_REPOSITORY, INVENTORY_DIMENSION_REPOSITORY, AuditedTransaction],
     },
     {
       provide: GetInventoryBalanceUseCase,

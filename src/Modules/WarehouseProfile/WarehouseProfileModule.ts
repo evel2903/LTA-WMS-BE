@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccessControlModule } from '@modules/AccessControl/AccessControlModule';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { IAuditWriter, AUDIT_WRITER } from '@modules/AccessControl/Application/Interfaces/IAuditWriter';
 import { IOwnerRepository, OWNER_REPOSITORY } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { ISkuRepository, SKU_REPOSITORY } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import {
@@ -134,8 +136,18 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
         skus: ISkuRepository,
         scopeKeyService: ScopeKeyService,
         policyValidator: WarehouseProfilePolicyValidator,
+        audited: AuditedTransaction,
       ) =>
-        new CreateWarehouseProfileUseCase(profiles, warehouses, zones, owners, skus, scopeKeyService, policyValidator),
+        new CreateWarehouseProfileUseCase(
+          profiles,
+          warehouses,
+          zones,
+          owners,
+          skus,
+          scopeKeyService,
+          policyValidator,
+          audited,
+        ),
       inject: [
         WAREHOUSE_PROFILE_REPOSITORY,
         WAREHOUSE_REPOSITORY,
@@ -144,6 +156,7 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
         SKU_REPOSITORY,
         ScopeKeyService,
         WarehouseProfilePolicyValidator,
+        AuditedTransaction,
       ],
     },
     {
@@ -166,8 +179,18 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
         skus: ISkuRepository,
         scopeKeyService: ScopeKeyService,
         policyValidator: WarehouseProfilePolicyValidator,
+        audited: AuditedTransaction,
       ) =>
-        new UpdateWarehouseProfileUseCase(profiles, warehouses, zones, owners, skus, scopeKeyService, policyValidator),
+        new UpdateWarehouseProfileUseCase(
+          profiles,
+          warehouses,
+          zones,
+          owners,
+          skus,
+          scopeKeyService,
+          policyValidator,
+          audited,
+        ),
       inject: [
         WAREHOUSE_PROFILE_REPOSITORY,
         WAREHOUSE_REPOSITORY,
@@ -176,6 +199,7 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
         SKU_REPOSITORY,
         ScopeKeyService,
         WarehouseProfilePolicyValidator,
+        AuditedTransaction,
       ],
     },
     {
@@ -190,13 +214,15 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
         profiles: IWarehouseProfileRepository,
         policyValidator: WarehouseProfilePolicyValidator,
         activationGuard: ProfileActivationGuard,
-      ) => new ActivateWarehouseProfileUseCase(profiles, policyValidator, activationGuard),
-      inject: [WAREHOUSE_PROFILE_REPOSITORY, WarehouseProfilePolicyValidator, ProfileActivationGuard],
+        auditWriter: IAuditWriter,
+      ) => new ActivateWarehouseProfileUseCase(profiles, policyValidator, activationGuard, auditWriter),
+      inject: [WAREHOUSE_PROFILE_REPOSITORY, WarehouseProfilePolicyValidator, ProfileActivationGuard, AUDIT_WRITER],
     },
     {
       provide: DeactivateWarehouseProfileUseCase,
-      useFactory: (profiles: IWarehouseProfileRepository) => new DeactivateWarehouseProfileUseCase(profiles),
-      inject: [WAREHOUSE_PROFILE_REPOSITORY],
+      useFactory: (profiles: IWarehouseProfileRepository, audited: AuditedTransaction) =>
+        new DeactivateWarehouseProfileUseCase(profiles, audited),
+      inject: [WAREHOUSE_PROFILE_REPOSITORY, AuditedTransaction],
     },
     {
       provide: CreateWarehouseProfileAssignmentUseCase,
@@ -205,12 +231,14 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
         profiles: IWarehouseProfileRepository,
         warehouses: IWarehouseRepository,
         scopeKeyService: ScopeKeyService,
-      ) => new CreateWarehouseProfileAssignmentUseCase(assignments, profiles, warehouses, scopeKeyService),
+        audited: AuditedTransaction,
+      ) => new CreateWarehouseProfileAssignmentUseCase(assignments, profiles, warehouses, scopeKeyService, audited),
       inject: [
         WAREHOUSE_PROFILE_ASSIGNMENT_REPOSITORY,
         WAREHOUSE_PROFILE_REPOSITORY,
         WAREHOUSE_REPOSITORY,
         ScopeKeyService,
+        AuditedTransaction,
       ],
     },
     {
@@ -221,8 +249,9 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
     },
     {
       provide: CreateRuleGroupUseCase,
-      useFactory: (groups: IRuleGroupRepository) => new CreateRuleGroupUseCase(groups),
-      inject: [RULE_GROUP_REPOSITORY],
+      useFactory: (groups: IRuleGroupRepository, audited: AuditedTransaction) =>
+        new CreateRuleGroupUseCase(groups, audited),
+      inject: [RULE_GROUP_REPOSITORY, AuditedTransaction],
     },
     {
       provide: GetRuleGroupUseCase,
@@ -245,6 +274,7 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
         skus: ISkuRepository,
         scopeKeyService: ScopeKeyService,
         payloadValidator: RulePayloadValidator,
+        audited: AuditedTransaction,
       ) =>
         new CreateRuleDefinitionUseCase(
           definitions,
@@ -255,6 +285,7 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
           skus,
           scopeKeyService,
           payloadValidator,
+          audited,
         ),
       inject: [
         RULE_DEFINITION_REPOSITORY,
@@ -265,6 +296,7 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
         SKU_REPOSITORY,
         ScopeKeyService,
         RulePayloadValidator,
+        AuditedTransaction,
       ],
     },
     {
@@ -283,8 +315,14 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
         bindings: IWarehouseProfileRuleRepository,
         profiles: IWarehouseProfileRepository,
         definitions: IRuleDefinitionRepository,
-      ) => new AddWarehouseProfileRuleUseCase(bindings, profiles, definitions),
-      inject: [WAREHOUSE_PROFILE_RULE_REPOSITORY, WAREHOUSE_PROFILE_REPOSITORY, RULE_DEFINITION_REPOSITORY],
+        audited: AuditedTransaction,
+      ) => new AddWarehouseProfileRuleUseCase(bindings, profiles, definitions, audited),
+      inject: [
+        WAREHOUSE_PROFILE_RULE_REPOSITORY,
+        WAREHOUSE_PROFILE_REPOSITORY,
+        RULE_DEFINITION_REPOSITORY,
+        AuditedTransaction,
+      ],
     },
     {
       provide: ListWarehouseProfileRulesUseCase,
@@ -294,9 +332,12 @@ import { WarehouseProfileChecklistController } from '@modules/WarehouseProfile/P
     },
     {
       provide: RemoveWarehouseProfileRuleUseCase,
-      useFactory: (bindings: IWarehouseProfileRuleRepository, profiles: IWarehouseProfileRepository) =>
-        new RemoveWarehouseProfileRuleUseCase(bindings, profiles),
-      inject: [WAREHOUSE_PROFILE_RULE_REPOSITORY, WAREHOUSE_PROFILE_REPOSITORY],
+      useFactory: (
+        bindings: IWarehouseProfileRuleRepository,
+        profiles: IWarehouseProfileRepository,
+        audited: AuditedTransaction,
+      ) => new RemoveWarehouseProfileRuleUseCase(bindings, profiles, audited),
+      inject: [WAREHOUSE_PROFILE_RULE_REPOSITORY, WAREHOUSE_PROFILE_REPOSITORY, AuditedTransaction],
     },
     {
       provide: PreviewRuleResolutionUseCase,

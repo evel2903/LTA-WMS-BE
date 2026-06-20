@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { LocationEntity } from '@modules/MasterData/Domain/Entities/LocationEntity';
 import { LocationStatus } from '@modules/MasterData/Domain/Enums/LocationStatus';
 
@@ -16,8 +17,8 @@ export type LocationListFilter = {
 export interface ILocationRepository {
   FindById(id: string): Promise<LocationEntity | null>;
   FindByWarehouseAndCode(warehouseId: string, locationCode: string): Promise<LocationEntity | null>;
-  Create(location: LocationEntity): Promise<LocationEntity>;
-  Update(location: LocationEntity): Promise<LocationEntity>;
+  Create(location: LocationEntity, manager?: EntityManager): Promise<LocationEntity>;
+  Update(location: LocationEntity, manager?: EntityManager): Promise<LocationEntity>;
   List(
     skip: number,
     take: number,
