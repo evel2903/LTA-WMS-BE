@@ -96,6 +96,13 @@ export const ReasonCodeCatalogEntries: ReadonlyArray<ReasonCodeCatalogEntry> = [
     AppliesToObjects: [ObjectType.Sku, ObjectType.InventoryStatus],
   },
   {
+    ReasonCode: 'RC-EXC-RESOLVE',
+    ReasonGroup: ReasonGroup.ManualFix,
+    Description: 'Resolve or close an exception case (manual fix).',
+    AppliesToActions: [ActionCode.Update],
+    AppliesToObjects: [ObjectType.ExceptionCase],
+  },
+  {
     ReasonCode: 'RC-ADJUST',
     ReasonGroup: ReasonGroup.InventoryAdjustment,
     Description: 'Inventory quantity / status adjustment (needs evidence).',

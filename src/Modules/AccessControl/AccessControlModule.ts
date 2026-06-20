@@ -93,6 +93,22 @@ import { ControlExceptionCatalogRepository } from '@modules/AccessControl/Infras
 import { ValidationRuleCatalogRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/ValidationRuleCatalogRepository';
 import { ControlExceptionCatalogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ControlExceptionCatalogOrmEntity';
 import { ValidationRuleCatalogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ValidationRuleCatalogOrmEntity';
+import {
+  IExceptionCaseRepository,
+  EXCEPTION_CASE_REPOSITORY,
+} from '@modules/AccessControl/Application/Interfaces/IExceptionCaseRepository';
+import { ExceptionCaseRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/ExceptionCaseRepository';
+import { ExceptionCaseOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ExceptionCaseOrmEntity';
+import { IControlExceptionCatalog } from '@modules/AccessControl/Application/Interfaces/IControlExceptionCatalog';
+import { CreateExceptionUseCase } from '@modules/AccessControl/Application/UseCases/CreateExceptionUseCase';
+import { GetExceptionUseCase } from '@modules/AccessControl/Application/UseCases/GetExceptionUseCase';
+import { ListExceptionsUseCase } from '@modules/AccessControl/Application/UseCases/ListExceptionsUseCase';
+import { LogExceptionUseCase } from '@modules/AccessControl/Application/UseCases/LogExceptionUseCase';
+import { AssignExceptionUseCase } from '@modules/AccessControl/Application/UseCases/AssignExceptionUseCase';
+import { SubmitExceptionForApprovalUseCase } from '@modules/AccessControl/Application/UseCases/SubmitExceptionForApprovalUseCase';
+import { ResolveExceptionUseCase } from '@modules/AccessControl/Application/UseCases/ResolveExceptionUseCase';
+import { CloseExceptionUseCase } from '@modules/AccessControl/Application/UseCases/CloseExceptionUseCase';
+import { ExceptionCaseController } from '@modules/AccessControl/Presentation/Controllers/ExceptionCaseController';
 
 @Module({
   imports: [
@@ -109,6 +125,7 @@ import { ValidationRuleCatalogOrmEntity } from '@modules/AccessControl/Infrastru
       ApprovalRequestOrmEntity,
       ControlExceptionCatalogOrmEntity,
       ValidationRuleCatalogOrmEntity,
+      ExceptionCaseOrmEntity,
     ]),
   ],
   controllers: [
@@ -118,6 +135,7 @@ import { ValidationRuleCatalogOrmEntity } from '@modules/AccessControl/Infrastru
     ReasonCodeController,
     AuditLogController,
     ApprovalRequestController,
+    ExceptionCaseController,
   ],
   providers: [
     { provide: ROLE_REPOSITORY, useClass: RoleRepository },
@@ -273,6 +291,75 @@ import { ValidationRuleCatalogOrmEntity } from '@modules/AccessControl/Infrastru
       useFactory: (approvalRequests: IApprovalRequestRepository) => new ListApprovalRequestsUseCase(approvalRequests),
       inject: [APPROVAL_REQUEST_REPOSITORY],
     },
+    { provide: EXCEPTION_CASE_REPOSITORY, useClass: ExceptionCaseRepository },
+    {
+      provide: CreateExceptionUseCase,
+      useFactory: (
+        cases: IExceptionCaseRepository,
+        controlExceptionCatalog: IControlExceptionCatalog,
+        audited: AuditedTransaction,
+      ) => new CreateExceptionUseCase(cases, controlExceptionCatalog, audited),
+      inject: [EXCEPTION_CASE_REPOSITORY, CONTROL_EXCEPTION_CATALOG, AuditedTransaction],
+    },
+    {
+      provide: GetExceptionUseCase,
+      useFactory: (cases: IExceptionCaseRepository) => new GetExceptionUseCase(cases),
+      inject: [EXCEPTION_CASE_REPOSITORY],
+    },
+    {
+      provide: ListExceptionsUseCase,
+      useFactory: (cases: IExceptionCaseRepository) => new ListExceptionsUseCase(cases),
+      inject: [EXCEPTION_CASE_REPOSITORY],
+    },
+    {
+      provide: LogExceptionUseCase,
+      useFactory: (cases: IExceptionCaseRepository, audited: AuditedTransaction) =>
+        new LogExceptionUseCase(cases, audited),
+      inject: [EXCEPTION_CASE_REPOSITORY, AuditedTransaction],
+    },
+    {
+      provide: AssignExceptionUseCase,
+      useFactory: (cases: IExceptionCaseRepository, audited: AuditedTransaction) =>
+        new AssignExceptionUseCase(cases, audited),
+      inject: [EXCEPTION_CASE_REPOSITORY, AuditedTransaction],
+    },
+    {
+      provide: SubmitExceptionForApprovalUseCase,
+      useFactory: (
+        cases: IExceptionCaseRepository,
+        controlExceptionCatalog: IControlExceptionCatalog,
+        createApprovalRequest: CreateApprovalRequestUseCase,
+        audited: AuditedTransaction,
+      ) => new SubmitExceptionForApprovalUseCase(cases, controlExceptionCatalog, createApprovalRequest, audited),
+      inject: [EXCEPTION_CASE_REPOSITORY, CONTROL_EXCEPTION_CATALOG, CreateApprovalRequestUseCase, AuditedTransaction],
+    },
+    {
+      provide: ResolveExceptionUseCase,
+      useFactory: (
+        cases: IExceptionCaseRepository,
+        controlExceptionCatalog: IControlExceptionCatalog,
+        reasonCatalog: IReasonCodeCatalog,
+        approvalRequests: IApprovalRequestRepository,
+        audited: AuditedTransaction,
+      ) => new ResolveExceptionUseCase(cases, controlExceptionCatalog, reasonCatalog, approvalRequests, audited),
+      inject: [
+        EXCEPTION_CASE_REPOSITORY,
+        CONTROL_EXCEPTION_CATALOG,
+        REASON_CODE_CATALOG,
+        APPROVAL_REQUEST_REPOSITORY,
+        AuditedTransaction,
+      ],
+    },
+    {
+      provide: CloseExceptionUseCase,
+      useFactory: (
+        cases: IExceptionCaseRepository,
+        controlExceptionCatalog: IControlExceptionCatalog,
+        approvalRequests: IApprovalRequestRepository,
+        audited: AuditedTransaction,
+      ) => new CloseExceptionUseCase(cases, controlExceptionCatalog, approvalRequests, audited),
+      inject: [EXCEPTION_CASE_REPOSITORY, CONTROL_EXCEPTION_CATALOG, APPROVAL_REQUEST_REPOSITORY, AuditedTransaction],
+    },
   ],
   exports: [
     ROLE_REPOSITORY,
@@ -294,6 +381,7 @@ import { ValidationRuleCatalogOrmEntity } from '@modules/AccessControl/Infrastru
     CONTROL_EXCEPTION_CATALOG,
     CONTROL_EXCEPTION_CATALOG_REPOSITORY,
     VALIDATION_RULE_CATALOG_REPOSITORY,
+    EXCEPTION_CASE_REPOSITORY,
   ],
 })
 export class AccessControlModule {}

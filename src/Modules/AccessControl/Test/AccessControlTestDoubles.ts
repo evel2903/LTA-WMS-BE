@@ -33,6 +33,11 @@ import {
 } from '@modules/AccessControl/Application/Interfaces/IApprovalRequestRepository';
 import { ControlExceptionCatalogEntity } from '@modules/AccessControl/Domain/Entities/ControlExceptionCatalogEntity';
 import { IControlExceptionCatalogRepository } from '@modules/AccessControl/Application/Interfaces/IControlExceptionCatalogRepository';
+import { ExceptionCaseEntity } from '@modules/AccessControl/Domain/Entities/ExceptionCaseEntity';
+import {
+  ExceptionCaseListFilter,
+  IExceptionCaseRepository,
+} from '@modules/AccessControl/Application/Interfaces/IExceptionCaseRepository';
 import { ValidationRuleCatalogEntity } from '@modules/AccessControl/Domain/Entities/ValidationRuleCatalogEntity';
 import { IValidationRuleCatalogRepository } from '@modules/AccessControl/Application/Interfaces/IValidationRuleCatalogRepository';
 
@@ -332,6 +337,46 @@ export class InMemoryValidationRuleCatalogRepository implements IValidationRuleC
     }
     this.entries.set(entity.Id, entity);
     return entity;
+  }
+}
+
+/** In-memory exception case repository (no Delete — mirrors the port). */
+export class InMemoryExceptionCaseRepository implements IExceptionCaseRepository {
+  private readonly cases = new Map<string, ExceptionCaseEntity>();
+
+  public async Seed(entity: ExceptionCaseEntity): Promise<void> {
+    this.cases.set(entity.Id, entity);
+  }
+
+  public async FindById(id: string): Promise<ExceptionCaseEntity | null> {
+    return this.cases.get(id) ?? null;
+  }
+
+  public async Create(entity: ExceptionCaseEntity): Promise<ExceptionCaseEntity> {
+    this.cases.set(entity.Id, entity);
+    return entity;
+  }
+
+  public async Update(entity: ExceptionCaseEntity): Promise<ExceptionCaseEntity> {
+    this.cases.set(entity.Id, entity);
+    return entity;
+  }
+
+  public async List(
+    skip: number,
+    take: number,
+    filter: ExceptionCaseListFilter = {},
+  ): Promise<{ Items: ExceptionCaseEntity[]; TotalItems: number }> {
+    let items = [...this.cases.values()];
+    if (filter.State) items = items.filter((c) => c.State === filter.State);
+    if (filter.ExceptionType) items = items.filter((c) => c.ExceptionType === filter.ExceptionType);
+    if (filter.ReferenceType) items = items.filter((c) => c.ReferenceType === filter.ReferenceType);
+    if (filter.ReferenceId) items = items.filter((c) => c.ReferenceId === filter.ReferenceId);
+    if (filter.WarehouseId) items = items.filter((c) => c.WarehouseId === filter.WarehouseId);
+    if (filter.OwnerId) items = items.filter((c) => c.OwnerId === filter.OwnerId);
+    if (filter.AssignedToUserId) items = items.filter((c) => c.AssignedToUserId === filter.AssignedToUserId);
+    if (filter.Severity) items = items.filter((c) => c.Severity === filter.Severity);
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
   }
 }
 

@@ -38,6 +38,7 @@ import { AuditLogOrmEntity } from '@modules/AccessControl/Infrastructure/Persist
 import { ApprovalRequestOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ApprovalRequestOrmEntity';
 import { ControlExceptionCatalogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ControlExceptionCatalogOrmEntity';
 import { ValidationRuleCatalogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ValidationRuleCatalogOrmEntity';
+import { ExceptionCaseOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ExceptionCaseOrmEntity';
 
 const env = GetEnv();
 
@@ -86,6 +87,7 @@ export default new DataSource({
     ApprovalRequestOrmEntity,
     ControlExceptionCatalogOrmEntity,
     ValidationRuleCatalogOrmEntity,
+    ExceptionCaseOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',
