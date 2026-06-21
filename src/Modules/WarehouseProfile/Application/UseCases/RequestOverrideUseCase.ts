@@ -128,6 +128,10 @@ export class RequestOverrideUseCase {
       if (!request.ApprovalRequestId) {
         throw new BusinessRuleException('Override requires an approved approval request');
       }
+      const consumedApproval = await this.overrideLogs.List(0, 1, { ApprovalRequestId: request.ApprovalRequestId });
+      if (consumedApproval.TotalItems > 0) {
+        throw new BusinessRuleException('Approval request has already been consumed by another override');
+      }
       const approval = await this.approvalRequests.FindById(request.ApprovalRequestId);
       // The approval must be APPROVED *and* be for THIS override of THIS target — match action +
       // object type + id, not the id alone (ids are loosely-typed strings; an approval granted for a

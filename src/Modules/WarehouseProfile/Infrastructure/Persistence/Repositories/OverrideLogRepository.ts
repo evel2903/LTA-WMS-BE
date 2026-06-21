@@ -52,6 +52,8 @@ export class OverrideLogRepository implements IOverrideLogRepository {
     if (filter.TargetObjectType)
       query.andWhere('ol.TargetObjectType = :objectType', { objectType: filter.TargetObjectType });
     if (filter.TargetObjectId) query.andWhere('ol.TargetObjectId = :objectId', { objectId: filter.TargetObjectId });
+    if (filter.ApprovalRequestId)
+      query.andWhere('ol.ApprovalRequestId = :approvalRequestId', { approvalRequestId: filter.ApprovalRequestId });
     if (filter.From) query.andWhere('ol.CreatedAt >= :from', { from: filter.From });
     if (filter.To) query.andWhere('ol.CreatedAt <= :to', { to: filter.To });
     query.orderBy('ol.CreatedAt', 'DESC').skip(skip).take(take);
