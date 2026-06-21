@@ -10,6 +10,7 @@ export class InventoryStatusMapper {
       StageGroup: entity.StageGroup,
       AllowsAllocation: entity.AllowsAllocation,
       AllowsPick: entity.AllowsPick,
+      Hold: entity.Hold,
       IsTerminal: entity.IsTerminal,
       IsMilestone: entity.IsMilestone,
       SortOrder: entity.SortOrder,

@@ -7,6 +7,7 @@ export class InventoryStatusEntity {
   public StageGroup: string;
   public AllowsAllocation: boolean;
   public AllowsPick: boolean;
+  public Hold: boolean;
   public IsTerminal: boolean;
   public IsMilestone: boolean;
   public SortOrder: number;
@@ -25,6 +26,7 @@ export class InventoryStatusEntity {
     StageGroup: string;
     AllowsAllocation?: boolean;
     AllowsPick?: boolean;
+    Hold?: boolean;
     IsTerminal?: boolean;
     IsMilestone?: boolean;
     SortOrder: number;
@@ -42,6 +44,7 @@ export class InventoryStatusEntity {
     this.StageGroup = params.StageGroup;
     this.AllowsAllocation = params.AllowsAllocation ?? false;
     this.AllowsPick = params.AllowsPick ?? false;
+    this.Hold = params.Hold ?? false;
     this.IsTerminal = params.IsTerminal ?? false;
     this.IsMilestone = params.IsMilestone ?? false;
     this.SortOrder = params.SortOrder;
