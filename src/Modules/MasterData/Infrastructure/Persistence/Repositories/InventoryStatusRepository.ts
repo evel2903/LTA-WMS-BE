@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import {
   IInventoryStatusRepository,
   InventoryStatusListFilter,
@@ -44,5 +44,11 @@ export class InventoryStatusRepository implements IInventoryStatusRepository {
     });
 
     return { Items: items.map(InventoryStatusOrmMapper.ToDomain), TotalItems: total };
+  }
+
+  public async Update(status: InventoryStatusEntity, manager?: EntityManager): Promise<InventoryStatusEntity> {
+    const repo = manager ? manager.getRepository(InventoryStatusOrmEntity) : this.inventoryStatuses;
+    const saved = await repo.save(InventoryStatusOrmMapper.ToOrm(status));
+    return InventoryStatusOrmMapper.ToDomain(saved);
   }
 }

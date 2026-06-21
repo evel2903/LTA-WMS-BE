@@ -21,6 +21,9 @@ export class InventoryStatusOrmEntity {
   @Column({ name: 'allows_pick', type: 'boolean', default: false })
   public AllowsPick!: boolean;
 
+  @Column({ name: 'hold', type: 'boolean', default: false })
+  public Hold!: boolean;
+
   @Column({ name: 'is_terminal', type: 'boolean', default: false })
   public IsTerminal!: boolean;
 

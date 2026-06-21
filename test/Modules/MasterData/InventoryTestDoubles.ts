@@ -380,6 +380,11 @@ export class MemoryInventoryStatusRepository implements IInventoryStatusReposito
     if (filter.StageGroup) items = items.filter((status) => status.StageGroup === filter.StageGroup);
     return { Items: items, TotalItems: items.length };
   }
+
+  public async Update(status: InventoryStatusEntity): Promise<InventoryStatusEntity> {
+    this.statuses.set(status.Id, status);
+    return status;
+  }
 }
 
 export class MemoryInventoryDimensionRepository implements IInventoryDimensionRepository {

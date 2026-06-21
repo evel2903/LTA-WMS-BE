@@ -67,6 +67,7 @@ import { ListItemCoveragesUseCase } from '@modules/MasterData/Application/UseCas
 import { UpdateItemCoverageUseCase } from '@modules/MasterData/Application/UseCases/UpdateItemCoverageUseCase';
 import { GetInventoryStatusUseCase } from '@modules/MasterData/Application/UseCases/GetInventoryStatusUseCase';
 import { ListInventoryStatusesUseCase } from '@modules/MasterData/Application/UseCases/ListInventoryStatusesUseCase';
+import { UpdateInventoryStatusUseCase } from '@modules/MasterData/Application/UseCases/UpdateInventoryStatusUseCase';
 import { CreateInventoryDimensionUseCase } from '@modules/MasterData/Application/UseCases/CreateInventoryDimensionUseCase';
 import { GetInventoryDimensionUseCase } from '@modules/MasterData/Application/UseCases/GetInventoryDimensionUseCase';
 import { ListInventoryDimensionsUseCase } from '@modules/MasterData/Application/UseCases/ListInventoryDimensionsUseCase';
@@ -161,6 +162,7 @@ import { MasterDataOwnershipPolicyRepository } from '@modules/MasterData/Infrast
 import { SiteController } from '@modules/MasterData/Presentation/Controllers/SiteController';
 import { WarehouseController } from '@modules/MasterData/Presentation/Controllers/WarehouseController';
 import { ZoneController } from '@modules/MasterData/Presentation/Controllers/ZoneController';
+import { InventoryStatusController } from '@modules/MasterData/Presentation/Controllers/InventoryStatusController';
 import { LocationProfileController } from '@modules/MasterData/Presentation/Controllers/LocationProfileController';
 import { LocationController } from '@modules/MasterData/Presentation/Controllers/LocationController';
 import { OwnerController } from '@modules/MasterData/Presentation/Controllers/OwnerController';
@@ -206,6 +208,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     UomConversionController,
     SkuBarcodeController,
     ItemCoverageController,
+    InventoryStatusController,
   ],
   providers: [
     { provide: SITE_REPOSITORY, useClass: SiteRepository },
@@ -689,6 +692,15 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
       useFactory: (inventoryStatuses: IInventoryStatusRepository) =>
         new ListInventoryStatusesUseCase(inventoryStatuses),
       inject: [INVENTORY_STATUS_REPOSITORY],
+    },
+    {
+      provide: UpdateInventoryStatusUseCase,
+      useFactory: (
+        inventoryStatuses: IInventoryStatusRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdateInventoryStatusUseCase(inventoryStatuses, ownership, audited),
+      inject: [INVENTORY_STATUS_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: CreateInventoryDimensionUseCase,

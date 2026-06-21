@@ -7,6 +7,7 @@ export interface InventoryStatusDto {
   StageGroup: string;
   AllowsAllocation: boolean;
   AllowsPick: boolean;
+  Hold: boolean;
   IsTerminal: boolean;
   IsMilestone: boolean;
   SortOrder: number;

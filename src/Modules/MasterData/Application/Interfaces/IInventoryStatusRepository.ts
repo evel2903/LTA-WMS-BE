@@ -1,3 +1,4 @@
+import { EntityManager } from 'typeorm';
 import { InventoryStatusEntity } from '@modules/MasterData/Domain/Entities/InventoryStatusEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
@@ -17,4 +18,6 @@ export interface IInventoryStatusRepository {
     take: number,
     filter?: InventoryStatusListFilter,
   ): Promise<{ Items: InventoryStatusEntity[]; TotalItems: number }>;
+  /** Controlled update (C14); `manager` lets it run inside an AuditedTransaction (C5). */
+  Update(status: InventoryStatusEntity, manager?: EntityManager): Promise<InventoryStatusEntity>;
 }
