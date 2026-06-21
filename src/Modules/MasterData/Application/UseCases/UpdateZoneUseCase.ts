@@ -1,9 +1,4 @@
-import {
-  BusinessRuleException,
-  ConflictException,
-  ForbiddenAppException,
-  NotFoundException,
-} from '@common/Exceptions/AppException';
+import { BusinessRuleException, ConflictException, NotFoundException } from '@common/Exceptions/AppException';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import {
@@ -13,6 +8,10 @@ import {
 } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import {
+  AssertUpdateDataScopes,
+  ResolveActorUserId,
+} from '@modules/AccessControl/Application/Services/PermissionScopeAssertion';
 import { MasterDataOwnershipPolicyService } from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
 import { MasterDataObjectGroup } from '@modules/MasterData/Domain/Enums/MasterDataObjectGroup';
 import { UpdateZoneDto } from '@modules/MasterData/Application/DTOs/UpdateZoneDto';
@@ -53,24 +52,14 @@ export class UpdateZoneUseCase {
       throw new NotFoundException('Zone not found');
     }
 
-    // Entity-resident data-scope re-check (architecture 6.4 step 5): the guard enforces
-    // the (action, object) permission, but a zone's warehouse scope lives on the row, not
-    // the request — so the use case re-checks it against the actor's data scope.
-    if (request.ActorUserId) {
-      const decision = await this.permissionChecker.Check({
-        UserId: request.ActorUserId,
-        Action: ActionCode.Update,
-        ObjectType: ObjectType.Zone,
-        Scope: { WarehouseId: zone.WarehouseId },
-      });
-      if (!decision.Allowed) {
-        throw new ForbiddenAppException(`Access denied (${decision.Reason})`, { Reason: decision.Reason });
-      }
-    }
-
     const before = ZoneDtoMapper.ToDto(zone) as unknown as Record<string, unknown>;
 
     const targetWarehouseId = request.WarehouseId ?? zone.WarehouseId;
+    await AssertUpdateDataScopes(this.permissionChecker, ResolveActorUserId(request, context), ObjectType.Zone, [
+      { WarehouseId: zone.WarehouseId },
+      { WarehouseId: targetWarehouseId },
+    ]);
+
     if (request.WarehouseId !== undefined) {
       const warehouse = await this.warehouseRepository.FindById(request.WarehouseId);
       if (!warehouse) {

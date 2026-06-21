@@ -7,6 +7,11 @@ import {
   SystemAuditContext,
 } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import {
+  AssertUpdateDataScopes,
+  ResolveActorUserId,
+} from '@modules/AccessControl/Application/Services/PermissionScopeAssertion';
 import { UpdateWarehouseDto } from '@modules/MasterData/Application/DTOs/UpdateWarehouseDto';
 import { WarehouseDto } from '@modules/MasterData/Application/DTOs/WarehouseDto';
 import { ISiteRepository } from '@modules/MasterData/Application/Interfaces/ISiteRepository';
@@ -32,6 +37,7 @@ export class UpdateWarehouseUseCase {
     private readonly siteRepository: ISiteRepository,
     private readonly ownershipPolicy?: MasterDataOwnershipPolicyService,
     private readonly auditedTransaction?: AuditedTransaction,
+    private readonly permissionChecker?: IPermissionChecker,
   ) {}
 
   public async Execute(request: UpdateWarehouseDto, context: AuditContext = SystemAuditContext): Promise<WarehouseDto> {
@@ -52,6 +58,9 @@ export class UpdateWarehouseUseCase {
     if (!warehouse) {
       throw new NotFoundException('Warehouse not found');
     }
+    await AssertUpdateDataScopes(this.permissionChecker, ResolveActorUserId(request, context), ObjectType.Warehouse, [
+      { WarehouseId: warehouse.Id },
+    ]);
     const before = snapshot(warehouse);
 
     if (request.SiteId !== undefined) {

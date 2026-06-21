@@ -34,4 +34,5 @@ export class UpdateWarehouseProfileDto {
   public SourceSystem?: string | null;
   public ReferenceId?: string | null;
   public UpdatedBy?: string;
+  public ActorUserId?: string;
 }

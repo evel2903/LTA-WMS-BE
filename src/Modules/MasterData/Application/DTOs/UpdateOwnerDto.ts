@@ -9,5 +9,6 @@ export interface UpdateOwnerDto {
   VisibilityScope?: Record<string, unknown>;
   SourceSystem?: string | null;
   ReferenceId?: string | null;
+  ActorUserId?: string;
   ReasonCode?: string | null;
 }

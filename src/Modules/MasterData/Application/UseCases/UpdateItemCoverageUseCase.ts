@@ -7,6 +7,11 @@ import {
   SystemAuditContext,
 } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import {
+  AssertUpdateDataScopes,
+  ResolveActorUserId,
+} from '@modules/AccessControl/Application/Services/PermissionScopeAssertion';
 import { ItemCoverageDto } from '@modules/MasterData/Application/DTOs/ItemCoverageDto';
 import { UpdateItemCoverageDto } from '@modules/MasterData/Application/DTOs/UpdateItemCoverageDto';
 import { IItemCoverageRepository } from '@modules/MasterData/Application/Interfaces/IItemCoverageRepository';
@@ -28,6 +33,7 @@ export class UpdateItemCoverageUseCase {
     private readonly warehouses: IWarehouseRepository,
     private readonly owners: IOwnerRepository,
     private readonly auditedTransaction?: AuditedTransaction,
+    private readonly permissionChecker?: IPermissionChecker,
   ) {}
 
   public async Execute(
@@ -43,6 +49,15 @@ export class UpdateItemCoverageUseCase {
     const targetSkuId = request.SkuId ?? coverage.SkuId;
     const targetWarehouseId = request.WarehouseId ?? coverage.WarehouseId;
     const targetOwnerId = request.OwnerId !== undefined ? request.OwnerId : coverage.OwnerId;
+    await AssertUpdateDataScopes(
+      this.permissionChecker,
+      ResolveActorUserId(request, context),
+      ObjectType.ItemCoverage,
+      [
+        { WarehouseId: coverage.WarehouseId, OwnerId: coverage.OwnerId },
+        { WarehouseId: targetWarehouseId, OwnerId: targetOwnerId },
+      ],
+    );
     const targetStatus = request.Status ?? coverage.Status;
     const quantities = {
       MinQty: request.MinQty !== undefined ? request.MinQty : coverage.MinQty,

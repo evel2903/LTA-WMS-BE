@@ -63,6 +63,28 @@ describe('UpdateZoneUseCase entity-resident data-scope re-check (C2 F2)', () => 
     );
   });
 
+  it('checks the target warehouse scope before moving a zone', async () => {
+    const zones = zoneRepo();
+    const warehouses = warehouseRepo();
+    warehouses.FindById = jest.fn(async () => ({
+      Id: 'W2',
+      Status: MasterDataStatus.Active,
+    })) as unknown as IWarehouseRepository['FindById'];
+    const c: IPermissionChecker = {
+      Check: jest.fn(async (context) =>
+        context.Scope?.WarehouseId === 'W2' ? { Allowed: false, Reason: 'OUT_OF_SCOPE' as const } : { Allowed: true },
+      ),
+    };
+    const useCase = new UpdateZoneUseCase(zones, warehouses, c);
+
+    await expect(useCase.Execute({ Id: 'z1', WarehouseId: 'W2', ActorUserId: 'u1' })).rejects.toBeInstanceOf(
+      ForbiddenAppException,
+    );
+    expect(c.Check).toHaveBeenCalledWith(expect.objectContaining({ Scope: { WarehouseId: 'W1' } }));
+    expect(c.Check).toHaveBeenCalledWith(expect.objectContaining({ Scope: { WarehouseId: 'W2' } }));
+    expect(zones.Update).not.toHaveBeenCalled();
+  });
+
   it('skips the scope re-check when no actor is supplied (internal callers)', async () => {
     const c = checker({ Allowed: false, Reason: 'OUT_OF_SCOPE' });
     const useCase = new UpdateZoneUseCase(zoneRepo(), warehouseRepo(), c);

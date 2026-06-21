@@ -7,6 +7,11 @@ import {
   SystemAuditContext,
 } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import {
+  AssertUpdateDataScopes,
+  ResolveActorUserId,
+} from '@modules/AccessControl/Application/Services/PermissionScopeAssertion';
 import { IOwnerRepository } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
@@ -34,6 +39,7 @@ export class UpdateWarehouseProfileUseCase {
     private readonly scopeKeyService: ScopeKeyService,
     private readonly policyValidator: WarehouseProfilePolicyValidator,
     private readonly auditedTransaction?: AuditedTransaction,
+    private readonly permissionChecker?: IPermissionChecker,
   ) {
     this.scopeReferenceValidator = new ScopeReferenceValidator(
       warehouseRepository,
@@ -52,6 +58,18 @@ export class UpdateWarehouseProfileUseCase {
       throw new NotFoundException('Warehouse profile not found');
     }
     const before = WarehouseProfileDtoMapper.ToDto(profile) as unknown as Record<string, unknown>;
+    await AssertUpdateDataScopes(
+      this.permissionChecker,
+      ResolveActorUserId(request, context),
+      ObjectType.WarehouseProfile,
+      [
+        { WarehouseId: profile.WarehouseId, OwnerId: profile.OwnerId },
+        {
+          WarehouseId: request.WarehouseId !== undefined ? request.WarehouseId : profile.WarehouseId,
+          OwnerId: request.OwnerId !== undefined ? request.OwnerId : profile.OwnerId,
+        },
+      ],
+    );
 
     this.RejectNullRequired(request);
     await this.ApplyHeader(request, profile);

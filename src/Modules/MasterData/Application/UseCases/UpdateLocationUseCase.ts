@@ -7,6 +7,11 @@ import {
   SystemAuditContext,
 } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import {
+  AssertUpdateDataScopes,
+  ResolveActorUserId,
+} from '@modules/AccessControl/Application/Services/PermissionScopeAssertion';
 import { MasterDataOwnershipPolicyService } from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
 import { MasterDataObjectGroup } from '@modules/MasterData/Domain/Enums/MasterDataObjectGroup';
 import { UpdateLocationDto } from '@modules/MasterData/Application/DTOs/UpdateLocationDto';
@@ -28,6 +33,7 @@ export class UpdateLocationUseCase {
     private readonly zoneRepository: IZoneRepository,
     private readonly ownershipPolicy?: MasterDataOwnershipPolicyService,
     private readonly auditedTransaction?: AuditedTransaction,
+    private readonly permissionChecker?: IPermissionChecker,
   ) {}
 
   public async Execute(request: UpdateLocationDto, context: AuditContext = SystemAuditContext): Promise<LocationDto> {
@@ -56,6 +62,10 @@ export class UpdateLocationUseCase {
     const targetLocationCode = request.LocationCode ?? location.LocationCode;
     const targetParentLocationId =
       request.ParentLocationId !== undefined ? request.ParentLocationId : location.ParentLocationId;
+    await AssertUpdateDataScopes(this.permissionChecker, ResolveActorUserId(request, context), ObjectType.Location, [
+      { WarehouseId: location.WarehouseId },
+      { WarehouseId: targetWarehouseId },
+    ]);
 
     const warehouse = await this.warehouseRepository.FindById(targetWarehouseId);
     if (!warehouse) {

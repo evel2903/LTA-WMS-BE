@@ -7,6 +7,11 @@ import {
   SystemAuditContext,
 } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import {
+  AssertUpdateDataScopes,
+  ResolveActorUserId,
+} from '@modules/AccessControl/Application/Services/PermissionScopeAssertion';
 import { MasterDataOwnershipPolicyService } from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
 import { MasterDataObjectGroup } from '@modules/MasterData/Domain/Enums/MasterDataObjectGroup';
 import { SkuDto } from '@modules/MasterData/Application/DTOs/SkuDto';
@@ -27,6 +32,7 @@ export class UpdateSkuUseCase {
     private readonly uomRepository: IUomRepository,
     private readonly ownershipPolicy?: MasterDataOwnershipPolicyService,
     private readonly auditedTransaction?: AuditedTransaction,
+    private readonly permissionChecker?: IPermissionChecker,
   ) {}
 
   public async Execute(request: UpdateSkuDto, context: AuditContext = SystemAuditContext): Promise<SkuDto> {
@@ -48,6 +54,11 @@ export class UpdateSkuUseCase {
       throw new NotFoundException('SKU not found');
     }
     const before = SkuDtoMapper.ToDto(sku) as unknown as Record<string, unknown>;
+    const targetOwnerId = request.DefaultOwnerId !== undefined ? request.DefaultOwnerId : sku.DefaultOwnerId;
+    await AssertUpdateDataScopes(this.permissionChecker, ResolveActorUserId(request, context), ObjectType.Sku, [
+      { OwnerId: sku.DefaultOwnerId },
+      { OwnerId: targetOwnerId },
+    ]);
 
     if (request.SkuCode && request.SkuCode !== sku.SkuCode) {
       const duplicate = await this.skuRepository.FindByCode(request.SkuCode);

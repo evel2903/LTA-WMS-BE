@@ -1,4 +1,10 @@
-import { BusinessRuleException, ConflictException, NotFoundException } from '@common/Exceptions/AppException';
+import {
+  BusinessRuleException,
+  ConflictException,
+  ForbiddenAppException,
+  NotFoundException,
+} from '@common/Exceptions/AppException';
+import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
 import { UpdateLocationUseCase } from '@modules/MasterData/Application/UseCases/UpdateLocationUseCase';
 import { ILocationProfileRepository } from '@modules/MasterData/Application/Interfaces/ILocationProfileRepository';
 import { ILocationRepository } from '@modules/MasterData/Application/Interfaces/ILocationRepository';
@@ -133,7 +139,7 @@ const Zone = (id = 'zone-1', warehouseId = 'warehouse-1') =>
     UpdatedBy: null,
   });
 
-const buildUseCase = () => {
+const buildUseCase = (permissionChecker?: IPermissionChecker) => {
   const warehouses = new FakeWarehouseRepository();
   const zones = new FakeZoneRepository();
   const profiles = new FakeLocationProfileRepository();
@@ -147,7 +153,7 @@ const buildUseCase = () => {
     zones,
     profiles,
     locations,
-    useCase: new UpdateLocationUseCase(locations, profiles, warehouses, zones),
+    useCase: new UpdateLocationUseCase(locations, profiles, warehouses, zones, undefined, undefined, permissionChecker),
   };
 };
 
@@ -254,6 +260,28 @@ describe('UpdateLocationUseCase', () => {
     await expect(
       useCase.Execute({ Id: 'location-1', WarehouseId: 'warehouse-2', ZoneId: 'zone-3' }),
     ).rejects.toBeInstanceOf(BusinessRuleException);
+  });
+
+  it('checks current and target warehouse scope before moving a location', async () => {
+    const checker: IPermissionChecker = {
+      Check: jest.fn(async (context) =>
+        context.Scope?.WarehouseId === 'warehouse-2'
+          ? { Allowed: false, Reason: 'OUT_OF_SCOPE' as const }
+          : { Allowed: true },
+      ),
+    };
+    const { locations, useCase } = buildUseCase(checker);
+    locations.FindById.mockResolvedValue(
+      Location({ Id: 'location-1', WarehouseId: 'warehouse-1', ZoneId: 'zone-1', ParentLocationId: null }),
+    );
+
+    await expect(
+      useCase.Execute({ Id: 'location-1', WarehouseId: 'warehouse-2', ZoneId: 'zone-2', ActorUserId: 'u1' }),
+    ).rejects.toBeInstanceOf(ForbiddenAppException);
+
+    expect(checker.Check).toHaveBeenCalledWith(expect.objectContaining({ Scope: { WarehouseId: 'warehouse-1' } }));
+    expect(checker.Check).toHaveBeenCalledWith(expect.objectContaining({ Scope: { WarehouseId: 'warehouse-2' } }));
+    expect(locations.Update).not.toHaveBeenCalled();
   });
 
   it('throws BusinessRuleException when parent is a descendant of the current location', async () => {

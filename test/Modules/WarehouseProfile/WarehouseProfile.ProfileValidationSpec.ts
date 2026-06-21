@@ -1,4 +1,5 @@
-import { BusinessRuleException, NotFoundException } from '@common/Exceptions/AppException';
+import { BusinessRuleException, ForbiddenAppException, NotFoundException } from '@common/Exceptions/AppException';
+import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 import { CreateWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/CreateWarehouseProfileUseCase';
 import { UpdateWarehouseProfileUseCase } from '@modules/WarehouseProfile/Application/UseCases/UpdateWarehouseProfileUseCase';
@@ -9,7 +10,7 @@ import {
   MasterDataReferenceStub,
 } from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
 
-const Build = () => {
+const Build = (permissionChecker?: IPermissionChecker) => {
   const profiles = new InMemoryWarehouseProfileRepository();
   const refs = new MasterDataReferenceStub();
   const create = new CreateWarehouseProfileUseCase(
@@ -29,6 +30,8 @@ const Build = () => {
     refs.Skus,
     new ScopeKeyService(),
     new WarehouseProfilePolicyValidator(),
+    undefined,
+    permissionChecker,
   );
   return { profiles, refs, create, update };
 };
@@ -157,6 +160,30 @@ describe('Warehouse profile validation', () => {
   it('PATCH on a missing profile throws NotFoundException', async () => {
     const { update } = Build();
     await expect(update.Execute({ Id: 'missing', ProfileName: 'X' })).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('PATCH checks current and target owner/warehouse scope before changing profile scope', async () => {
+    const checker: IPermissionChecker = {
+      Check: jest.fn(async (context) =>
+        context.Scope?.OwnerId === 'owner-2' ? { Allowed: false, Reason: 'OUT_OF_SCOPE' as const } : { Allowed: true },
+      ),
+    };
+    const { create, update, refs } = Build(checker);
+    refs.AddWarehouse('warehouse-1', MasterDataStatus.Active);
+    refs.AddOwner('owner-1', MasterDataStatus.Active);
+    refs.AddOwner('owner-2', MasterDataStatus.Active);
+    const created = await create.Execute({ ...ValidInput(), WarehouseId: 'warehouse-1', OwnerId: 'owner-1' });
+
+    await expect(update.Execute({ Id: created.Id, OwnerId: 'owner-2', ActorUserId: 'u1' })).rejects.toBeInstanceOf(
+      ForbiddenAppException,
+    );
+
+    expect(checker.Check).toHaveBeenCalledWith(
+      expect.objectContaining({ Scope: { WarehouseId: 'warehouse-1', OwnerId: 'owner-1' } }),
+    );
+    expect(checker.Check).toHaveBeenCalledWith(
+      expect.objectContaining({ Scope: { WarehouseId: 'warehouse-1', OwnerId: 'owner-2' } }),
+    );
   });
 
   it('enforces minimum scope readiness (WarehouseTypeCode) on create through the use case', async () => {

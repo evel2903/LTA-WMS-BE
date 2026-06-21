@@ -24,18 +24,21 @@ export class UserController {
   ) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission(ActionCode.Create, ObjectType.UserAssignment)
   public async Create(@Body() request: CreateUserRequest) {
     return await this.createUserUseCase.Execute(request);
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission(ActionCode.Read, ObjectType.UserAssignment)
   public async GetById(@Param('id') id: string) {
     return await this.getUserByIdUseCase.Execute(id);
   }
 
-  // The user roster carries PII and backs the admin-only RBAC assignment screen (C10),
-  // so reading it requires the same permission as managing assignments. Other /users
-  // endpoints retain their pre-existing access model (tracked separately).
+  // The Users surface carries PII and backs the admin-only RBAC assignment screen.
+  // Legacy endpoints use UserAssignment permissions until a separate User object exists.
   @Get()
   @UseGuards(JwtAuthGuard, PermissionGuard)
   @RequirePermission(ActionCode.Read, ObjectType.UserAssignment)
@@ -44,11 +47,15 @@ export class UserController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission(ActionCode.Update, ObjectType.UserAssignment)
   public async Update(@Param('id') id: string, @Body() request: UpdateUserRequest) {
     return await this.updateUserUseCase.Execute({ Id: id, ...request });
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission(ActionCode.DeleteCancel, ObjectType.UserAssignment)
   public async Delete(@Param('id') id: string) {
     await this.deleteUserUseCase.Execute(id);
     return { Deleted: true };

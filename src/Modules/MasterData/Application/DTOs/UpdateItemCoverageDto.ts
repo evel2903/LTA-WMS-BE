@@ -18,4 +18,5 @@ export interface UpdateItemCoverageDto {
   Status?: MasterDataStatus;
   SourceSystem?: string | null;
   ReferenceId?: string | null;
+  ActorUserId?: string;
 }

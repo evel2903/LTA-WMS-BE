@@ -205,6 +205,7 @@ import { OverrideController } from '@modules/WarehouseProfile/Presentation/Contr
         scopeKeyService: ScopeKeyService,
         policyValidator: WarehouseProfilePolicyValidator,
         audited: AuditedTransaction,
+        checker: IPermissionChecker,
       ) =>
         new UpdateWarehouseProfileUseCase(
           profiles,
@@ -215,6 +216,7 @@ import { OverrideController } from '@modules/WarehouseProfile/Presentation/Contr
           scopeKeyService,
           policyValidator,
           audited,
+          checker,
         ),
       inject: [
         WAREHOUSE_PROFILE_REPOSITORY,
@@ -225,6 +227,7 @@ import { OverrideController } from '@modules/WarehouseProfile/Presentation/Contr
         ScopeKeyService,
         WarehouseProfilePolicyValidator,
         AuditedTransaction,
+        PERMISSION_CHECKER,
       ],
     },
     {

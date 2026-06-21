@@ -7,6 +7,11 @@ import {
   SystemAuditContext,
 } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import {
+  AssertUpdateDataScopes,
+  ResolveActorUserId,
+} from '@modules/AccessControl/Application/Services/PermissionScopeAssertion';
 import { MasterDataOwnershipPolicyService } from '@modules/MasterData/Application/Services/MasterDataOwnershipPolicyService';
 import { MasterDataObjectGroup } from '@modules/MasterData/Domain/Enums/MasterDataObjectGroup';
 import { OwnerDto } from '@modules/MasterData/Application/DTOs/OwnerDto';
@@ -21,6 +26,7 @@ export class UpdateOwnerUseCase {
     private readonly ownerRepository: IOwnerRepository,
     private readonly ownershipPolicy?: MasterDataOwnershipPolicyService,
     private readonly auditedTransaction?: AuditedTransaction,
+    private readonly permissionChecker?: IPermissionChecker,
   ) {}
 
   public async Execute(request: UpdateOwnerDto, context: AuditContext = SystemAuditContext): Promise<OwnerDto> {
@@ -41,6 +47,9 @@ export class UpdateOwnerUseCase {
     if (!owner) {
       throw new NotFoundException('Owner not found');
     }
+    await AssertUpdateDataScopes(this.permissionChecker, ResolveActorUserId(request, context), ObjectType.Owner, [
+      { OwnerId: owner.Id },
+    ]);
     const before = OwnerDtoMapper.ToDto(owner) as unknown as Record<string, unknown>;
 
     if (request.OwnerCode && request.OwnerCode !== owner.OwnerCode) {

@@ -10,5 +10,6 @@ export class UpdateWarehouseDto {
   public Timezone?: string | null;
   public SourceSystem?: string | null;
   public ReferenceId?: string | null;
+  public ActorUserId?: string;
   public ReasonCode?: string | null;
 }
