@@ -175,6 +175,7 @@ export class InMemoryOverrideLogRepository implements IOverrideLogRepository {
     if (filter.ActorUserId) items = items.filter((log) => log.ActorUserId === filter.ActorUserId);
     if (filter.TargetObjectType) items = items.filter((log) => log.TargetObjectType === filter.TargetObjectType);
     if (filter.TargetObjectId) items = items.filter((log) => log.TargetObjectId === filter.TargetObjectId);
+    if (filter.ApprovalRequestId) items = items.filter((log) => log.ApprovalRequestId === filter.ApprovalRequestId);
     if (filter.From) items = items.filter((log) => log.CreatedAt.getTime() >= filter.From!.getTime());
     if (filter.To) items = items.filter((log) => log.CreatedAt.getTime() <= filter.To!.getTime());
     items.sort((a, b) => b.CreatedAt.getTime() - a.CreatedAt.getTime());

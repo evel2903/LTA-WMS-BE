@@ -10,6 +10,7 @@ export interface OverrideLogListFilter {
   ActorUserId?: string;
   TargetObjectType?: ObjectType;
   TargetObjectId?: string;
+  ApprovalRequestId?: string;
   From?: Date;
   To?: Date;
 }
