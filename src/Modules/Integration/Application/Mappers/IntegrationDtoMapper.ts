@@ -1,0 +1,72 @@
+import {
+  ImportBatchDto,
+  InterfaceMessageDto,
+  OutboxMessageDto,
+} from '@modules/Integration/Application/DTOs/IntegrationDtos';
+import { ImportBatchEntity } from '@modules/Integration/Domain/Entities/ImportBatchEntity';
+import { InterfaceMessageEntity } from '@modules/Integration/Domain/Entities/InterfaceMessageEntity';
+import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/OutboxMessageEntity';
+
+export class IntegrationDtoMapper {
+  public static ToImportBatchDto(entity: ImportBatchEntity): ImportBatchDto {
+    return {
+      Id: entity.Id,
+      BatchReference: entity.BatchReference,
+      SourceSystem: entity.SourceSystem,
+      TargetSystem: entity.TargetSystem,
+      Status: entity.Status,
+      MessageCount: entity.MessageCount,
+      AcceptedCount: entity.AcceptedCount,
+      DuplicateCount: entity.DuplicateCount,
+      RejectedCount: entity.RejectedCount,
+      CreatedAt: entity.CreatedAt,
+      CreatedBy: entity.CreatedBy,
+    };
+  }
+
+  public static ToInterfaceMessageDto(entity: InterfaceMessageEntity, isDuplicate = false): InterfaceMessageDto {
+    return {
+      Id: entity.Id,
+      ImportBatchId: entity.ImportBatchId,
+      MessageId: entity.MessageId,
+      MessageType: entity.MessageType,
+      Version: entity.Version,
+      BusinessReference: entity.BusinessReference,
+      SourceSystem: entity.SourceSystem,
+      TargetSystem: entity.TargetSystem,
+      WarehouseContext: entity.WarehouseContext,
+      OwnerContext: entity.OwnerContext,
+      EventTime: entity.EventTime,
+      CorrelationId: entity.CorrelationId,
+      CausationId: entity.CausationId,
+      Payload: entity.Payload,
+      MessageStatus: entity.MessageStatus,
+      CreatedAt: entity.CreatedAt,
+      CreatedBy: entity.CreatedBy,
+      IsDuplicate: isDuplicate,
+    };
+  }
+
+  public static ToOutboxMessageDto(entity: OutboxMessageEntity, isDuplicate = false): OutboxMessageDto {
+    return {
+      Id: entity.Id,
+      SourceMessageId: entity.SourceMessageId,
+      MessageId: entity.MessageId,
+      EventType: entity.EventType,
+      Version: entity.Version,
+      BusinessReference: entity.BusinessReference,
+      SourceSystem: entity.SourceSystem,
+      TargetSystem: entity.TargetSystem,
+      WarehouseContext: entity.WarehouseContext,
+      OwnerContext: entity.OwnerContext,
+      EventTime: entity.EventTime,
+      CorrelationId: entity.CorrelationId,
+      CausationId: entity.CausationId,
+      Payload: entity.Payload,
+      Status: entity.Status,
+      CreatedAt: entity.CreatedAt,
+      CreatedBy: entity.CreatedBy,
+      IsDuplicate: isDuplicate,
+    };
+  }
+}

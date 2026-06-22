@@ -43,6 +43,9 @@ import { PartnerOrmEntity } from '@modules/PartnerMaster/Infrastructure/Persiste
 import { CoreFlowInstanceOrmEntity } from '@modules/CoreFlow/Infrastructure/Persistence/Entities/CoreFlowInstanceOrmEntity';
 import { WorkflowMilestoneOrmEntity } from '@modules/CoreFlow/Infrastructure/Persistence/Entities/WorkflowMilestoneOrmEntity';
 import { WorkflowHandoffOrmEntity } from '@modules/CoreFlow/Infrastructure/Persistence/Entities/WorkflowHandoffOrmEntity';
+import { ImportBatchOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/ImportBatchOrmEntity';
+import { InterfaceMessageOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/InterfaceMessageOrmEntity';
+import { OutboxMessageOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/OutboxMessageOrmEntity';
 
 const env = GetEnv();
 
@@ -96,6 +99,9 @@ export default new DataSource({
     CoreFlowInstanceOrmEntity,
     WorkflowMilestoneOrmEntity,
     WorkflowHandoffOrmEntity,
+    ImportBatchOrmEntity,
+    InterfaceMessageOrmEntity,
+    OutboxMessageOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

@@ -23,6 +23,7 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
 import { AccessControlModule } from '@modules/AccessControl/AccessControlModule';
 import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule';
 import { CoreFlowModule } from '@modules/CoreFlow/CoreFlowModule';
+import { IntegrationModule } from '@modules/Integration/IntegrationModule';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { CoreFlowModule } from '@modules/CoreFlow/CoreFlowModule';
     MasterDataModule,
     PartnerMasterModule,
     CoreFlowModule,
+    IntegrationModule,
     WarehouseProfileModule,
     AccessControlModule,
     AuthenticationModule,
