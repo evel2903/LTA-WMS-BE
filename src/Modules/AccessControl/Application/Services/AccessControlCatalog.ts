@@ -225,6 +225,8 @@ const SUPERVISOR_GRANTS: RolePermissionGrant[] = [
     ObjectType.Allocation,
     ObjectType.MobileTask,
     ObjectType.PutawayTask,
+    ObjectType.Package,
+    ObjectType.Load,
     ObjectType.PickTask,
     ObjectType.GoodsIssue,
     ObjectType.IntegrationMessage,

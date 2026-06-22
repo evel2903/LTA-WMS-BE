@@ -12,6 +12,7 @@ import { LabelTemplateVersionEntity } from '@modules/BarcodeLabel/Domain/Entitie
 import { PrintJobEntity } from '@modules/BarcodeLabel/Domain/Entities/PrintJobEntity';
 import { ReprintRequestEntity } from '@modules/BarcodeLabel/Domain/Entities/ReprintRequestEntity';
 import { LabelTemplateStatus } from '@modules/BarcodeLabel/Domain/Enums/LabelTemplateStatus';
+import { PrintJobStatus } from '@modules/BarcodeLabel/Domain/Enums/PrintJobStatus';
 import { BarcodeLabelOrmMapper } from '@modules/BarcodeLabel/Infrastructure/Mappers/BarcodeLabelOrmMapper';
 import { LabelTemplateOrmEntity } from '@modules/BarcodeLabel/Infrastructure/Persistence/Entities/LabelTemplateOrmEntity';
 import { LabelTemplateVersionOrmEntity } from '@modules/BarcodeLabel/Infrastructure/Persistence/Entities/LabelTemplateVersionOrmEntity';
@@ -68,6 +69,40 @@ export class BarcodeLabelRepository implements IBarcodeLabelRepository {
       where: { Id: id },
       lock: { mode: 'pessimistic_write' },
     });
+    return entity ? BarcodeLabelOrmMapper.ToPrintJobDomain(entity) : null;
+  }
+
+  public async FindLatestValidPrintJobForObject(input: {
+    BusinessObjectType: string;
+    BusinessObjectId: string;
+    WarehouseId?: string | null;
+    OwnerId?: string | null;
+    LabelType?: string | null;
+    ValidStatuses: PrintJobStatus[];
+  }): Promise<PrintJobEntity | null> {
+    const query = this.printJobs
+      .createQueryBuilder('job')
+      .innerJoin(LabelTemplateOrmEntity, 'template', 'template.id = job.template_id')
+      .where('job.business_object_type = :businessObjectType', { businessObjectType: input.BusinessObjectType })
+      .andWhere('job.business_object_id = :businessObjectId', { businessObjectId: input.BusinessObjectId })
+      .andWhere('job.status IN (:...validStatuses)', { validStatuses: input.ValidStatuses })
+      .orderBy('job.created_at', 'DESC');
+
+    if (input.WarehouseId === null) {
+      query.andWhere('job.warehouse_id IS NULL');
+    } else if (input.WarehouseId !== undefined) {
+      query.andWhere('job.warehouse_id = :warehouseId', { warehouseId: input.WarehouseId });
+    }
+    if (input.OwnerId === null) {
+      query.andWhere('job.owner_id IS NULL');
+    } else if (input.OwnerId !== undefined) {
+      query.andWhere('job.owner_id = :ownerId', { ownerId: input.OwnerId });
+    }
+    if (input.LabelType) {
+      query.andWhere('template.label_type = :labelType', { labelType: input.LabelType });
+    }
+
+    const entity = await query.getOne();
     return entity ? BarcodeLabelOrmMapper.ToPrintJobDomain(entity) : null;
   }
 

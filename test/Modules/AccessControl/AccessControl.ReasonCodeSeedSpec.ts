@@ -88,6 +88,11 @@ describe('SeedReasonCodeCatalog', () => {
     for (const forbidden of FORBIDDEN_INVENTORY_STATUS_MILESTONES) {
       expect(allSeedText).not.toContain(forbidden);
     }
+
+    const override = await repo.FindByCode('RC-V1-OVERRIDE');
+    expect(override!.AppliesToObjects).toEqual(
+      expect.arrayContaining([ObjectType.PutawayTask, ObjectType.Package, ObjectType.Load]),
+    );
   });
 
   it('keeps broad V1 reasons scoped away from task-only actions without owner grants', () => {

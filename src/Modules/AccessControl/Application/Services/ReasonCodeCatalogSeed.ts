@@ -191,6 +191,8 @@ export const ReasonCodeCatalogEntries: ReadonlyArray<ReasonCodeCatalogEntry> = [
       ObjectType.QcTask,
       ObjectType.MobileTask,
       ObjectType.PutawayTask,
+      ObjectType.Package,
+      ObjectType.Load,
       ObjectType.PickTask,
       ObjectType.GoodsIssue,
       ObjectType.IntegrationMessage,

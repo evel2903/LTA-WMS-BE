@@ -53,6 +53,10 @@ class InMemoryBarcodeLabelRepository implements IBarcodeLabelRepository {
     return this.FindPrintJobById(id);
   }
 
+  public async FindLatestValidPrintJobForObject(): Promise<PrintJobEntity | null> {
+    return null;
+  }
+
   public async CreateTemplate(template: LabelTemplateEntity): Promise<LabelTemplateEntity> {
     this.templates.push(template);
     return template;

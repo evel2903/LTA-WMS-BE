@@ -2,10 +2,19 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccessControlModule } from '@modules/AccessControl/AccessControlModule';
 import {
+  IPermissionChecker,
+  PERMISSION_CHECKER,
+} from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import {
   IReasonCodeCatalog,
   REASON_CODE_CATALOG,
 } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import {
+  IWarehouseProfileRepository,
+  WAREHOUSE_PROFILE_REPOSITORY,
+} from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
+import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfileModule';
 import {
   BARCODE_LABEL_REPOSITORY,
   IBarcodeLabelRepository,
@@ -18,6 +27,8 @@ import { ListLabelTemplatesUseCase } from '@modules/BarcodeLabel/Application/Use
 import { ListPrintJobsUseCase } from '@modules/BarcodeLabel/Application/UseCases/ListPrintJobsUseCase';
 import { PreviewPrintJobUseCase } from '@modules/BarcodeLabel/Application/UseCases/PreviewPrintJobUseCase';
 import { ReprintPrintJobUseCase } from '@modules/BarcodeLabel/Application/UseCases/ReprintPrintJobUseCase';
+import { ValidateLabelBlockingUseCase } from '@modules/BarcodeLabel/Application/UseCases/ValidateLabelBlockingUseCase';
+import { LabelBlockingController } from '@modules/BarcodeLabel/Presentation/Controllers/LabelBlockingController';
 import { LabelTemplateController } from '@modules/BarcodeLabel/Presentation/Controllers/LabelTemplateController';
 import { PrintJobController } from '@modules/BarcodeLabel/Presentation/Controllers/PrintJobController';
 import { LabelTemplateOrmEntity } from '@modules/BarcodeLabel/Infrastructure/Persistence/Entities/LabelTemplateOrmEntity';
@@ -35,8 +46,9 @@ import { BarcodeLabelRepository } from '@modules/BarcodeLabel/Infrastructure/Per
       ReprintRequestOrmEntity,
     ]),
     AccessControlModule,
+    WarehouseProfileModule,
   ],
-  controllers: [LabelTemplateController, PrintJobController],
+  controllers: [LabelTemplateController, PrintJobController, LabelBlockingController],
   providers: [
     { provide: BARCODE_LABEL_REPOSITORY, useClass: BarcodeLabelRepository },
     {
@@ -82,6 +94,23 @@ import { BarcodeLabelRepository } from '@modules/BarcodeLabel/Infrastructure/Per
       useFactory: (labels: IBarcodeLabelRepository, reasonCatalog: IReasonCodeCatalog, audited: AuditedTransaction) =>
         new ReprintPrintJobUseCase(labels, reasonCatalog, audited),
       inject: [BARCODE_LABEL_REPOSITORY, REASON_CODE_CATALOG, AuditedTransaction],
+    },
+    {
+      provide: ValidateLabelBlockingUseCase,
+      useFactory: (
+        labels: IBarcodeLabelRepository,
+        profiles: IWarehouseProfileRepository,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) => new ValidateLabelBlockingUseCase(labels, profiles, reasonCatalog, audited, permissionChecker),
+      inject: [
+        BARCODE_LABEL_REPOSITORY,
+        WAREHOUSE_PROFILE_REPOSITORY,
+        REASON_CODE_CATALOG,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
     },
   ],
   exports: [BARCODE_LABEL_REPOSITORY],

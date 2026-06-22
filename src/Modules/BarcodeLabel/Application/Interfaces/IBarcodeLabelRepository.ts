@@ -29,6 +29,14 @@ export interface IBarcodeLabelRepository {
   CountTemplateVersions(templateId: string): Promise<number>;
   FindPrintJobById(id: string): Promise<PrintJobEntity | null>;
   FindPrintJobByIdForUpdate(id: string, manager: EntityManager): Promise<PrintJobEntity | null>;
+  FindLatestValidPrintJobForObject(input: {
+    BusinessObjectType: string;
+    BusinessObjectId: string;
+    WarehouseId?: string | null;
+    OwnerId?: string | null;
+    LabelType?: string | null;
+    ValidStatuses: PrintJobStatus[];
+  }): Promise<PrintJobEntity | null>;
   CreateTemplate(template: LabelTemplateEntity, manager?: EntityManager): Promise<LabelTemplateEntity>;
   UpdateTemplate(template: LabelTemplateEntity, manager?: EntityManager): Promise<LabelTemplateEntity>;
   CreateTemplateVersion(

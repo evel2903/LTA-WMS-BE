@@ -133,4 +133,26 @@ describe('Access control RBAC seed and matrix', () => {
       expect(seededObjects.has(objectType)).toBe(true);
     }
   });
+
+  it('allows supervisor override on label-blocked putaway, package and loading owners', () => {
+    expect(ROLE_PERMISSION_GRANTS).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          Role: RoleCode.WarehouseSupervisor,
+          Action: ActionCode.Override,
+          ObjectType: ObjectType.PutawayTask,
+        }),
+        expect.objectContaining({
+          Role: RoleCode.WarehouseSupervisor,
+          Action: ActionCode.Override,
+          ObjectType: ObjectType.Package,
+        }),
+        expect.objectContaining({
+          Role: RoleCode.WarehouseSupervisor,
+          Action: ActionCode.Override,
+          ObjectType: ObjectType.Load,
+        }),
+      ]),
+    );
+  });
 });
