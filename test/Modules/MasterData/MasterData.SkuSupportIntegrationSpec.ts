@@ -276,6 +276,10 @@ class MemorySkuBarcodeRepository implements ISkuBarcodeRepository {
     );
   }
 
+  public async FindCandidatesByValue(barcodeValue: string): Promise<SkuBarcodeEntity[]> {
+    return [...this.barcodes.values()].filter((barcode) => barcode.BarcodeValue === barcodeValue);
+  }
+
   public async Create(barcode: SkuBarcodeEntity): Promise<SkuBarcodeEntity> {
     this.barcodes.set(barcode.Id, barcode);
     return barcode;

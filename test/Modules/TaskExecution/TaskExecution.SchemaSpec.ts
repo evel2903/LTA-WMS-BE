@@ -2,7 +2,9 @@ import { QueryRunner } from 'typeorm';
 import { getMetadataArgsStorage } from 'typeorm';
 import DataSource from '@shared/Database/TypeOrmDataSource';
 import { CreateTaskExecutionMobileTasks1781642600000 } from '@shared/Database/Migrations/1781642600000-CreateTaskExecutionMobileTasks';
+import { CreateTaskExecutionMobileScanEvents1781642700000 } from '@shared/Database/Migrations/1781642700000-CreateTaskExecutionMobileScanEvents';
 import { MobileTaskOrmEntity } from '@modules/TaskExecution/Infrastructure/Persistence/Entities/MobileTaskOrmEntity';
+import { MobileScanEventOrmEntity } from '@modules/TaskExecution/Infrastructure/Persistence/Entities/MobileScanEventOrmEntity';
 
 const fakeRunner = () => {
   const queries: string[] = [];
@@ -13,6 +15,10 @@ const fakeRunner = () => {
 describe('TaskExecution schema registration', () => {
   it('registers MobileTask ORM entity for TypeORM migrations', () => {
     expect(DataSource.options.entities).toEqual(expect.arrayContaining([MobileTaskOrmEntity]));
+  });
+
+  it('registers MobileScanEvent ORM entity for TypeORM migrations', () => {
+    expect(DataSource.options.entities).toEqual(expect.arrayContaining([MobileScanEventOrmEntity]));
   });
 
   it('maps MobileTask ORM properties to the snake_case migration columns', () => {
@@ -52,5 +58,19 @@ describe('TaskExecution schema registration', () => {
     expect(sql).toContain('DROP INDEX "public"."IDX_mobile_tasks_assignee_status"');
     expect(sql).toContain('DROP INDEX "public"."IDX_mobile_tasks_scope_status_type"');
     expect(sql).toContain('DROP TABLE "mobile_tasks"');
+  });
+
+  it('creates mobile_scan_events table and indexes without InventoryStatus columns', async () => {
+    const { runner, queries } = fakeRunner();
+    await new CreateTaskExecutionMobileScanEvents1781642700000().up(runner);
+    const sql = queries.join('\n');
+    expect(sql).toContain('CREATE TABLE "mobile_scan_events"');
+    expect(sql).toContain('"task_id" char(36) NOT NULL');
+    expect(sql).toContain('"scan_type" varchar(30) NOT NULL');
+    expect(sql).toContain('"result" varchar(40) NOT NULL');
+    expect(sql).toContain('"parsed_value_json" jsonb NOT NULL DEFAULT');
+    expect(sql).toContain('CREATE INDEX "IDX_mobile_scan_events_task_time"');
+    expect(sql).toContain('CREATE INDEX "IDX_mobile_scan_events_raw_value"');
+    expect(sql).not.toContain('inventory_status');
   });
 });

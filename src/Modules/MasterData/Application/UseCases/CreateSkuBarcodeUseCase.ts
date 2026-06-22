@@ -72,6 +72,8 @@ export class CreateSkuBarcodeUseCase {
       BarcodeType: request.BarcodeType,
       IsPrimary: request.IsPrimary ?? false,
       Status: request.Status,
+      EffectiveFrom: request.EffectiveFrom ? new Date(request.EffectiveFrom) : null,
+      EffectiveTo: request.EffectiveTo ? new Date(request.EffectiveTo) : null,
       SourceSystem: request.SourceSystem ?? null,
       ReferenceId: request.ReferenceId ?? null,
       CreatedAt: now,

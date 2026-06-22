@@ -52,6 +52,12 @@ export class SkuBarcodeOrmEntity {
   @Column({ name: 'status', type: 'varchar', length: 30 })
   public Status!: string;
 
+  @Column({ name: 'effective_from', type: 'timestamptz', nullable: true })
+  public EffectiveFrom!: Date | null;
+
+  @Column({ name: 'effective_to', type: 'timestamptz', nullable: true })
+  public EffectiveTo!: Date | null;
+
   @Column({ name: 'source_system', type: 'varchar', length: 100, nullable: true })
   public SourceSystem!: string | null;
 

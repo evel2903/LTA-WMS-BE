@@ -22,6 +22,7 @@ import { CreateLocationProfileAndLocation1781623000000 } from '@shared/Database/
 import { CreateOwnerUomSku1781624000000 } from '@shared/Database/Migrations/1781624000000-CreateOwnerUomSku';
 import { CreateSkuSupportTables1781625000000 } from '@shared/Database/Migrations/1781625000000-CreateSkuSupportTables';
 import { AddUomConversionOverlapExclusion1781625100000 } from '@shared/Database/Migrations/1781625100000-AddUomConversionOverlapExclusion';
+import { AddSkuBarcodeEffectiveWindow1781642650000 } from '@shared/Database/Migrations/1781642650000-AddSkuBarcodeEffectiveWindow';
 import { CreateInventoryStatusDimensionBalance1781626000000 } from '@shared/Database/Migrations/1781626000000-CreateInventoryStatusDimensionBalance';
 import { CreateMasterDataOwnershipPolicy1781627000000 } from '@shared/Database/Migrations/1781627000000-CreateMasterDataOwnershipPolicy';
 import { getMetadataArgsStorage } from 'typeorm';
@@ -210,6 +211,25 @@ describe('MasterData module and schema registration', () => {
       'tstzrange("effective_from", coalesce("effective_to", \'infinity\'::timestamptz), \'[]\') with &&',
     );
     expect(sql).toContain("where (status = 'active')");
+  });
+
+  it('adds effective window columns for SKU barcode aliases', async () => {
+    const migration = new AddSkuBarcodeEffectiveWindow1781642650000();
+    const queries: string[] = [];
+    const queryRunner = {
+      query: jest.fn(async (sql: string) => {
+        queries.push(sql);
+      }),
+    };
+
+    await migration.up(queryRunner as never);
+
+    const sql = queries.join('\n').toLowerCase();
+    expect(sql).toContain('alter table "sku_barcodes" add "effective_from"');
+    expect(sql).toContain('alter table "sku_barcodes" add "effective_to"');
+    expect(sql).toContain(
+      'check ("effective_to" is null or "effective_from" is null or "effective_to" >= "effective_from")',
+    );
   });
 
   it('provides a migration for inventory statuses, dimensions, balances, FKs and unique constraints', async () => {

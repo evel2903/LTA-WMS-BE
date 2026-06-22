@@ -9,9 +9,11 @@ import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAut
 import { ClaimMobileTaskUseCase } from '@modules/TaskExecution/Application/UseCases/ClaimMobileTaskUseCase';
 import { GetMobileTaskUseCase } from '@modules/TaskExecution/Application/UseCases/GetMobileTaskUseCase';
 import { ListMobileTasksUseCase } from '@modules/TaskExecution/Application/UseCases/ListMobileTasksUseCase';
+import { RecordMobileScanUseCase } from '@modules/TaskExecution/Application/UseCases/RecordMobileScanUseCase';
 import { ReleaseMobileTaskUseCase } from '@modules/TaskExecution/Application/UseCases/ReleaseMobileTaskUseCase';
 import { ClaimMobileTaskRequest } from '@modules/TaskExecution/Presentation/Requests/ClaimMobileTaskRequest';
 import { ListMobileTasksQuery } from '@modules/TaskExecution/Presentation/Requests/ListMobileTasksQuery';
+import { RecordMobileScanRequest } from '@modules/TaskExecution/Presentation/Requests/RecordMobileScanRequest';
 import { ReleaseMobileTaskRequest } from '@modules/TaskExecution/Presentation/Requests/ReleaseMobileTaskRequest';
 
 @UseGuards(JwtAuthGuard, PermissionGuard)
@@ -22,6 +24,7 @@ export class TaskExecutionController {
     private readonly getMobileTaskUseCase: GetMobileTaskUseCase,
     private readonly claimMobileTaskUseCase: ClaimMobileTaskUseCase,
     private readonly releaseMobileTaskUseCase: ReleaseMobileTaskUseCase,
+    private readonly recordMobileScanUseCase: RecordMobileScanUseCase,
   ) {}
 
   @Get()
@@ -56,5 +59,15 @@ export class TaskExecutionController {
     @CurrentAuditContext() context: AuditContext,
   ) {
     return await this.releaseMobileTaskUseCase.Execute({ Id: id }, context);
+  }
+
+  @Post(':id/scans')
+  @RequirePermission(ActionCode.Update, ObjectType.MobileTask)
+  public async RecordScan(
+    @Param('id') id: string,
+    @Body() request: RecordMobileScanRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.recordMobileScanUseCase.Execute({ TaskId: id, ...request }, context);
   }
 }

@@ -31,6 +31,14 @@ export class SkuBarcodeRepository implements ISkuBarcodeRepository {
     return entity ? SkuBarcodeOrmMapper.ToDomain(entity) : null;
   }
 
+  public async FindCandidatesByValue(barcodeValue: string): Promise<SkuBarcodeEntity[]> {
+    const entities = await this.skuBarcodes.find({
+      where: { BarcodeValue: barcodeValue },
+      order: { OwnerId: 'DESC', CreatedAt: 'DESC' },
+    });
+    return entities.map(SkuBarcodeOrmMapper.ToDomain);
+  }
+
   public async Create(skuBarcode: SkuBarcodeEntity, manager?: EntityManager): Promise<SkuBarcodeEntity> {
     const repo = manager ? manager.getRepository(SkuBarcodeOrmEntity) : this.skuBarcodes;
     try {

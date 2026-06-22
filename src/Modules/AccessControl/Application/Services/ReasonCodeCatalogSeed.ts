@@ -88,7 +88,7 @@ export const ReasonCodeCatalogEntries: ReadonlyArray<ReasonCodeCatalogEntry> = [
     ReasonCode: 'RC-RULE-OVERRIDE',
     ReasonGroup: ReasonGroup.RuleOverride,
     Description: 'Override a non-compliance rule outcome (needs evidence + approval).',
-    AppliesToActions: [ActionCode.Override],
+    AppliesToActions: [ActionCode.Update, ActionCode.Override],
     AppliesToObjects: [ObjectType.Rule, ObjectType.WarehouseProfile],
     EvidenceRequired: true,
     ApprovalRequired: true,
@@ -189,6 +189,7 @@ export const ReasonCodeCatalogEntries: ReadonlyArray<ReasonCodeCatalogEntry> = [
     AppliesToObjects: [
       ObjectType.Allocation,
       ObjectType.QcTask,
+      ObjectType.MobileTask,
       ObjectType.PutawayTask,
       ObjectType.PickTask,
       ObjectType.GoodsIssue,

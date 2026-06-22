@@ -18,6 +18,7 @@ import { SkuStatus } from '@modules/MasterData/Domain/Enums/SkuStatus';
 class FakeSkuBarcodeRepository implements ISkuBarcodeRepository {
   public FindById = jest.fn<Promise<SkuBarcodeEntity | null>, [string]>();
   public FindByValueAndOwner = jest.fn<Promise<SkuBarcodeEntity | null>, [string, string | null]>();
+  public FindCandidatesByValue = jest.fn<Promise<SkuBarcodeEntity[]>, [string]>();
   public Create = jest.fn<Promise<SkuBarcodeEntity>, [SkuBarcodeEntity]>();
   public Update = jest.fn<Promise<SkuBarcodeEntity>, [SkuBarcodeEntity]>();
   public List = jest.fn<Promise<{ Items: SkuBarcodeEntity[]; TotalItems: number }>, [number, number, unknown?]>();

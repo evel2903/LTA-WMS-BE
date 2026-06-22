@@ -14,6 +14,8 @@ export class SkuBarcodeOrmMapper {
       BarcodeType: entity.BarcodeType,
       IsPrimary: entity.IsPrimary,
       Status: entity.Status as MasterDataStatus,
+      EffectiveFrom: entity.EffectiveFrom,
+      EffectiveTo: entity.EffectiveTo,
       SourceSystem: entity.SourceSystem,
       ReferenceId: entity.ReferenceId,
       CreatedAt: entity.CreatedAt,
@@ -34,6 +36,8 @@ export class SkuBarcodeOrmMapper {
     orm.BarcodeType = entity.BarcodeType;
     orm.IsPrimary = entity.IsPrimary;
     orm.Status = entity.Status;
+    orm.EffectiveFrom = entity.EffectiveFrom;
+    orm.EffectiveTo = entity.EffectiveTo;
     orm.SourceSystem = entity.SourceSystem;
     orm.ReferenceId = entity.ReferenceId;
     orm.CreatedAt = entity.CreatedAt;

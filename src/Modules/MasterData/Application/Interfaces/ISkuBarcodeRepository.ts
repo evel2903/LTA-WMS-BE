@@ -15,6 +15,7 @@ export interface SkuBarcodeListFilter {
 export interface ISkuBarcodeRepository {
   FindById(id: string): Promise<SkuBarcodeEntity | null>;
   FindByValueAndOwner(barcodeValue: string, ownerId: string | null): Promise<SkuBarcodeEntity | null>;
+  FindCandidatesByValue(barcodeValue: string): Promise<SkuBarcodeEntity[]>;
   Create(skuBarcode: SkuBarcodeEntity, manager?: EntityManager): Promise<SkuBarcodeEntity>;
   Update(skuBarcode: SkuBarcodeEntity, manager?: EntityManager): Promise<SkuBarcodeEntity>;
   List(

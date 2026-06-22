@@ -21,20 +21,23 @@ export const BuildMobileTaskAudit = (
   context: AuditContext,
   task: MobileTaskEntity,
   input: {
+    Action?: ActionCode;
     ObjectCode: string;
     BeforeJson?: Record<string, unknown> | null;
     AfterJson?: Record<string, unknown> | null;
     Result?: AuditResult;
+    ReasonCodeId?: string | null;
     ReasonNote?: string | null;
   },
 ): AuditEntry =>
   MergeAuditContext(context, {
-    Action: ActionCode.Update,
+    Action: input.Action ?? ActionCode.Update,
     ObjectType: ObjectType.MobileTask,
     ObjectId: task.Id,
     ObjectCode: input.ObjectCode,
     BeforeJson: input.BeforeJson ?? null,
     AfterJson: input.AfterJson ?? null,
+    ReasonCodeId: input.ReasonCodeId ?? null,
     ReasonNote: input.ReasonNote ?? null,
     WarehouseId: task.WarehouseId,
     OwnerId: task.OwnerId,

@@ -219,6 +219,7 @@ const SUPERVISOR_GRANTS: RolePermissionGrant[] = [
   ]),
   ...grant(RoleCode.WarehouseSupervisor, ActionCode.Override, [
     ObjectType.Allocation,
+    ObjectType.MobileTask,
     ObjectType.PutawayTask,
     ObjectType.PickTask,
     ObjectType.GoodsIssue,

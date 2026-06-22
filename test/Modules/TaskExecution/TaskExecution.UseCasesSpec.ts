@@ -11,6 +11,7 @@ import { ClaimMobileTaskUseCase } from '@modules/TaskExecution/Application/UseCa
 import { GetMobileTaskUseCase } from '@modules/TaskExecution/Application/UseCases/GetMobileTaskUseCase';
 import { ListMobileTasksUseCase } from '@modules/TaskExecution/Application/UseCases/ListMobileTasksUseCase';
 import { ReleaseMobileTaskUseCase } from '@modules/TaskExecution/Application/UseCases/ReleaseMobileTaskUseCase';
+import { MobileScanEventEntity } from '@modules/TaskExecution/Domain/Entities/MobileScanEventEntity';
 import { MobileTaskEntity } from '@modules/TaskExecution/Domain/Entities/MobileTaskEntity';
 import { MobileTaskStatus } from '@modules/TaskExecution/Domain/Enums/MobileTaskStatus';
 import { MobileTaskType } from '@modules/TaskExecution/Domain/Enums/MobileTaskType';
@@ -18,6 +19,7 @@ import {
   ITaskExecutionRepository,
   MobileTaskListFilter,
 } from '@modules/TaskExecution/Application/Interfaces/ITaskExecutionRepository';
+import { EntityManager } from 'typeorm';
 
 const contextFor = (actor: string): AuditContext => ({ ...SystemAuditContext, ActorUserId: actor });
 
@@ -79,6 +81,14 @@ class FakeTaskRepository implements ITaskExecutionRepository {
     if (index >= 0) this.tasks[index] = task;
     else this.tasks.push(task);
     return task;
+  }
+
+  public async SaveScanEvent(scan: MobileScanEventEntity): Promise<MobileScanEventEntity> {
+    return scan;
+  }
+
+  public async RunInTransaction<T>(work: (manager: EntityManager) => Promise<T>): Promise<T> {
+    return work(undefined as unknown as EntityManager);
   }
 }
 

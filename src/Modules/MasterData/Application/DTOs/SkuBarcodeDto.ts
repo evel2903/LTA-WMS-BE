@@ -10,6 +10,8 @@ export interface SkuBarcodeDto {
   BarcodeType: string;
   IsPrimary: boolean;
   Status: MasterDataStatus;
+  EffectiveFrom: Date | null;
+  EffectiveTo: Date | null;
   SourceSystem: string | null;
   ReferenceId: string | null;
   CreatedAt: Date;

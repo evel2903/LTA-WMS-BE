@@ -13,6 +13,8 @@ export class SkuBarcodeMapper {
       BarcodeType: entity.BarcodeType,
       IsPrimary: entity.IsPrimary,
       Status: entity.Status,
+      EffectiveFrom: entity.EffectiveFrom,
+      EffectiveTo: entity.EffectiveTo,
       SourceSystem: entity.SourceSystem,
       ReferenceId: entity.ReferenceId,
       CreatedAt: entity.CreatedAt,

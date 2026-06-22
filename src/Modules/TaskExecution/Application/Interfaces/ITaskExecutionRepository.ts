@@ -1,4 +1,5 @@
 import { EntityManager } from 'typeorm';
+import { MobileScanEventEntity } from '@modules/TaskExecution/Domain/Entities/MobileScanEventEntity';
 import { MobileTaskEntity } from '@modules/TaskExecution/Domain/Entities/MobileTaskEntity';
 import { MobileTaskStatus } from '@modules/TaskExecution/Domain/Enums/MobileTaskStatus';
 import { MobileTaskType } from '@modules/TaskExecution/Domain/Enums/MobileTaskType';
@@ -16,4 +17,6 @@ export interface ITaskExecutionRepository {
   FindById(id: string, manager?: EntityManager): Promise<MobileTaskEntity | null>;
   FindByIdForUpdate(id: string, manager: EntityManager): Promise<MobileTaskEntity | null>;
   Save(task: MobileTaskEntity, manager?: EntityManager): Promise<MobileTaskEntity>;
+  SaveScanEvent(scan: MobileScanEventEntity, manager?: EntityManager): Promise<MobileScanEventEntity>;
+  RunInTransaction<T>(work: (manager: EntityManager) => Promise<T>): Promise<T>;
 }

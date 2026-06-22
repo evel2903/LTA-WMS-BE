@@ -1,3 +1,4 @@
+import { BusinessRuleException } from '@common/Exceptions/AppException';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
 export class SkuBarcodeEntity {
@@ -10,6 +11,8 @@ export class SkuBarcodeEntity {
   public BarcodeType: string;
   public IsPrimary: boolean;
   public Status: MasterDataStatus;
+  public EffectiveFrom: Date | null;
+  public EffectiveTo: Date | null;
   public SourceSystem: string | null;
   public ReferenceId: string | null;
   public readonly CreatedAt: Date;
@@ -27,6 +30,8 @@ export class SkuBarcodeEntity {
     BarcodeType: string;
     IsPrimary?: boolean;
     Status: MasterDataStatus;
+    EffectiveFrom?: Date | null;
+    EffectiveTo?: Date | null;
     SourceSystem?: string | null;
     ReferenceId?: string | null;
     CreatedAt: Date;
@@ -43,6 +48,11 @@ export class SkuBarcodeEntity {
     this.BarcodeType = params.BarcodeType;
     this.IsPrimary = params.IsPrimary ?? false;
     this.Status = params.Status;
+    this.EffectiveFrom = params.EffectiveFrom ?? null;
+    this.EffectiveTo = params.EffectiveTo ?? null;
+    if (this.EffectiveFrom && this.EffectiveTo && this.EffectiveTo < this.EffectiveFrom) {
+      throw new BusinessRuleException('EffectiveTo must be greater than or equal to EffectiveFrom');
+    }
     this.SourceSystem = params.SourceSystem ?? null;
     this.ReferenceId = params.ReferenceId ?? null;
     this.CreatedAt = params.CreatedAt;

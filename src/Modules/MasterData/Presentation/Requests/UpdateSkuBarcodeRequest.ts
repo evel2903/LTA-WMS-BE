@@ -1,4 +1,5 @@
-import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsBoolean, IsDate, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
 export class UpdateSkuBarcodeRequest {
@@ -45,6 +46,16 @@ export class UpdateSkuBarcodeRequest {
   @ValidateIf((_, value) => value !== undefined)
   @IsEnum(MasterDataStatus)
   public Status?: MasterDataStatus;
+
+  @ValidateIf((_, value) => value !== undefined && value !== null)
+  @Type(() => Date)
+  @IsDate()
+  public EffectiveFrom?: Date | null;
+
+  @ValidateIf((_, value) => value !== undefined && value !== null)
+  @Type(() => Date)
+  @IsDate()
+  public EffectiveTo?: Date | null;
 
   @IsOptional()
   @IsString()

@@ -47,6 +47,7 @@ import { ImportBatchOrmEntity } from '@modules/Integration/Infrastructure/Persis
 import { InterfaceMessageOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/InterfaceMessageOrmEntity';
 import { OutboxMessageOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/OutboxMessageOrmEntity';
 import { MobileTaskOrmEntity } from '@modules/TaskExecution/Infrastructure/Persistence/Entities/MobileTaskOrmEntity';
+import { MobileScanEventOrmEntity } from '@modules/TaskExecution/Infrastructure/Persistence/Entities/MobileScanEventOrmEntity';
 
 const env = GetEnv();
 
@@ -104,6 +105,7 @@ export default new DataSource({
     InterfaceMessageOrmEntity,
     OutboxMessageOrmEntity,
     MobileTaskOrmEntity,
+    MobileScanEventOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

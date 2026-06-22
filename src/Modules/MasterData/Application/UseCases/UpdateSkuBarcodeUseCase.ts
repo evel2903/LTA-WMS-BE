@@ -86,6 +86,21 @@ export class UpdateSkuBarcodeUseCase {
     barcode.BarcodeType = request.BarcodeType ?? barcode.BarcodeType;
     barcode.IsPrimary = request.IsPrimary ?? barcode.IsPrimary;
     barcode.Status = targetStatus;
+    barcode.EffectiveFrom =
+      request.EffectiveFrom !== undefined
+        ? request.EffectiveFrom
+          ? new Date(request.EffectiveFrom)
+          : null
+        : barcode.EffectiveFrom;
+    barcode.EffectiveTo =
+      request.EffectiveTo !== undefined
+        ? request.EffectiveTo
+          ? new Date(request.EffectiveTo)
+          : null
+        : barcode.EffectiveTo;
+    if (barcode.EffectiveFrom && barcode.EffectiveTo && barcode.EffectiveTo < barcode.EffectiveFrom) {
+      throw new ConflictException('EffectiveTo must be greater than or equal to EffectiveFrom');
+    }
     barcode.SourceSystem = request.SourceSystem !== undefined ? request.SourceSystem : barcode.SourceSystem;
     barcode.ReferenceId = request.ReferenceId !== undefined ? request.ReferenceId : barcode.ReferenceId;
     barcode.UpdatedAt = new Date();
