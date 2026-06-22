@@ -1,0 +1,225 @@
+import { randomUUID } from 'crypto';
+import { BusinessRuleException, NotFoundException } from '@common/Exceptions/AppException';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import {
+  AuditContext,
+  MergeAuditContext,
+  SystemAuditContext,
+} from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import { IReasonCodeCatalog } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { CoreFlowStageCode } from '@modules/CoreFlow/Domain/Enums/CoreFlowStageCode';
+import { CoreFlowStepCode } from '@modules/CoreFlow/Domain/Enums/CoreFlowStepCode';
+import { WorkflowMilestoneStatus } from '@modules/CoreFlow/Domain/Enums/WorkflowMilestoneStatus';
+import { WorkflowMilestoneEntity } from '@modules/CoreFlow/Domain/Entities/WorkflowMilestoneEntity';
+import { ICoreFlowRepository } from '@modules/CoreFlow/Application/Interfaces/ICoreFlowRepository';
+import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/OutboxMessageEntity';
+import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
+import { IIntegrationRepository } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
+import { ConfirmReceiptLineDto, ReceiptLineDto } from '@modules/Inbound/Application/DTOs/InboundPlanDto';
+import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/IInboundPlanRepository';
+import { IReceivingRepository } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
+import { ReceivingDtoMapper } from '@modules/Inbound/Application/Mappers/ReceivingDtoMapper';
+import { AssertReceiptPermission } from '@modules/Inbound/Application/Services/ReceiptPermission';
+import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
+import { InboundPlanLineEntity } from '@modules/Inbound/Domain/Entities/InboundPlanLineEntity';
+import { ReceiptEntity } from '@modules/Inbound/Domain/Entities/ReceiptEntity';
+import { ReceiptLineEntity } from '@modules/Inbound/Domain/Entities/ReceiptLineEntity';
+import { ReceiptLineDiscrepancySignal } from '@modules/Inbound/Domain/Enums/ReceiptLineDiscrepancySignal';
+import { ReceiptLineStatus } from '@modules/Inbound/Domain/Enums/ReceiptLineStatus';
+
+export class ConfirmReceiptLineUseCase {
+  constructor(
+    private readonly inboundPlans: IInboundPlanRepository,
+    private readonly receiving: IReceivingRepository,
+    private readonly coreFlows: ICoreFlowRepository,
+    private readonly integrations: IIntegrationRepository,
+    private readonly reasonCatalog: IReasonCodeCatalog,
+    private readonly readiness: ValidateReceivingReadinessUseCase,
+    private readonly audited: AuditedTransaction,
+    private readonly permissionChecker?: IPermissionChecker,
+  ) {}
+
+  public async Execute(
+    request: ConfirmReceiptLineDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<ReceiptLineDto> {
+    this.AssertRequest(request);
+    const receipt = await this.receiving.FindReceiptById(request.ReceiptId);
+    if (!receipt) throw new NotFoundException('Receipt not found');
+
+    await AssertReceiptPermission(this.permissionChecker, context.ActorUserId, ActionCode.Update, receipt);
+
+    const duplicate = await this.receiving.FindReceiptLineByIdempotencyKey(receipt.Id, request.IdempotencyKey);
+    if (duplicate) return ReceivingDtoMapper.ToLineDto(duplicate, true);
+
+    const readiness = await this.readiness.Execute({ Id: receipt.InboundPlanId }, context);
+    if (!readiness.Allowed) throw new BusinessRuleException(readiness.Reason);
+
+    const aggregate = await this.inboundPlans.FindById(receipt.InboundPlanId);
+    if (!aggregate) throw new NotFoundException('Inbound plan not found for receipt');
+    const planLine = aggregate.Lines.find((line) => line.Id === request.InboundPlanLineId);
+    if (!planLine) throw new BusinessRuleException('Inbound plan line not found for receipt line');
+
+    let reasonCodeId: string | null = null;
+    if (request.ManualConfirm) {
+      if (!request.ReasonCode?.trim()) throw new BusinessRuleException('Manual receipt confirm reason is required');
+      await AssertReceiptPermission(this.permissionChecker, context.ActorUserId, ActionCode.Override, receipt);
+      const reason = await this.reasonCatalog.ValidateReason({
+        ReasonCode: request.ReasonCode,
+        Action: ActionCode.Override,
+        ObjectType: ObjectType.Receipt,
+      });
+      reasonCodeId = reason.ReasonCodeId;
+    } else if (!request.ScanEvidence?.RawValue && !request.ScanEvidence?.ScanEventId) {
+      throw new BusinessRuleException('Scan evidence is required for receipt line confirm');
+    }
+
+    const actualSkuId = request.SkuId?.trim() || planLine.SkuId;
+    const actualUomId = request.UomId?.trim() || planLine.UomId;
+    const signals = this.DiscrepancySignals(request, planLine, actualSkuId, actualUomId);
+    const now = new Date();
+    const line = new ReceiptLineEntity({
+      Id: randomUUID(),
+      ReceiptId: receipt.Id,
+      InboundPlanId: receipt.InboundPlanId,
+      InboundPlanLineId: planLine.Id,
+      LineNumber: planLine.LineNumber,
+      SkuId: actualSkuId,
+      SkuCode: actualSkuId === planLine.SkuId ? planLine.SkuCode : null,
+      UomId: actualUomId,
+      UomCode: actualUomId === planLine.UomId ? planLine.UomCode : null,
+      ExpectedQuantity: planLine.ExpectedQuantity,
+      ActualQuantity: request.ActualQuantity,
+      Status: signals.length ? ReceiptLineStatus.Discrepancy : ReceiptLineStatus.Received,
+      ManualConfirm: request.ManualConfirm ?? false,
+      ReasonCode: request.ReasonCode ?? null,
+      ReasonCodeId: reasonCodeId,
+      ReasonNote: request.ReasonNote ?? null,
+      ScanEvidenceJson: request.ScanEvidence ? (request.ScanEvidence as unknown as Record<string, unknown>) : null,
+      DiscrepancySignals: signals,
+      IdempotencyKey: request.IdempotencyKey,
+      ReceivedAt: now,
+      ReceivedBy: context.ActorUserId,
+      CreatedAt: now,
+      UpdatedAt: now,
+    });
+    const beforeReceipt = ReceivingDtoMapper.ToReceiptDto(receipt);
+    receipt.MarkLineReceived(context.ActorUserId);
+
+    const outbox = this.BuildOutbox(receipt, line, aggregate.Plan.BusinessReference);
+    const milestone = receipt.CoreFlowInstanceId
+      ? new WorkflowMilestoneEntity({
+          Id: randomUUID(),
+          CoreFlowInstanceId: receipt.CoreFlowInstanceId,
+          StageCode: CoreFlowStageCode.Inbound,
+          StepCode: CoreFlowStepCode.ReceiptLineReceived,
+          MilestoneStatus: WorkflowMilestoneStatus.Completed,
+          Metadata: {
+            ReceiptId: receipt.Id,
+            ReceiptLineId: line.Id,
+            InboundPlanLineId: line.InboundPlanLineId,
+            ActualQuantity: line.ActualQuantity,
+            DiscrepancySignals: line.DiscrepancySignals,
+          },
+          OccurredAt: line.ReceivedAt,
+          CreatedBy: context.ActorUserId,
+        })
+      : null;
+
+    return this.audited.Run(async (manager) => {
+      await this.receiving.UpdateReceipt(receipt, manager);
+      const createdLine = await this.receiving.CreateReceiptLine(line, manager);
+      await this.integrations.CreateOutboxMessage(outbox, manager);
+      if (milestone) await this.coreFlows.CreateMilestone(milestone, manager);
+      const result = ReceivingDtoMapper.ToLineDto(createdLine);
+      return {
+        result,
+        entry: MergeAuditContext(context, {
+          Action: line.ManualConfirm ? ActionCode.Override : ActionCode.Update,
+          ObjectType: ObjectType.Receipt,
+          ObjectId: receipt.Id,
+          ObjectCode: receipt.ReceiptNumber,
+          BeforeJson: beforeReceipt as unknown as Record<string, unknown>,
+          AfterJson: result as unknown as Record<string, unknown>,
+          ReasonCodeId: line.ReasonCodeId,
+          ReasonNote: line.ReasonNote,
+          EvidenceRefs: line.ScanEvidenceJson ? [JSON.stringify(line.ScanEvidenceJson)] : null,
+          ReferenceType: 'ReceiptLine',
+          ReferenceId: createdLine.Id,
+          WarehouseId: receipt.WarehouseId,
+          OwnerId: receipt.OwnerId,
+        }),
+      };
+    });
+  }
+
+  private AssertRequest(request: ConfirmReceiptLineDto): void {
+    if (!request.IdempotencyKey?.trim()) throw new BusinessRuleException('Receipt line idempotency key is required');
+    if (!request.InboundPlanLineId?.trim()) throw new BusinessRuleException('Inbound plan line is required');
+    if (request.ActualQuantity <= 0) throw new BusinessRuleException('Actual quantity must be positive');
+  }
+
+  private DiscrepancySignals(
+    request: ConfirmReceiptLineDto,
+    planLine: InboundPlanLineEntity,
+    actualSkuId: string,
+    actualUomId: string,
+  ): ReceiptLineDiscrepancySignal[] {
+    const signals: ReceiptLineDiscrepancySignal[] = [];
+    if (request.ActualQuantity !== planLine.ExpectedQuantity) {
+      signals.push(ReceiptLineDiscrepancySignal.QuantityVariance);
+    }
+    if (actualSkuId !== planLine.SkuId) signals.push(ReceiptLineDiscrepancySignal.WrongSku);
+    if (actualUomId !== planLine.UomId) signals.push(ReceiptLineDiscrepancySignal.WrongUom);
+    if (
+      request.ScanEvidence?.ResolvedSkuId &&
+      request.ScanEvidence.ResolvedSkuId !== planLine.SkuId &&
+      !signals.includes(ReceiptLineDiscrepancySignal.WrongSku)
+    ) {
+      signals.push(ReceiptLineDiscrepancySignal.WrongSku);
+    }
+    if (
+      request.ScanEvidence?.ResolvedUomId &&
+      request.ScanEvidence.ResolvedUomId !== planLine.UomId &&
+      !signals.includes(ReceiptLineDiscrepancySignal.WrongUom)
+    ) {
+      signals.push(ReceiptLineDiscrepancySignal.WrongUom);
+    }
+    if (request.ScanEvidence?.ScanResult === 'Rejected') {
+      signals.push(ReceiptLineDiscrepancySignal.UnresolvedBarcode);
+    }
+    return signals;
+  }
+
+  private BuildOutbox(receipt: ReceiptEntity, line: ReceiptLineEntity, businessReference: string): OutboxMessageEntity {
+    return new OutboxMessageEntity({
+      Id: randomUUID(),
+      MessageId: `ReceiptLineReceived:${receipt.Id}:${line.IdempotencyKey}`,
+      EventType: 'ReceiptLineReceived',
+      Version: '1.0',
+      BusinessReference: businessReference,
+      SourceSystem: 'LTA-WMS',
+      TargetSystem: 'INTEGRATION',
+      WarehouseContext: receipt.WarehouseCode ?? receipt.WarehouseId,
+      OwnerContext: receipt.OwnerCode ?? receipt.OwnerId,
+      EventTime: line.ReceivedAt,
+      CorrelationId: receipt.CoreFlowInstanceId,
+      CausationId: line.Id,
+      Payload: {
+        ReceiptId: receipt.Id,
+        ReceiptLineId: line.Id,
+        InboundPlanId: receipt.InboundPlanId,
+        InboundPlanLineId: line.InboundPlanLineId,
+        ActualQuantity: line.ActualQuantity,
+        ManualConfirm: line.ManualConfirm,
+        DiscrepancySignals: line.DiscrepancySignals,
+        ScanEvidence: line.ScanEvidenceJson,
+      },
+      Status: OutboxMessageStatus.Pending,
+      CreatedBy: line.ReceivedBy,
+    });
+  }
+}

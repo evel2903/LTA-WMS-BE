@@ -21,18 +21,29 @@ import {
 } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
 import { IntegrationModule } from '@modules/Integration/IntegrationModule';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
+import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
+import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCases/StartReceivingSessionUseCase';
 import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
 import {
   IInboundPlanRepository,
   INBOUND_PLAN_REPOSITORY,
 } from '@modules/Inbound/Application/Interfaces/IInboundPlanRepository';
+import {
+  IReceivingRepository,
+  RECEIVING_REPOSITORY,
+} from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
 import { InboundPlanOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanOrmEntity';
 import { InboundPlanLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanLineOrmEntity';
+import { ReceiptOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptOrmEntity';
+import { ReceiptLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptLineOrmEntity';
+import { ReceivingSessionOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceivingSessionOrmEntity';
 import { InboundPlanRepository } from '@modules/Inbound/Infrastructure/Persistence/Repositories/InboundPlanRepository';
+import { ReceivingRepository } from '@modules/Inbound/Infrastructure/Persistence/Repositories/ReceivingRepository';
 import { InboundPlanController } from '@modules/Inbound/Presentation/Controllers/InboundPlanController';
+import { ReceiptController } from '@modules/Inbound/Presentation/Controllers/ReceiptController';
 import { IOwnerRepository, OWNER_REPOSITORY } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { ISkuRepository, SKU_REPOSITORY } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { IUomRepository, UOM_REPOSITORY } from '@modules/MasterData/Application/Interfaces/IUomRepository';
@@ -54,7 +65,13 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([InboundPlanOrmEntity, InboundPlanLineOrmEntity]),
+    TypeOrmModule.forFeature([
+      InboundPlanOrmEntity,
+      InboundPlanLineOrmEntity,
+      ReceivingSessionOrmEntity,
+      ReceiptOrmEntity,
+      ReceiptLineOrmEntity,
+    ]),
     AccessControlModule,
     MasterDataModule,
     PartnerMasterModule,
@@ -62,9 +79,10 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
     IntegrationModule,
     WarehouseProfileModule,
   ],
-  controllers: [InboundPlanController],
+  controllers: [InboundPlanController, ReceiptController],
   providers: [
     { provide: INBOUND_PLAN_REPOSITORY, useClass: InboundPlanRepository },
+    { provide: RECEIVING_REPOSITORY, useClass: ReceivingRepository },
     {
       provide: CreateInboundPlanUseCase,
       useFactory: (
@@ -143,7 +161,57 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
         PERMISSION_CHECKER,
       ],
     },
+    {
+      provide: StartReceivingSessionUseCase,
+      useFactory: (
+        inboundPlans: IInboundPlanRepository,
+        receiving: IReceivingRepository,
+        readiness: ValidateReceivingReadinessUseCase,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) => new StartReceivingSessionUseCase(inboundPlans, receiving, readiness, audited, permissionChecker),
+      inject: [
+        INBOUND_PLAN_REPOSITORY,
+        RECEIVING_REPOSITORY,
+        ValidateReceivingReadinessUseCase,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
+    {
+      provide: ConfirmReceiptLineUseCase,
+      useFactory: (
+        inboundPlans: IInboundPlanRepository,
+        receiving: IReceivingRepository,
+        coreFlows: ICoreFlowRepository,
+        integrations: IIntegrationRepository,
+        reasonCatalog: IReasonCodeCatalog,
+        readiness: ValidateReceivingReadinessUseCase,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) =>
+        new ConfirmReceiptLineUseCase(
+          inboundPlans,
+          receiving,
+          coreFlows,
+          integrations,
+          reasonCatalog,
+          readiness,
+          audited,
+          permissionChecker,
+        ),
+      inject: [
+        INBOUND_PLAN_REPOSITORY,
+        RECEIVING_REPOSITORY,
+        CORE_FLOW_REPOSITORY,
+        INTEGRATION_REPOSITORY,
+        REASON_CODE_CATALOG,
+        ValidateReceivingReadinessUseCase,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
   ],
-  exports: [INBOUND_PLAN_REPOSITORY],
+  exports: [INBOUND_PLAN_REPOSITORY, RECEIVING_REPOSITORY],
 })
 export class InboundModule {}

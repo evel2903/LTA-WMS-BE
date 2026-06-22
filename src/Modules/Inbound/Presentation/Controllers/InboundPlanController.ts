@@ -10,10 +10,12 @@ import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
+import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCases/StartReceivingSessionUseCase';
 import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
 import { CreateInboundPlanRequest } from '@modules/Inbound/Presentation/Requests/CreateInboundPlanRequest';
 import { ListInboundPlansQuery } from '@modules/Inbound/Presentation/Requests/ListInboundPlansQuery';
 import { RecordGateInRequest } from '@modules/Inbound/Presentation/Requests/RecordGateInRequest';
+import { StartReceivingSessionRequest } from '@modules/Inbound/Presentation/Requests/StartReceivingSessionRequest';
 import { ValidateReceivingReadinessRequest } from '@modules/Inbound/Presentation/Requests/ValidateReceivingReadinessRequest';
 
 @UseGuards(JwtAuthGuard, PermissionGuard)
@@ -25,6 +27,7 @@ export class InboundPlanController {
     private readonly listInboundPlansUseCase: ListInboundPlansUseCase,
     private readonly recordGateInUseCase: RecordGateInUseCase,
     private readonly validateReceivingReadinessUseCase: ValidateReceivingReadinessUseCase,
+    private readonly startReceivingSessionUseCase: StartReceivingSessionUseCase,
   ) {}
 
   @Post()
@@ -69,5 +72,15 @@ export class InboundPlanController {
     @CurrentAuditContext() context: AuditContext,
   ) {
     return await this.validateReceivingReadinessUseCase.Execute({ Id: id, ...request }, context);
+  }
+
+  @Post(':id/receiving-sessions')
+  @RequirePermission(ActionCode.Create, ObjectType.Receipt)
+  public async StartReceivingSession(
+    @Param('id') id: string,
+    @Body() request: StartReceivingSessionRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.startReceivingSessionUseCase.Execute({ InboundPlanId: id, ...request }, context);
   }
 }

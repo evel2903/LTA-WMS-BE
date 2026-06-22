@@ -6,12 +6,15 @@ import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { REQUIRE_PERMISSION_KEY } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
+import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCases/StartReceivingSessionUseCase';
 import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
 import { InboundPlanController } from '@modules/Inbound/Presentation/Controllers/InboundPlanController';
+import { ReceiptController } from '@modules/Inbound/Presentation/Controllers/ReceiptController';
 import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 
 describe('E2E InboundPlanController (no DB)', () => {
@@ -22,10 +25,12 @@ describe('E2E InboundPlanController (no DB)', () => {
   const listExecute = jest.fn();
   const gateInExecute = jest.fn();
   const readinessExecute = jest.fn();
+  const startReceivingExecute = jest.fn();
+  const confirmReceiptLineExecute = jest.fn();
 
   const buildModule = () =>
     Test.createTestingModule({
-      controllers: [InboundPlanController],
+      controllers: [InboundPlanController, ReceiptController],
       providers: [
         Reflector,
         { provide: CreateInboundPlanUseCase, useValue: { Execute: createExecute } },
@@ -33,6 +38,8 @@ describe('E2E InboundPlanController (no DB)', () => {
         { provide: ListInboundPlansUseCase, useValue: { Execute: listExecute } },
         { provide: RecordGateInUseCase, useValue: { Execute: gateInExecute } },
         { provide: ValidateReceivingReadinessUseCase, useValue: { Execute: readinessExecute } },
+        { provide: StartReceivingSessionUseCase, useValue: { Execute: startReceivingExecute } },
+        { provide: ConfirmReceiptLineUseCase, useValue: { Execute: confirmReceiptLineExecute } },
       ],
     });
 
@@ -54,9 +61,11 @@ describe('E2E InboundPlanController (no DB)', () => {
     listExecute.mockReset();
     gateInExecute.mockReset();
     readinessExecute.mockReset();
+    startReceivingExecute.mockReset();
+    confirmReceiptLineExecute.mockReset();
   });
 
-  it('declares InboundPlan permissions on read, create, update and readiness endpoints', () => {
+  it('declares InboundPlan and Receipt permissions on inbound and receiving endpoints', () => {
     expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, InboundPlanController.prototype.Create)).toMatchObject({
       Action: ActionCode.Create,
       ObjectType: ObjectType.InboundPlan,
@@ -78,6 +87,16 @@ describe('E2E InboundPlanController (no DB)', () => {
     ).toMatchObject({
       Action: ActionCode.Read,
       ObjectType: ObjectType.InboundPlan,
+    });
+    expect(
+      Reflect.getMetadata(REQUIRE_PERMISSION_KEY, InboundPlanController.prototype.StartReceivingSession),
+    ).toMatchObject({
+      Action: ActionCode.Create,
+      ObjectType: ObjectType.Receipt,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ReceiptController.prototype.ConfirmReceiptLine)).toMatchObject({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.Receipt,
     });
   });
 
@@ -131,10 +150,12 @@ describe('E2E InboundPlanController (no DB)', () => {
     });
   });
 
-  it('GET detail, gate-in and readiness endpoints call use cases', async () => {
+  it('GET detail, gate-in, readiness and receiving endpoints call use cases', async () => {
     getExecute.mockResolvedValue({ Id: 'inbound-plan-1' });
     gateInExecute.mockResolvedValue({ Id: 'inbound-plan-1', GateInStatus: 'Recorded' });
     readinessExecute.mockResolvedValue({ Allowed: true, Blocked: false });
+    startReceivingExecute.mockResolvedValue({ Id: 'session-1', ReceiptId: 'receipt-1' });
+    confirmReceiptLineExecute.mockResolvedValue({ Id: 'receipt-line-1', ReceiptId: 'receipt-1' });
 
     await request(app.getHttpServer()).get('/inbound-plans/inbound-plan-1').expect(200);
     await request(app.getHttpServer())
@@ -145,6 +166,19 @@ describe('E2E InboundPlanController (no DB)', () => {
       .post('/inbound-plans/inbound-plan-1/receiving-readiness')
       .send({ AttemptOverride: false })
       .expect(201);
+    await request(app.getHttpServer())
+      .post('/inbound-plans/inbound-plan-1/receiving-sessions')
+      .send({ SessionKey: 'dock-1:user-1', DeviceCode: 'rf-01' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/receipts/receipt-1/lines')
+      .send({
+        InboundPlanLineId: 'plan-line-1',
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-1',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      })
+      .expect(201);
 
     expect(getExecute).toHaveBeenCalledWith('inbound-plan-1', 'test-admin');
     expect(gateInExecute).toHaveBeenCalledWith(
@@ -153,6 +187,18 @@ describe('E2E InboundPlanController (no DB)', () => {
     );
     expect(readinessExecute).toHaveBeenCalledWith(
       expect.objectContaining({ Id: 'inbound-plan-1', AttemptOverride: false }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(startReceivingExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ InboundPlanId: 'inbound-plan-1', SessionKey: 'dock-1:user-1' }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(confirmReceiptLineExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ReceiptId: 'receipt-1',
+        InboundPlanLineId: 'plan-line-1',
+        ActualQuantity: 12,
+      }),
       expect.objectContaining({ ActorUserId: 'test-admin' }),
     );
   });

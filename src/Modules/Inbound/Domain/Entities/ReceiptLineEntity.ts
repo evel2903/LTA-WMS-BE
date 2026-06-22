@@ -1,0 +1,78 @@
+import { ReceiptLineDiscrepancySignal } from '@modules/Inbound/Domain/Enums/ReceiptLineDiscrepancySignal';
+import { ReceiptLineStatus } from '@modules/Inbound/Domain/Enums/ReceiptLineStatus';
+
+export class ReceiptLineEntity {
+  public readonly Id: string;
+  public ReceiptId: string;
+  public InboundPlanId: string;
+  public InboundPlanLineId: string;
+  public LineNumber: number;
+  public SkuId: string;
+  public SkuCode: string | null;
+  public UomId: string;
+  public UomCode: string | null;
+  public ExpectedQuantity: number;
+  public ActualQuantity: number;
+  public Status: ReceiptLineStatus;
+  public ManualConfirm: boolean;
+  public ReasonCode: string | null;
+  public ReasonCodeId: string | null;
+  public ReasonNote: string | null;
+  public ScanEvidenceJson: Record<string, unknown> | null;
+  public DiscrepancySignals: ReceiptLineDiscrepancySignal[];
+  public IdempotencyKey: string;
+  public ReceivedAt: Date;
+  public ReceivedBy: string | null;
+  public readonly CreatedAt: Date;
+  public UpdatedAt: Date;
+
+  constructor(params: {
+    Id: string;
+    ReceiptId: string;
+    InboundPlanId: string;
+    InboundPlanLineId: string;
+    LineNumber: number;
+    SkuId: string;
+    SkuCode?: string | null;
+    UomId: string;
+    UomCode?: string | null;
+    ExpectedQuantity: number;
+    ActualQuantity: number;
+    Status?: ReceiptLineStatus;
+    ManualConfirm?: boolean;
+    ReasonCode?: string | null;
+    ReasonCodeId?: string | null;
+    ReasonNote?: string | null;
+    ScanEvidenceJson?: Record<string, unknown> | null;
+    DiscrepancySignals?: ReceiptLineDiscrepancySignal[];
+    IdempotencyKey: string;
+    ReceivedAt: Date;
+    ReceivedBy?: string | null;
+    CreatedAt: Date;
+    UpdatedAt: Date;
+  }) {
+    this.Id = params.Id;
+    this.ReceiptId = params.ReceiptId;
+    this.InboundPlanId = params.InboundPlanId;
+    this.InboundPlanLineId = params.InboundPlanLineId;
+    this.LineNumber = params.LineNumber;
+    this.SkuId = params.SkuId;
+    this.SkuCode = params.SkuCode ?? null;
+    this.UomId = params.UomId;
+    this.UomCode = params.UomCode ?? null;
+    this.ExpectedQuantity = params.ExpectedQuantity;
+    this.ActualQuantity = params.ActualQuantity;
+    this.Status = params.Status ?? ReceiptLineStatus.Received;
+    this.ManualConfirm = params.ManualConfirm ?? false;
+    this.ReasonCode = params.ReasonCode ?? null;
+    this.ReasonCodeId = params.ReasonCodeId ?? null;
+    this.ReasonNote = params.ReasonNote ?? null;
+    this.ScanEvidenceJson = params.ScanEvidenceJson ?? null;
+    this.DiscrepancySignals = params.DiscrepancySignals ?? [];
+    this.IdempotencyKey = params.IdempotencyKey;
+    this.ReceivedAt = params.ReceivedAt;
+    this.ReceivedBy = params.ReceivedBy ?? null;
+    this.CreatedAt = params.CreatedAt;
+    this.UpdatedAt = params.UpdatedAt;
+  }
+}

@@ -1,5 +1,9 @@
-import { BusinessRuleException, ConflictException } from '@common/Exceptions/AppException';
+import { BusinessRuleException, ConflictException, ForbiddenAppException } from '@common/Exceptions/AppException';
 import { SystemAuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
+import {
+  PermissionCheckContext,
+  PermissionDecision,
+} from '@modules/AccessControl/Application/DTOs/PermissionCheckContext';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
@@ -8,15 +12,23 @@ import { CoreFlowStepCode } from '@modules/CoreFlow/Domain/Enums/CoreFlowStepCod
 import { WorkflowMilestoneStatus } from '@modules/CoreFlow/Domain/Enums/WorkflowMilestoneStatus';
 import { InboundPlanDto } from '@modules/Inbound/Application/DTOs/InboundPlanDto';
 import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/IInboundPlanRepository';
+import { IReceivingRepository } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
+import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
+import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCases/StartReceivingSessionUseCase';
 import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
 import { InboundPlanEntity } from '@modules/Inbound/Domain/Entities/InboundPlanEntity';
 import { InboundPlanLineEntity } from '@modules/Inbound/Domain/Entities/InboundPlanLineEntity';
+import { ReceiptEntity } from '@modules/Inbound/Domain/Entities/ReceiptEntity';
+import { ReceiptLineEntity } from '@modules/Inbound/Domain/Entities/ReceiptLineEntity';
+import { ReceivingSessionEntity } from '@modules/Inbound/Domain/Entities/ReceivingSessionEntity';
 import { InboundGateInStatus } from '@modules/Inbound/Domain/Enums/InboundGateInStatus';
 import { InboundPlanDocumentStatus } from '@modules/Inbound/Domain/Enums/InboundPlanDocumentStatus';
+import { ReceiptLineDiscrepancySignal } from '@modules/Inbound/Domain/Enums/ReceiptLineDiscrepancySignal';
+import { ReceiptLineStatus } from '@modules/Inbound/Domain/Enums/ReceiptLineStatus';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 import { OwnerEntity } from '@modules/MasterData/Domain/Entities/OwnerEntity';
 import { PartnerEntity } from '@modules/PartnerMaster/Domain/Entities/PartnerEntity';
@@ -129,6 +141,73 @@ class FakeInboundRepository implements IInboundPlanRepository {
   }
 }
 
+class FakeReceivingRepository implements IReceivingRepository {
+  public Sessions: ReceivingSessionEntity[] = [];
+  public Receipts: ReceiptEntity[] = [];
+  public Lines: ReceiptLineEntity[] = [];
+
+  public async CreateSessionWithReceipt(
+    session: ReceivingSessionEntity,
+    receipt: ReceiptEntity,
+  ): Promise<{ Session: ReceivingSessionEntity; Receipt: ReceiptEntity }> {
+    const existingReceiptIndex = this.Receipts.findIndex((item) => item.Id === receipt.Id);
+    if (existingReceiptIndex >= 0) this.Receipts[existingReceiptIndex] = receipt;
+    else this.Receipts.push(receipt);
+    if (
+      this.Sessions.some(
+        (item) => item.InboundPlanId === session.InboundPlanId && item.SessionKey === session.SessionKey,
+      )
+    ) {
+      throw new ConflictException('Receiving session already exists');
+    }
+    this.Sessions.push(session);
+    return { Session: session, Receipt: receipt };
+  }
+
+  public async FindOpenSessionByPlanAndKey(
+    inboundPlanId: string,
+    sessionKey: string,
+  ): Promise<{ Session: ReceivingSessionEntity; Receipt: ReceiptEntity } | null> {
+    const session = this.Sessions.find(
+      (item) => item.InboundPlanId === inboundPlanId && item.SessionKey === sessionKey,
+    );
+    if (!session) return null;
+    const receipt = this.Receipts.find((item) => item.Id === session.ReceiptId);
+    if (!receipt) return null;
+    return { Session: session, Receipt: receipt };
+  }
+
+  public async FindReceiptById(id: string): Promise<ReceiptEntity | null> {
+    return this.Receipts.find((item) => item.Id === id) ?? null;
+  }
+
+  public async FindReceiptByInboundPlanId(inboundPlanId: string): Promise<ReceiptEntity | null> {
+    return this.Receipts.find((item) => item.InboundPlanId === inboundPlanId) ?? null;
+  }
+
+  public async UpdateReceipt(receipt: ReceiptEntity): Promise<ReceiptEntity> {
+    const index = this.Receipts.findIndex((item) => item.Id === receipt.Id);
+    if (index >= 0) this.Receipts[index] = receipt;
+    else this.Receipts.push(receipt);
+    return receipt;
+  }
+
+  public async CreateReceiptLine(line: ReceiptLineEntity): Promise<ReceiptLineEntity> {
+    if (this.Lines.some((item) => item.ReceiptId === line.ReceiptId && item.IdempotencyKey === line.IdempotencyKey)) {
+      throw new ConflictException('Receipt line already exists');
+    }
+    this.Lines.push(line);
+    return line;
+  }
+
+  public async FindReceiptLineByIdempotencyKey(
+    receiptId: string,
+    idempotencyKey: string,
+  ): Promise<ReceiptLineEntity | null> {
+    return this.Lines.find((item) => item.ReceiptId === receiptId && item.IdempotencyKey === idempotencyKey) ?? null;
+  }
+}
+
 const supplier = () =>
   new PartnerEntity({
     Id: 'supplier-1',
@@ -219,6 +298,7 @@ const createRequest = () => ({
 
 const repoBundle = () => {
   const inbound = new FakeInboundRepository();
+  const receiving = new FakeReceivingRepository();
   const partners = { FindById: jest.fn(async () => supplier()) };
   const owners = { FindById: jest.fn(async () => owner()) };
   const warehouses = { FindById: jest.fn(async () => warehouse()) };
@@ -255,7 +335,7 @@ const repoBundle = () => {
     })),
   };
   const permissionChecker = {
-    Check: jest.fn(async () => ({ Allowed: true })),
+    Check: jest.fn<Promise<PermissionDecision>, [PermissionCheckContext]>(async () => ({ Allowed: true })),
   };
   const auditEntries: unknown[] = [];
   const audited = {
@@ -268,6 +348,7 @@ const repoBundle = () => {
   };
   return {
     inbound,
+    receiving,
     partners,
     owners,
     warehouses,
@@ -309,6 +390,27 @@ const readinessUseCase = (bundle: ReturnType<typeof repoBundle>) =>
     bundle.inbound,
     bundle.profiles as unknown as IWarehouseProfileRepository,
     bundle.reasonCatalog,
+    bundle.audited as unknown as AuditedTransaction,
+    bundle.permissionChecker,
+  );
+
+const startReceivingUseCase = (bundle: ReturnType<typeof repoBundle>) =>
+  new StartReceivingSessionUseCase(
+    bundle.inbound,
+    bundle.receiving,
+    readinessUseCase(bundle),
+    bundle.audited as unknown as AuditedTransaction,
+    bundle.permissionChecker,
+  );
+
+const confirmReceiptLineUseCase = (bundle: ReturnType<typeof repoBundle>) =>
+  new ConfirmReceiptLineUseCase(
+    bundle.inbound,
+    bundle.receiving,
+    bundle.coreFlows as unknown as ICoreFlowRepository,
+    bundle.integrations as unknown as IIntegrationRepository,
+    bundle.reasonCatalog,
+    readinessUseCase(bundle),
     bundle.audited as unknown as AuditedTransaction,
     bundle.permissionChecker,
   );
@@ -527,5 +629,218 @@ describe('Inbound plan use cases', () => {
 
     expect(defaultPage.Meta.PageSize).toBe(50);
     expect(clampedPage.Meta.PageSize).toBe(100);
+  });
+
+  it('starts receiving session and receipt idempotently after readiness is allowed', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const useCase = startReceivingUseCase(bundle);
+
+    const first = await useCase.Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1', DeviceCode: 'rf-01' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const duplicate = await useCase.Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1', DeviceCode: 'rf-01' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(first.ReceiptNumber).toBe('ASN-10001-RCPT');
+    expect(duplicate.IsDuplicate).toBe(true);
+    expect(bundle.receiving.Sessions).toHaveLength(1);
+    expect(bundle.receiving.Receipts).toHaveLength(1);
+    expect(bundle.permissionChecker.Check).toHaveBeenCalledWith(
+      expect.objectContaining({ Action: ActionCode.Create, ObjectType: ObjectType.Receipt }),
+    );
+    expect(bundle.audited.Entries[bundle.audited.Entries.length - 1]).toMatchObject({
+      Action: ActionCode.Create,
+      ObjectType: ObjectType.Receipt,
+      ReferenceType: 'ReceivingSession',
+    });
+  });
+
+  it('records scan-confirmed receipt line with scan evidence, outbox, CoreFlow milestone and idempotency', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const planLine = created.Lines[0];
+
+    const useCase = confirmReceiptLineUseCase(bundle);
+    const line = await useCase.Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: planLine.Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-1',
+        ScanEvidence: {
+          RawValue: '01012345678901281726010110LOT-A',
+          ScanEventId: 'scan-event-1',
+          ScanResult: 'Accepted',
+          ResolvedSkuId: 'sku-1',
+          ResolvedUomId: 'uom-1',
+        },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const duplicate = await useCase.Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: planLine.Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-1',
+        ScanEvidence: { RawValue: 'retry-scan', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(line.Status).toBe(ReceiptLineStatus.Received);
+    expect(line.ActualQuantity).toBe(12);
+    expect(line.ReceivedBy).toBe('user-1');
+    expect(line.ScanEvidenceJson).toMatchObject({ ScanEventId: 'scan-event-1', RawValue: expect.any(String) });
+    expect(duplicate.IsDuplicate).toBe(true);
+    expect(bundle.receiving.Lines).toHaveLength(1);
+    expect(bundle.integrations.Outbox).toHaveLength(2);
+    expect(bundle.integrations.Outbox[1]).toMatchObject({ EventType: 'ReceiptLineReceived' });
+    expect(bundle.coreFlows.CreateMilestone).toHaveBeenCalledWith(
+      expect.objectContaining({ StepCode: CoreFlowStepCode.ReceiptLineReceived }),
+      undefined,
+    );
+  });
+
+  it('requires reason and override permission for manual receipt confirm and records discrepancy signal', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const planLine = created.Lines[0];
+    const useCase = confirmReceiptLineUseCase(bundle);
+
+    await expect(
+      useCase.Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          InboundPlanLineId: planLine.Id,
+          ActualQuantity: 10,
+          ManualConfirm: true,
+          IdempotencyKey: 'manual-line-missing-reason',
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    const line = await useCase.Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: planLine.Id,
+        ActualQuantity: 10,
+        ManualConfirm: true,
+        ReasonCode: 'RC-V1-MANUAL-SCAN',
+        ReasonNote: 'Barcode unreadable',
+        IdempotencyKey: 'manual-line-1',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(line.Status).toBe(ReceiptLineStatus.Discrepancy);
+    expect(line.DiscrepancySignals).toContain(ReceiptLineDiscrepancySignal.QuantityVariance);
+    expect(line.ReasonCodeId).toBe('reason-1');
+    expect(bundle.permissionChecker.Check).toHaveBeenCalledWith(
+      expect.objectContaining({ Action: ActionCode.Override, ObjectType: ObjectType.Receipt }),
+    );
+    expect(bundle.audited.Entries[bundle.audited.Entries.length - 1]).toMatchObject({
+      Action: ActionCode.Override,
+      ObjectType: ObjectType.Receipt,
+      ReasonCodeId: 'reason-1',
+      ReferenceType: 'ReceiptLine',
+    });
+  });
+
+  it('records wrong SKU discrepancy when scan evidence resolves away from the expected plan line', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const planLine = created.Lines[0];
+
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: planLine.Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'wrong-sku-scan-1',
+        ScanEvidence: {
+          RawValue: 'wrong-sku-barcode',
+          ScanResult: 'Accepted',
+          ResolvedSkuId: 'sku-other',
+          ResolvedUomId: 'uom-1',
+        },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(line.Status).toBe(ReceiptLineStatus.Discrepancy);
+    expect(line.DiscrepancySignals).toContain(ReceiptLineDiscrepancySignal.WrongSku);
+    expect(bundle.integrations.Outbox[bundle.integrations.Outbox.length - 1]).toMatchObject({
+      EventType: 'ReceiptLineReceived',
+      Payload: expect.objectContaining({
+        DiscrepancySignals: expect.arrayContaining([ReceiptLineDiscrepancySignal.WrongSku]),
+      }),
+    });
+  });
+
+  it('rejects receipt line confirm when Receipt Update permission is denied without side effects', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const planLine = created.Lines[0];
+    const outboxBefore = bundle.integrations.Outbox.length;
+    bundle.permissionChecker.Check.mockImplementation(async (context) =>
+      context.ObjectType === ObjectType.Receipt && context.Action === ActionCode.Update
+        ? { Allowed: false, Reason: 'OUT_OF_SCOPE' }
+        : { Allowed: true },
+    );
+
+    await expect(
+      confirmReceiptLineUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          InboundPlanLineId: planLine.Id,
+          ActualQuantity: 12,
+          IdempotencyKey: 'denied-line-1',
+          ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(ForbiddenAppException);
+
+    expect(bundle.receiving.Lines).toHaveLength(0);
+    expect(bundle.integrations.Outbox).toHaveLength(outboxBefore);
+    expect(bundle.coreFlows.CreateMilestone).not.toHaveBeenCalledWith(
+      expect.objectContaining({ StepCode: CoreFlowStepCode.ReceiptLineReceived }),
+      expect.anything(),
+    );
+  });
+
+  it('blocks receiving session and line confirmation when gate-in readiness is blocked', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundGateInRequired: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+
+    await expect(
+      startReceivingUseCase(bundle).Execute(
+        { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
   });
 });
