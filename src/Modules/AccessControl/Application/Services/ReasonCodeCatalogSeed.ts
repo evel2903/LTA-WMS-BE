@@ -20,6 +20,25 @@ const MASTER_OBJECTS: ObjectType[] = [
 ];
 
 const CONFIG_OBJECTS: ObjectType[] = [ObjectType.WarehouseProfile, ObjectType.Rule];
+const V1_DOCUMENT_OBJECTS: ObjectType[] = [
+  ObjectType.InboundPlan,
+  ObjectType.Receipt,
+  ObjectType.OutboundOrder,
+  ObjectType.Shipment,
+  ObjectType.Load,
+  ObjectType.GoodsIssue,
+];
+const V1_INVENTORY_OBJECTS: ObjectType[] = [
+  ObjectType.InventoryMovement,
+  ObjectType.CycleCount,
+  ObjectType.ReconciliationRun,
+];
+const V1_LABEL_OBJECTS: ObjectType[] = [ObjectType.LabelTemplate, ObjectType.PrintJob, ObjectType.Package];
+const V1_INTEGRATION_OBJECTS: ObjectType[] = [
+  ObjectType.IntegrationMessage,
+  ObjectType.DeadLetterMessage,
+  ObjectType.ReconciliationRun,
+];
 
 export type ReasonCodeCatalogEntry = {
   ReasonCode: string;
@@ -123,6 +142,84 @@ export const ReasonCodeCatalogEntries: ReadonlyArray<ReasonCodeCatalogEntry> = [
     Description: 'Integration / external system manual fix.',
     AppliesToActions: [ActionCode.Create, ActionCode.Update],
     AppliesToObjects: [ObjectType.Sku, ObjectType.Owner],
+  },
+  {
+    ReasonCode: 'RC-V1-CANCEL',
+    ReasonGroup: ReasonGroup.ManualFix,
+    Description: 'Cancel a V1 operational document or task.',
+    AppliesToActions: [ActionCode.DeleteCancel],
+    AppliesToObjects: V1_DOCUMENT_OBJECTS,
+  },
+  {
+    ReasonCode: 'RC-V1-DISCREPANCY',
+    ReasonGroup: ReasonGroup.ManualFix,
+    Description: 'Record inbound, QC, inventory or outbound discrepancy evidence.',
+    AppliesToActions: [ActionCode.Create, ActionCode.Update],
+    AppliesToObjects: [
+      ObjectType.Receipt,
+      ObjectType.QcTask,
+      ObjectType.InventoryMovement,
+      ObjectType.OutboundOrder,
+      ObjectType.Allocation,
+      ObjectType.PickTask,
+      ObjectType.Package,
+    ],
+    EvidenceRequired: true,
+  },
+  {
+    ReasonCode: 'RC-V1-HOLD-RELEASE',
+    ReasonGroup: ReasonGroup.HoldRelease,
+    Description: 'Place or release an operational hold during V1 execution.',
+    AppliesToActions: [ActionCode.Update],
+    AppliesToObjects: [ObjectType.InventoryMovement, ObjectType.CycleCount, ObjectType.Package, ObjectType.Shipment],
+  },
+  {
+    ReasonCode: 'RC-V1-ADJUSTMENT',
+    ReasonGroup: ReasonGroup.InventoryAdjustment,
+    Description: 'Adjust V1 movement, count or reconciliation quantities.',
+    AppliesToActions: [ActionCode.Adjust],
+    AppliesToObjects: V1_INVENTORY_OBJECTS,
+    EvidenceRequired: true,
+  },
+  {
+    ReasonCode: 'RC-V1-OVERRIDE',
+    ReasonGroup: ReasonGroup.RuleOverride,
+    Description: 'Override a V1 task, allocation, routing or posting control.',
+    AppliesToActions: [ActionCode.Override],
+    AppliesToObjects: [
+      ObjectType.Allocation,
+      ObjectType.QcTask,
+      ObjectType.PutawayTask,
+      ObjectType.PickTask,
+      ObjectType.GoodsIssue,
+      ObjectType.IntegrationMessage,
+    ],
+    EvidenceRequired: true,
+    ApprovalRequired: true,
+  },
+  {
+    ReasonCode: 'RC-V1-REPRINT',
+    ReasonGroup: ReasonGroup.ManualFix,
+    Description: 'Reprint V1 label, package, shipment or loading document.',
+    AppliesToActions: [ActionCode.Reprint],
+    AppliesToObjects: V1_LABEL_OBJECTS,
+  },
+  {
+    ReasonCode: 'RC-V1-DEAD-LETTER-FIX',
+    ReasonGroup: ReasonGroup.Integration,
+    Description: 'Manually fix an integration dead-letter or reconciliation record.',
+    AppliesToActions: [ActionCode.Update, ActionCode.Override],
+    AppliesToObjects: V1_INTEGRATION_OBJECTS,
+    EvidenceRequired: true,
+  },
+  {
+    ReasonCode: 'RC-V1-GOODS-ISSUE-CORRECTION',
+    ReasonGroup: ReasonGroup.InventoryAdjustment,
+    Description: 'Correct goods issue, loading or inventory movement posting.',
+    AppliesToActions: [ActionCode.Update, ActionCode.Adjust],
+    AppliesToObjects: [ObjectType.GoodsIssue, ObjectType.Load, ObjectType.Shipment, ObjectType.InventoryMovement],
+    EvidenceRequired: true,
+    ApprovalRequired: true,
   },
 ];
 

@@ -25,4 +25,28 @@ export enum ObjectType {
   OverrideLog = 'OverrideLog',
   AuditLog = 'AuditLog',
   ExceptionCase = 'ExceptionCase',
+
+  // V1 MVP Core Flow permission objects. These seed RBAC decisions for future
+  // V1 modules without creating the operational tables in this story.
+  Partner = 'Partner',
+  InboundPlan = 'InboundPlan',
+  Receipt = 'Receipt',
+  QcTask = 'QcTask',
+  PutawayTask = 'PutawayTask',
+  InventoryMovement = 'InventoryMovement',
+  CycleCount = 'CycleCount',
+  ReplenishmentTask = 'ReplenishmentTask',
+  OutboundOrder = 'OutboundOrder',
+  Allocation = 'Allocation',
+  PickTask = 'PickTask',
+  Package = 'Package',
+  Shipment = 'Shipment',
+  Load = 'Load',
+  GoodsIssue = 'GoodsIssue',
+  MobileTask = 'MobileTask',
+  LabelTemplate = 'LabelTemplate',
+  PrintJob = 'PrintJob',
+  IntegrationMessage = 'IntegrationMessage',
+  DeadLetterMessage = 'DeadLetterMessage',
+  ReconciliationRun = 'ReconciliationRun',
 }

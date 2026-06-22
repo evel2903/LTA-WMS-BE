@@ -127,6 +127,49 @@ describe('Warehouse profile validation', () => {
     expect(created.StrategyPolicy).toEqual({ PutawayStrategy: 'DIRECTED' });
   });
 
+  it('accepts a configured goodsIssueTrigger strategy policy on create', async () => {
+    const { create } = Build();
+    const created = await create.Execute({
+      ...ValidInput(),
+      StrategyPolicy: { goodsIssueTrigger: 'at_gate_out' },
+    });
+    expect(created.StrategyPolicy).toEqual({ goodsIssueTrigger: 'at_gate_out' });
+  });
+
+  it('rejects an invalid goodsIssueTrigger strategy policy on create', async () => {
+    const { create } = Build();
+    await expect(
+      create.Execute({
+        ...ValidInput(),
+        StrategyPolicy: { goodsIssueTrigger: 'goods_issue_posted' },
+      }),
+    ).rejects.toBeInstanceOf(BusinessRuleException);
+    await expect(
+      create.Execute({
+        ...ValidInput(),
+        ProfileCode: 'WP-BLANK',
+        StrategyPolicy: { goodsIssueTrigger: '' },
+      }),
+    ).rejects.toBeInstanceOf(BusinessRuleException);
+  });
+
+  it('PATCH rejects an invalid goodsIssueTrigger strategy policy before persisting it', async () => {
+    const { create, update, profiles } = Build();
+    const created = await create.Execute(ValidInput());
+
+    await expect(
+      update.Execute({
+        Id: created.Id,
+        ProfileName: 'Should Not Persist',
+        StrategyPolicy: { goodsIssueTrigger: 'goods_issue_posted' },
+      }),
+    ).rejects.toBeInstanceOf(BusinessRuleException);
+
+    const stored = await profiles.FindById(created.Id);
+    expect(stored!.ProfileName).toBe('Profile 1');
+    expect(stored!.StrategyPolicy).toEqual({});
+  });
+
   it('PATCH rejects null for a business-required field (ProfileName)', async () => {
     const { create, update } = Build();
     const created = await create.Execute(ValidInput());

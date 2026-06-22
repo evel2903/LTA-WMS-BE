@@ -72,6 +72,7 @@ export class UpdateWarehouseProfileUseCase {
     );
 
     this.RejectNullRequired(request);
+    this.ValidatePolicyUpdates(request);
     await this.ApplyHeader(request, profile);
     this.ApplyScope(request, profile);
     // Re-assert minimum scope readiness against the post-update profile state
@@ -188,6 +189,23 @@ export class UpdateWarehouseProfileUseCase {
     for (const key of keys) {
       if (request[key] !== undefined) {
         profile[key] = this.policyValidator.ValidatePolicyShape(key, request[key]);
+      }
+    }
+  }
+
+  private ValidatePolicyUpdates(request: UpdateWarehouseProfileDto): void {
+    const keys: ProfilePolicyKey[] = [
+      'CapabilityFlags',
+      'StrategyPolicy',
+      'ThresholdPolicy',
+      'ApprovalPolicy',
+      'LabelDevicePolicy',
+      'IntegrationPolicy',
+      'AuditPolicy',
+    ];
+    for (const key of keys) {
+      if (request[key] !== undefined) {
+        this.policyValidator.ValidatePolicyShape(key, request[key]);
       }
     }
   }

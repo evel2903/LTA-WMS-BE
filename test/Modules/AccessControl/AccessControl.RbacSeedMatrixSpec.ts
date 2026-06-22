@@ -1,4 +1,5 @@
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
 import { RoleStatus } from '@modules/AccessControl/Domain/Enums/RoleStatus';
 import {
@@ -20,6 +21,30 @@ const seedFreshRepositories = async () => {
   await SeedAccessControlRbac(roles, permissions, rolePermissions);
   return { roles, permissions, rolePermissions };
 };
+
+const V1_REQUIRED_OBJECTS: ObjectType[] = [
+  ObjectType.Partner,
+  ObjectType.InboundPlan,
+  ObjectType.Receipt,
+  ObjectType.QcTask,
+  ObjectType.PutawayTask,
+  ObjectType.InventoryMovement,
+  ObjectType.CycleCount,
+  ObjectType.ReplenishmentTask,
+  ObjectType.OutboundOrder,
+  ObjectType.Allocation,
+  ObjectType.PickTask,
+  ObjectType.Package,
+  ObjectType.Shipment,
+  ObjectType.Load,
+  ObjectType.GoodsIssue,
+  ObjectType.MobileTask,
+  ObjectType.LabelTemplate,
+  ObjectType.PrintJob,
+  ObjectType.IntegrationMessage,
+  ObjectType.DeadLetterMessage,
+  ObjectType.ReconciliationRun,
+];
 
 describe('Access control RBAC seed and matrix', () => {
   it('catalog defines exactly the six core V0 roles', () => {
@@ -89,5 +114,22 @@ describe('Access control RBAC seed and matrix', () => {
     const operatorGrants = await rolePermissions.FindByRoleId(operator!.Id);
     expect(operatorGrants.length).toBeGreaterThan(0);
     expect(operatorGrants.length).toBeLessThan(adminGrants.length);
+  });
+
+  it('extends the seed catalog with V1 objects without adding non-standard actions', async () => {
+    expect(Object.values(ActionCode)).toHaveLength(9);
+    const knownActions = new Set(Object.values(ActionCode));
+    expect(PERMISSION_CATALOG.every((permission) => knownActions.has(permission.Action))).toBe(true);
+
+    const catalogObjects = new Set(PERMISSION_CATALOG.map((permission) => permission.ObjectType));
+    for (const objectType of V1_REQUIRED_OBJECTS) {
+      expect(catalogObjects.has(objectType)).toBe(true);
+    }
+
+    const { permissions } = await seedFreshRepositories();
+    const seededObjects = new Set((await permissions.List(0, 10000)).Items.map((permission) => permission.ObjectType));
+    for (const objectType of V1_REQUIRED_OBJECTS) {
+      expect(seededObjects.has(objectType)).toBe(true);
+    }
   });
 });
