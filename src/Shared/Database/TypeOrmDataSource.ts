@@ -39,6 +39,7 @@ import { ApprovalRequestOrmEntity } from '@modules/AccessControl/Infrastructure/
 import { ControlExceptionCatalogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ControlExceptionCatalogOrmEntity';
 import { ValidationRuleCatalogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ValidationRuleCatalogOrmEntity';
 import { ExceptionCaseOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ExceptionCaseOrmEntity';
+import { PartnerOrmEntity } from '@modules/PartnerMaster/Infrastructure/Persistence/Entities/PartnerOrmEntity';
 
 const env = GetEnv();
 
@@ -88,6 +89,7 @@ export default new DataSource({
     ControlExceptionCatalogOrmEntity,
     ValidationRuleCatalogOrmEntity,
     ExceptionCaseOrmEntity,
+    PartnerOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',
