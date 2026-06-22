@@ -25,6 +25,7 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
 import { CoreFlowModule } from '@modules/CoreFlow/CoreFlowModule';
 import { IntegrationModule } from '@modules/Integration/IntegrationModule';
 import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule';
+import { BarcodeLabelModule } from '@modules/BarcodeLabel/BarcodeLabelModule';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
     CoreFlowModule,
     IntegrationModule,
     TaskExecutionModule,
+    BarcodeLabelModule,
     WarehouseProfileModule,
     AccessControlModule,
     AuthenticationModule,
