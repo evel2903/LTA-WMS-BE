@@ -48,6 +48,10 @@ import { InterfaceMessageOrmEntity } from '@modules/Integration/Infrastructure/P
 import { OutboxMessageOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/OutboxMessageOrmEntity';
 import { MobileTaskOrmEntity } from '@modules/TaskExecution/Infrastructure/Persistence/Entities/MobileTaskOrmEntity';
 import { MobileScanEventOrmEntity } from '@modules/TaskExecution/Infrastructure/Persistence/Entities/MobileScanEventOrmEntity';
+import { LabelTemplateOrmEntity } from '@modules/BarcodeLabel/Infrastructure/Persistence/Entities/LabelTemplateOrmEntity';
+import { LabelTemplateVersionOrmEntity } from '@modules/BarcodeLabel/Infrastructure/Persistence/Entities/LabelTemplateVersionOrmEntity';
+import { PrintJobOrmEntity } from '@modules/BarcodeLabel/Infrastructure/Persistence/Entities/PrintJobOrmEntity';
+import { ReprintRequestOrmEntity } from '@modules/BarcodeLabel/Infrastructure/Persistence/Entities/ReprintRequestOrmEntity';
 
 const env = GetEnv();
 
@@ -106,6 +110,10 @@ export default new DataSource({
     OutboxMessageOrmEntity,
     MobileTaskOrmEntity,
     MobileScanEventOrmEntity,
+    LabelTemplateOrmEntity,
+    LabelTemplateVersionOrmEntity,
+    PrintJobOrmEntity,
+    ReprintRequestOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

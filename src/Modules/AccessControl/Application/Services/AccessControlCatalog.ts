@@ -186,6 +186,8 @@ const SUPERVISOR_GRANTS: RolePermissionGrant[] = [
   ...grant(RoleCode.WarehouseSupervisor, ActionCode.Create, [
     ObjectType.CoreFlow,
     ObjectType.QcTask,
+    ObjectType.LabelTemplate,
+    ObjectType.PrintJob,
     ObjectType.InventoryMovement,
     ObjectType.CycleCount,
     ObjectType.ReconciliationRun,
@@ -193,6 +195,8 @@ const SUPERVISOR_GRANTS: RolePermissionGrant[] = [
   ]),
   ...grant(RoleCode.WarehouseSupervisor, ActionCode.Update, [
     ObjectType.CoreFlow,
+    ObjectType.LabelTemplate,
+    ObjectType.PrintJob,
     ...V1_TASKS,
     ObjectType.Receipt,
     ObjectType.InventoryMovement,
@@ -258,6 +262,8 @@ const COORDINATOR_GRANTS: RolePermissionGrant[] = [
     ObjectType.Shipment,
     ObjectType.Load,
     ObjectType.IntegrationMessage,
+    ObjectType.LabelTemplate,
+    ObjectType.PrintJob,
   ]),
   ...grant(RoleCode.WarehouseCoordinator, ActionCode.Update, [
     ObjectType.Partner,
@@ -271,6 +277,8 @@ const COORDINATOR_GRANTS: RolePermissionGrant[] = [
     ObjectType.Shipment,
     ObjectType.Load,
     ObjectType.IntegrationMessage,
+    ObjectType.LabelTemplate,
+    ObjectType.PrintJob,
   ]),
   ...grant(RoleCode.WarehouseCoordinator, ActionCode.DeleteCancel, [
     ObjectType.InboundPlan,
@@ -287,7 +295,11 @@ const OPERATOR_GRANTS: RolePermissionGrant[] = [
     ObjectType.AuditLog,
     ObjectType.ExceptionCase,
   ]),
-  ...grant(RoleCode.Operator, ActionCode.Create, [ObjectType.ApprovalRequest, ObjectType.ExceptionCase]),
+  ...grant(RoleCode.Operator, ActionCode.Create, [
+    ObjectType.ApprovalRequest,
+    ObjectType.ExceptionCase,
+    ObjectType.PrintJob,
+  ]),
   ...grant(RoleCode.Operator, ActionCode.Read, [
     ObjectType.Receipt,
     ...V1_TASKS,
