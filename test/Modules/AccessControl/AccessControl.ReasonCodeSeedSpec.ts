@@ -29,6 +29,7 @@ const REQUIRED_V1_REASON_CODES = [
   'RC-V1-REPRINT',
   'RC-V1-DEAD-LETTER-FIX',
   'RC-V1-GOODS-ISSUE-CORRECTION',
+  'RC-V1-HANDOFF',
 ];
 
 const FORBIDDEN_INVENTORY_STATUS_MILESTONES = ['SHIPPED', 'GATE_OUT', 'GOODS_ISSUE_POSTED'];
@@ -113,5 +114,16 @@ describe('SeedReasonCodeCatalog', () => {
         }
       }
     }
+  });
+
+  it('validates the CoreFlow handoff/skip reason for CoreFlow mutations', async () => {
+    const repo = new InMemoryReasonCodeRepository();
+    await SeedReasonCodeCatalog(repo);
+
+    const handoff = await repo.FindByCode('RC-V1-HANDOFF');
+    expect(handoff).not.toBeNull();
+    expect(handoff!.AppliesToObjects).toContain(ObjectType.CoreFlow);
+    expect(handoff!.AppliesToActions).toEqual(expect.arrayContaining([ActionCode.Update, ActionCode.Override]));
+    expect(handoff!.EvidenceRequired).toBe(true);
   });
 });

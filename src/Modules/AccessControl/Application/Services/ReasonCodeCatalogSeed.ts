@@ -221,6 +221,14 @@ export const ReasonCodeCatalogEntries: ReadonlyArray<ReasonCodeCatalogEntry> = [
     EvidenceRequired: true,
     ApprovalRequired: true,
   },
+  {
+    ReasonCode: 'RC-V1-HANDOFF',
+    ReasonGroup: ReasonGroup.ManualFix,
+    Description: 'Record skipped CoreFlow step, blocked handoff or forced handoff evidence.',
+    AppliesToActions: [ActionCode.Update, ActionCode.Override],
+    AppliesToObjects: [ObjectType.CoreFlow],
+    EvidenceRequired: true,
+  },
 ];
 
 /** Idempotent: existing codes (matched by ReasonCode) are skipped, so re-runs never duplicate. */

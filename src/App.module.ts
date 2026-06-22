@@ -22,6 +22,7 @@ import { MasterDataModule } from '@modules/MasterData/MasterDataModule';
 import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfileModule';
 import { AccessControlModule } from '@modules/AccessControl/AccessControlModule';
 import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule';
+import { CoreFlowModule } from '@modules/CoreFlow/CoreFlowModule';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
     UserModule,
     MasterDataModule,
     PartnerMasterModule,
+    CoreFlowModule,
     WarehouseProfileModule,
     AccessControlModule,
     AuthenticationModule,

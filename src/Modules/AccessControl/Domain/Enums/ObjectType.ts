@@ -29,6 +29,7 @@ export enum ObjectType {
   // V1 MVP Core Flow permission objects. These seed RBAC decisions for future
   // V1 modules without creating the operational tables in this story.
   Partner = 'Partner',
+  CoreFlow = 'CoreFlow',
   InboundPlan = 'InboundPlan',
   Receipt = 'Receipt',
   QcTask = 'QcTask',

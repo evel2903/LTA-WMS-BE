@@ -73,6 +73,7 @@ const PROFILE_RULE: ObjectType[] = [ObjectType.WarehouseProfile, ObjectType.Rule
 const ACCESS: ObjectType[] = [ObjectType.Role, ObjectType.Permission, ObjectType.UserAssignment];
 const V1_FOUNDATION: ObjectType[] = [
   ObjectType.Partner,
+  ObjectType.CoreFlow,
   ObjectType.MobileTask,
   ObjectType.LabelTemplate,
   ObjectType.PrintJob,
@@ -181,7 +182,9 @@ const SUPERVISOR_GRANTS: RolePermissionGrant[] = [
   ...grant(RoleCode.WarehouseSupervisor, ActionCode.Reprint, [ObjectType.Location]),
   ...grant(RoleCode.WarehouseSupervisor, ActionCode.Adjust, [ObjectType.InventoryStatus]),
   ...grant(RoleCode.WarehouseSupervisor, ActionCode.Read, V1_OPERATIONAL),
+  ...grant(RoleCode.WarehouseSupervisor, ActionCode.Override, [ObjectType.CoreFlow]),
   ...grant(RoleCode.WarehouseSupervisor, ActionCode.Create, [
+    ObjectType.CoreFlow,
     ObjectType.QcTask,
     ObjectType.InventoryMovement,
     ObjectType.CycleCount,
@@ -189,6 +192,7 @@ const SUPERVISOR_GRANTS: RolePermissionGrant[] = [
     ObjectType.DeadLetterMessage,
   ]),
   ...grant(RoleCode.WarehouseSupervisor, ActionCode.Update, [
+    ObjectType.CoreFlow,
     ...V1_TASKS,
     ObjectType.Receipt,
     ObjectType.InventoryMovement,
@@ -243,6 +247,7 @@ const COORDINATOR_GRANTS: RolePermissionGrant[] = [
   ...grant(RoleCode.WarehouseCoordinator, ActionCode.Read, V1_OPERATIONAL),
   ...grant(RoleCode.WarehouseCoordinator, ActionCode.Create, [
     ObjectType.Partner,
+    ObjectType.CoreFlow,
     ObjectType.InboundPlan,
     ObjectType.Receipt,
     ObjectType.OutboundOrder,
@@ -255,6 +260,7 @@ const COORDINATOR_GRANTS: RolePermissionGrant[] = [
   ]),
   ...grant(RoleCode.WarehouseCoordinator, ActionCode.Update, [
     ObjectType.Partner,
+    ObjectType.CoreFlow,
     ObjectType.InboundPlan,
     ObjectType.Receipt,
     ...V1_TASKS,

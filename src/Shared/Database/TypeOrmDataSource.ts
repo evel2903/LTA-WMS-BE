@@ -40,6 +40,9 @@ import { ControlExceptionCatalogOrmEntity } from '@modules/AccessControl/Infrast
 import { ValidationRuleCatalogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ValidationRuleCatalogOrmEntity';
 import { ExceptionCaseOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ExceptionCaseOrmEntity';
 import { PartnerOrmEntity } from '@modules/PartnerMaster/Infrastructure/Persistence/Entities/PartnerOrmEntity';
+import { CoreFlowInstanceOrmEntity } from '@modules/CoreFlow/Infrastructure/Persistence/Entities/CoreFlowInstanceOrmEntity';
+import { WorkflowMilestoneOrmEntity } from '@modules/CoreFlow/Infrastructure/Persistence/Entities/WorkflowMilestoneOrmEntity';
+import { WorkflowHandoffOrmEntity } from '@modules/CoreFlow/Infrastructure/Persistence/Entities/WorkflowHandoffOrmEntity';
 
 const env = GetEnv();
 
@@ -90,6 +93,9 @@ export default new DataSource({
     ValidationRuleCatalogOrmEntity,
     ExceptionCaseOrmEntity,
     PartnerOrmEntity,
+    CoreFlowInstanceOrmEntity,
+    WorkflowMilestoneOrmEntity,
+    WorkflowHandoffOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

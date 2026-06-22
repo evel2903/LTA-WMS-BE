@@ -24,6 +24,7 @@ const seedFreshRepositories = async () => {
 
 const V1_REQUIRED_OBJECTS: ObjectType[] = [
   ObjectType.Partner,
+  ObjectType.CoreFlow,
   ObjectType.InboundPlan,
   ObjectType.Receipt,
   ObjectType.QcTask,
