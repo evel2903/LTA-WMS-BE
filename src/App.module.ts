@@ -24,6 +24,7 @@ import { AccessControlModule } from '@modules/AccessControl/AccessControlModule'
 import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule';
 import { CoreFlowModule } from '@modules/CoreFlow/CoreFlowModule';
 import { IntegrationModule } from '@modules/Integration/IntegrationModule';
+import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { IntegrationModule } from '@modules/Integration/IntegrationModule';
     PartnerMasterModule,
     CoreFlowModule,
     IntegrationModule,
+    TaskExecutionModule,
     WarehouseProfileModule,
     AccessControlModule,
     AuthenticationModule,

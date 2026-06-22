@@ -46,6 +46,7 @@ import { WorkflowHandoffOrmEntity } from '@modules/CoreFlow/Infrastructure/Persi
 import { ImportBatchOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/ImportBatchOrmEntity';
 import { InterfaceMessageOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/InterfaceMessageOrmEntity';
 import { OutboxMessageOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/OutboxMessageOrmEntity';
+import { MobileTaskOrmEntity } from '@modules/TaskExecution/Infrastructure/Persistence/Entities/MobileTaskOrmEntity';
 
 const env = GetEnv();
 
@@ -102,6 +103,7 @@ export default new DataSource({
     ImportBatchOrmEntity,
     InterfaceMessageOrmEntity,
     OutboxMessageOrmEntity,
+    MobileTaskOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',
