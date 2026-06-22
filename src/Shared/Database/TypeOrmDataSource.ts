@@ -52,6 +52,8 @@ import { LabelTemplateOrmEntity } from '@modules/BarcodeLabel/Infrastructure/Per
 import { LabelTemplateVersionOrmEntity } from '@modules/BarcodeLabel/Infrastructure/Persistence/Entities/LabelTemplateVersionOrmEntity';
 import { PrintJobOrmEntity } from '@modules/BarcodeLabel/Infrastructure/Persistence/Entities/PrintJobOrmEntity';
 import { ReprintRequestOrmEntity } from '@modules/BarcodeLabel/Infrastructure/Persistence/Entities/ReprintRequestOrmEntity';
+import { InboundPlanOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanOrmEntity';
+import { InboundPlanLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanLineOrmEntity';
 
 const env = GetEnv();
 
@@ -114,6 +116,8 @@ export default new DataSource({
     LabelTemplateVersionOrmEntity,
     PrintJobOrmEntity,
     ReprintRequestOrmEntity,
+    InboundPlanOrmEntity,
+    InboundPlanLineOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',
