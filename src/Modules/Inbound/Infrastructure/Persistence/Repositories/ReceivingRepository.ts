@@ -6,11 +6,14 @@ import {
   IReceivingRepository,
   ReceivingSessionAggregate,
 } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
+import { InboundDiscrepancyEntity } from '@modules/Inbound/Domain/Entities/InboundDiscrepancyEntity';
+import { InboundDiscrepancyStatus } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyStatus';
 import { ReceiptEntity } from '@modules/Inbound/Domain/Entities/ReceiptEntity';
 import { ReceiptLineEntity } from '@modules/Inbound/Domain/Entities/ReceiptLineEntity';
 import { ReceivingSessionEntity } from '@modules/Inbound/Domain/Entities/ReceivingSessionEntity';
 import { ReceivingSessionStatus } from '@modules/Inbound/Domain/Enums/ReceivingSessionStatus';
 import { ReceivingOrmMapper } from '@modules/Inbound/Infrastructure/Mappers/ReceivingOrmMapper';
+import { InboundDiscrepancyOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundDiscrepancyOrmEntity';
 import { ReceiptOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptOrmEntity';
 import { ReceiptLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptLineOrmEntity';
 import { ReceivingSessionOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceivingSessionOrmEntity';
@@ -24,6 +27,8 @@ export class ReceivingRepository implements IReceivingRepository {
     private readonly receipts: Repository<ReceiptOrmEntity>,
     @InjectRepository(ReceiptLineOrmEntity)
     private readonly lines: Repository<ReceiptLineOrmEntity>,
+    @InjectRepository(InboundDiscrepancyOrmEntity)
+    private readonly discrepancies: Repository<InboundDiscrepancyOrmEntity>,
   ) {}
 
   public async CreateSessionWithReceipt(
@@ -95,6 +100,61 @@ export class ReceivingRepository implements IReceivingRepository {
   ): Promise<ReceiptLineEntity | null> {
     const entity = await this.lines.findOne({ where: { ReceiptId: receiptId, IdempotencyKey: idempotencyKey } });
     return entity ? ReceivingOrmMapper.ToLineDomain(entity) : null;
+  }
+
+  public async FindReceiptLineById(id: string): Promise<ReceiptLineEntity | null> {
+    const entity = await this.lines.findOne({ where: { Id: id } });
+    return entity ? ReceivingOrmMapper.ToLineDomain(entity) : null;
+  }
+
+  public async CreateInboundDiscrepancy(
+    discrepancy: InboundDiscrepancyEntity,
+    manager?: EntityManager,
+  ): Promise<InboundDiscrepancyEntity> {
+    const repo = manager ? manager.getRepository(InboundDiscrepancyOrmEntity) : this.discrepancies;
+    try {
+      const saved = await repo.save(ReceivingOrmMapper.ToDiscrepancyOrm(discrepancy));
+      return ReceivingOrmMapper.ToDiscrepancyDomain(saved);
+    } catch (error) {
+      this.HandleUniqueViolation(error, 'Inbound discrepancy idempotency key already exists');
+      throw error;
+    }
+  }
+
+  public async FindInboundDiscrepancyByIdempotencyKey(
+    receiptId: string,
+    idempotencyKey: string,
+  ): Promise<InboundDiscrepancyEntity | null> {
+    const entity = await this.discrepancies.findOne({
+      where: { ReceiptId: receiptId, IdempotencyKey: idempotencyKey },
+    });
+    return entity ? ReceivingOrmMapper.ToDiscrepancyDomain(entity) : null;
+  }
+
+  public async ListInboundDiscrepancies(
+    skip: number,
+    take: number,
+    filter: {
+      ReceiptId?: string;
+      ReceiptLineId?: string;
+      InboundPlanId?: string;
+      WarehouseId?: string;
+      OwnerId?: string;
+      Status?: InboundDiscrepancyStatus;
+    } = {},
+  ): Promise<{ Items: InboundDiscrepancyEntity[]; TotalItems: number }> {
+    const query = this.discrepancies.createQueryBuilder('d');
+    if (filter.ReceiptId) query.andWhere('d.ReceiptId = :receiptId', { receiptId: filter.ReceiptId });
+    if (filter.ReceiptLineId)
+      query.andWhere('d.ReceiptLineId = :receiptLineId', { receiptLineId: filter.ReceiptLineId });
+    if (filter.InboundPlanId)
+      query.andWhere('d.InboundPlanId = :inboundPlanId', { inboundPlanId: filter.InboundPlanId });
+    if (filter.WarehouseId) query.andWhere('d.WarehouseId = :warehouseId', { warehouseId: filter.WarehouseId });
+    if (filter.OwnerId) query.andWhere('d.OwnerId = :ownerId', { ownerId: filter.OwnerId });
+    if (filter.Status) query.andWhere('d.Status = :status', { status: filter.Status });
+    query.orderBy('d.CreatedAt', 'DESC').skip(skip).take(take);
+    const [entities, total] = await query.getManyAndCount();
+    return { Items: entities.map(ReceivingOrmMapper.ToDiscrepancyDomain), TotalItems: total };
   }
 
   private HandleUniqueViolation(error: unknown, message: string): void {

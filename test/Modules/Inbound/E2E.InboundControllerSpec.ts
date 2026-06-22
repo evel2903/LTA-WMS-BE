@@ -6,6 +6,7 @@ import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { REQUIRE_PERMISSION_KEY } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { CaptureInboundDiscrepancyUseCase } from '@modules/Inbound/Application/UseCases/CaptureInboundDiscrepancyUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
@@ -27,6 +28,7 @@ describe('E2E InboundPlanController (no DB)', () => {
   const readinessExecute = jest.fn();
   const startReceivingExecute = jest.fn();
   const confirmReceiptLineExecute = jest.fn();
+  const captureDiscrepancyExecute = jest.fn();
 
   const buildModule = () =>
     Test.createTestingModule({
@@ -40,6 +42,7 @@ describe('E2E InboundPlanController (no DB)', () => {
         { provide: ValidateReceivingReadinessUseCase, useValue: { Execute: readinessExecute } },
         { provide: StartReceivingSessionUseCase, useValue: { Execute: startReceivingExecute } },
         { provide: ConfirmReceiptLineUseCase, useValue: { Execute: confirmReceiptLineExecute } },
+        { provide: CaptureInboundDiscrepancyUseCase, useValue: { Execute: captureDiscrepancyExecute } },
       ],
     });
 
@@ -63,6 +66,7 @@ describe('E2E InboundPlanController (no DB)', () => {
     readinessExecute.mockReset();
     startReceivingExecute.mockReset();
     confirmReceiptLineExecute.mockReset();
+    captureDiscrepancyExecute.mockReset();
   });
 
   it('declares InboundPlan and Receipt permissions on inbound and receiving endpoints', () => {
@@ -95,6 +99,10 @@ describe('E2E InboundPlanController (no DB)', () => {
       ObjectType: ObjectType.Receipt,
     });
     expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ReceiptController.prototype.ConfirmReceiptLine)).toMatchObject({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.Receipt,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ReceiptController.prototype.CaptureDiscrepancy)).toMatchObject({
       Action: ActionCode.Update,
       ObjectType: ObjectType.Receipt,
     });
@@ -150,12 +158,47 @@ describe('E2E InboundPlanController (no DB)', () => {
     });
   });
 
+  it('POST /receipts/:id/discrepancies rejects non-string evidence refs before use case', async () => {
+    await request(app.getHttpServer())
+      .post('/receipts/receipt-1/discrepancies')
+      .send({
+        ReceiptLineId: 'receipt-line-1',
+        DiscrepancyType: 'QuantityVariance',
+        ReasonCode: 'RC-V1-DISCREPANCY',
+        EvidenceRefs: [123],
+        IdempotencyKey: 'disc-invalid-evidence',
+      })
+      .expect(400);
+
+    expect(captureDiscrepancyExecute).not.toHaveBeenCalled();
+  });
+
+  it('POST /receipts/:id/discrepancies rejects over-length reason and idempotency fields', async () => {
+    await request(app.getHttpServer())
+      .post('/receipts/receipt-1/discrepancies')
+      .send({
+        ReceiptLineId: 'receipt-line-1',
+        DiscrepancyType: 'QuantityVariance',
+        ReasonCode: 'R'.repeat(81),
+        EvidenceRefs: ['photo://dock/over-qty-1'],
+        IdempotencyKey: 'I'.repeat(161),
+      })
+      .expect(400);
+
+    expect(captureDiscrepancyExecute).not.toHaveBeenCalled();
+  });
+
   it('GET detail, gate-in, readiness and receiving endpoints call use cases', async () => {
     getExecute.mockResolvedValue({ Id: 'inbound-plan-1' });
     gateInExecute.mockResolvedValue({ Id: 'inbound-plan-1', GateInStatus: 'Recorded' });
     readinessExecute.mockResolvedValue({ Allowed: true, Blocked: false });
     startReceivingExecute.mockResolvedValue({ Id: 'session-1', ReceiptId: 'receipt-1' });
     confirmReceiptLineExecute.mockResolvedValue({ Id: 'receipt-line-1', ReceiptId: 'receipt-1' });
+    captureDiscrepancyExecute.mockResolvedValue({
+      Id: 'discrepancy-1',
+      ReceiptId: 'receipt-1',
+      ExceptionCaseId: 'exception-1',
+    });
 
     await request(app.getHttpServer()).get('/inbound-plans/inbound-plan-1').expect(200);
     await request(app.getHttpServer())
@@ -179,6 +222,17 @@ describe('E2E InboundPlanController (no DB)', () => {
         ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
       })
       .expect(201);
+    await request(app.getHttpServer())
+      .post('/receipts/receipt-1/discrepancies')
+      .send({
+        ReceiptLineId: 'receipt-line-1',
+        DiscrepancyType: 'QuantityVariance',
+        ReasonCode: 'RC-V1-DISCREPANCY',
+        EvidenceRefs: ['photo://dock/over-qty-1'],
+        EvidenceJson: { ExpectedQuantity: 10, ActualQuantity: 12 },
+        IdempotencyKey: 'disc-1',
+      })
+      .expect(201);
 
     expect(getExecute).toHaveBeenCalledWith('inbound-plan-1', 'test-admin');
     expect(gateInExecute).toHaveBeenCalledWith(
@@ -198,6 +252,14 @@ describe('E2E InboundPlanController (no DB)', () => {
         ReceiptId: 'receipt-1',
         InboundPlanLineId: 'plan-line-1',
         ActualQuantity: 12,
+      }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(captureDiscrepancyExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ReceiptId: 'receipt-1',
+        ReceiptLineId: 'receipt-line-1',
+        DiscrepancyType: 'QuantityVariance',
       }),
       expect.objectContaining({ ActorUserId: 'test-admin' }),
     );
