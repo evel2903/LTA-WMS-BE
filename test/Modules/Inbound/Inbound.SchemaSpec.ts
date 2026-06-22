@@ -2,6 +2,8 @@ import { QueryRunner } from 'typeorm';
 import DataSource from '@shared/Database/TypeOrmDataSource';
 import { CreateInboundPlans1781643000000 } from '@shared/Database/Migrations/1781643000000-CreateInboundPlans';
 import { CreateReceivingReceipts1781643300000 } from '@shared/Database/Migrations/1781643300000-CreateReceivingReceipts';
+import { CreateInboundDiscrepancies1781643600000 } from '@shared/Database/Migrations/1781643600000-CreateInboundDiscrepancies';
+import { InboundDiscrepancyOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundDiscrepancyOrmEntity';
 import { InboundPlanOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanOrmEntity';
 import { InboundPlanLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanLineOrmEntity';
 import { ReceiptOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptOrmEntity';
@@ -25,6 +27,7 @@ describe('Inbound schema registration', () => {
       expect.arrayContaining([
         InboundPlanOrmEntity,
         InboundPlanLineOrmEntity,
+        InboundDiscrepancyOrmEntity,
         ReceivingSessionOrmEntity,
         ReceiptOrmEntity,
         ReceiptLineOrmEntity,
@@ -63,6 +66,19 @@ describe('Inbound schema registration', () => {
     expect(sql).toContain('CREATE TABLE "receipt_lines"');
     expect(sql).toContain('CREATE UNIQUE INDEX "UQ_receiving_sessions_plan_key"');
     expect(sql).toContain('CREATE UNIQUE INDEX "UQ_receipt_lines_idempotency"');
+  });
+
+  it('creates inbound discrepancy table with idempotency, exception link and scope indexes', async () => {
+    const { runner, queries } = fakeRunner();
+    await new CreateInboundDiscrepancies1781643600000().up(runner);
+    const sql = queries.join('\n');
+    expect(sql).toContain('CREATE TABLE "inbound_discrepancies"');
+    expect(sql).toContain('"expected_quantity" numeric(18,4) NOT NULL');
+    expect(sql).toContain('"actual_quantity" numeric(18,4) NOT NULL');
+    expect(sql).toContain('CONSTRAINT "FK_inbound_discrepancies_exception"');
+    expect(sql).toContain('CREATE INDEX "IDX_inbound_discrepancies_exception"');
+    expect(sql).toContain('CREATE INDEX "IDX_inbound_discrepancies_owner_warehouse"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "UQ_inbound_discrepancies_idempotency"');
   });
 
   it('keeps inbound document and gate states separate from InventoryStatus terms', () => {

@@ -6,6 +6,14 @@ import {
   PERMISSION_CHECKER,
 } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
 import {
+  CONTROL_EXCEPTION_CATALOG,
+  IControlExceptionCatalog,
+} from '@modules/AccessControl/Application/Interfaces/IControlExceptionCatalog';
+import {
+  EXCEPTION_CASE_REPOSITORY,
+  IExceptionCaseRepository,
+} from '@modules/AccessControl/Application/Interfaces/IExceptionCaseRepository';
+import {
   IReasonCodeCatalog,
   REASON_CODE_CATALOG,
 } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
@@ -21,6 +29,7 @@ import {
 } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
 import { IntegrationModule } from '@modules/Integration/IntegrationModule';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
+import { CaptureInboundDiscrepancyUseCase } from '@modules/Inbound/Application/UseCases/CaptureInboundDiscrepancyUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
@@ -37,6 +46,7 @@ import {
 } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
 import { InboundPlanOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanOrmEntity';
 import { InboundPlanLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanLineOrmEntity';
+import { InboundDiscrepancyOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundDiscrepancyOrmEntity';
 import { ReceiptOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptOrmEntity';
 import { ReceiptLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptLineOrmEntity';
 import { ReceivingSessionOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceivingSessionOrmEntity';
@@ -71,6 +81,7 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
       ReceivingSessionOrmEntity,
       ReceiptOrmEntity,
       ReceiptLineOrmEntity,
+      InboundDiscrepancyOrmEntity,
     ]),
     AccessControlModule,
     MasterDataModule,
@@ -207,6 +218,45 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
         INTEGRATION_REPOSITORY,
         REASON_CODE_CATALOG,
         ValidateReceivingReadinessUseCase,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
+    {
+      provide: CaptureInboundDiscrepancyUseCase,
+      useFactory: (
+        inboundPlans: IInboundPlanRepository,
+        receiving: IReceivingRepository,
+        exceptionCases: IExceptionCaseRepository,
+        controlExceptionCatalog: IControlExceptionCatalog,
+        profiles: IWarehouseProfileRepository,
+        coreFlows: ICoreFlowRepository,
+        integrations: IIntegrationRepository,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) =>
+        new CaptureInboundDiscrepancyUseCase(
+          inboundPlans,
+          receiving,
+          exceptionCases,
+          controlExceptionCatalog,
+          profiles,
+          coreFlows,
+          integrations,
+          reasonCatalog,
+          audited,
+          permissionChecker,
+        ),
+      inject: [
+        INBOUND_PLAN_REPOSITORY,
+        RECEIVING_REPOSITORY,
+        EXCEPTION_CASE_REPOSITORY,
+        CONTROL_EXCEPTION_CATALOG,
+        WAREHOUSE_PROFILE_REPOSITORY,
+        CORE_FLOW_REPOSITORY,
+        INTEGRATION_REPOSITORY,
+        REASON_CODE_CATALOG,
         AuditedTransaction,
         PERMISSION_CHECKER,
       ],

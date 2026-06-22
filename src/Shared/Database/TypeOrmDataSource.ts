@@ -54,6 +54,7 @@ import { PrintJobOrmEntity } from '@modules/BarcodeLabel/Infrastructure/Persiste
 import { ReprintRequestOrmEntity } from '@modules/BarcodeLabel/Infrastructure/Persistence/Entities/ReprintRequestOrmEntity';
 import { InboundPlanOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanOrmEntity';
 import { InboundPlanLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanLineOrmEntity';
+import { InboundDiscrepancyOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundDiscrepancyOrmEntity';
 import { ReceiptOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptOrmEntity';
 import { ReceiptLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptLineOrmEntity';
 import { ReceivingSessionOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceivingSessionOrmEntity';
@@ -121,6 +122,7 @@ export default new DataSource({
     ReprintRequestOrmEntity,
     InboundPlanOrmEntity,
     InboundPlanLineOrmEntity,
+    InboundDiscrepancyOrmEntity,
     ReceivingSessionOrmEntity,
     ReceiptOrmEntity,
     ReceiptLineOrmEntity,

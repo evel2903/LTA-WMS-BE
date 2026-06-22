@@ -1,4 +1,9 @@
 import { InboundGateInStatus } from '@modules/Inbound/Domain/Enums/InboundGateInStatus';
+import { ExceptionState } from '@modules/AccessControl/Domain/Enums/ExceptionState';
+import { ControlExceptionSeverity } from '@modules/AccessControl/Domain/Enums/ControlExceptionSeverity';
+import { InboundDiscrepancyStatus } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyStatus';
+import { InboundDiscrepancyToleranceDecision } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyToleranceDecision';
+import { InboundDiscrepancyType } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyType';
 import { InboundPlanDocumentStatus } from '@modules/Inbound/Domain/Enums/InboundPlanDocumentStatus';
 import { ReceiptDocumentStatus } from '@modules/Inbound/Domain/Enums/ReceiptDocumentStatus';
 import { ReceiptLineDiscrepancySignal } from '@modules/Inbound/Domain/Enums/ReceiptLineDiscrepancySignal';
@@ -203,6 +208,60 @@ export interface ReceiptLineDto {
   IdempotencyKey: string;
   ReceivedAt: Date;
   ReceivedBy: string | null;
+  IsDuplicate: boolean;
+  CreatedAt: Date;
+  UpdatedAt: Date;
+}
+
+export interface CaptureInboundDiscrepancyDto {
+  ReceiptId: string;
+  ReceiptLineId: string;
+  DiscrepancyType: InboundDiscrepancyType;
+  ReasonCode: string;
+  ReasonNote?: string | null;
+  EvidenceRefs?: string[];
+  EvidenceJson?: Record<string, unknown> | null;
+  IdempotencyKey: string;
+}
+
+export interface ListInboundDiscrepanciesDto {
+  Page?: number;
+  PageSize?: number;
+  ReceiptId?: string;
+  ReceiptLineId?: string;
+  InboundPlanId?: string;
+  WarehouseId?: string;
+  OwnerId?: string;
+  Status?: InboundDiscrepancyStatus;
+}
+
+export interface InboundDiscrepancyDto {
+  Id: string;
+  ReceiptId: string;
+  ReceiptLineId: string;
+  InboundPlanId: string;
+  InboundPlanLineId: string;
+  OwnerId: string;
+  OwnerCode: string | null;
+  WarehouseId: string;
+  WarehouseCode: string | null;
+  DiscrepancyType: InboundDiscrepancyType;
+  Signals: ReceiptLineDiscrepancySignal[];
+  Status: InboundDiscrepancyStatus;
+  Severity: ControlExceptionSeverity;
+  ToleranceDecision: InboundDiscrepancyToleranceDecision;
+  ExpectedQuantity: number;
+  ActualQuantity: number;
+  ReasonCode: string;
+  ReasonCodeId: string;
+  ReasonNote: string | null;
+  EvidenceRefs: string[];
+  EvidenceJson: Record<string, unknown> | null;
+  ExceptionCaseId: string;
+  ExceptionState: ExceptionState;
+  IdempotencyKey: string;
+  RecordedAt: Date;
+  RecordedBy: string | null;
   IsDuplicate: boolean;
   CreatedAt: Date;
   UpdatedAt: Date;

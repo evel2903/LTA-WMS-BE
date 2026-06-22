@@ -6,13 +6,18 @@ import {
 } from '@modules/AccessControl/Application/DTOs/PermissionCheckContext';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ControlExceptionSeverity } from '@modules/AccessControl/Domain/Enums/ControlExceptionSeverity';
+import { ExceptionState } from '@modules/AccessControl/Domain/Enums/ExceptionState';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import { ExceptionCaseEntity } from '@modules/AccessControl/Domain/Entities/ExceptionCaseEntity';
+import { IExceptionCaseRepository } from '@modules/AccessControl/Application/Interfaces/IExceptionCaseRepository';
 import { CoreFlowStageCode } from '@modules/CoreFlow/Domain/Enums/CoreFlowStageCode';
 import { CoreFlowStepCode } from '@modules/CoreFlow/Domain/Enums/CoreFlowStepCode';
 import { WorkflowMilestoneStatus } from '@modules/CoreFlow/Domain/Enums/WorkflowMilestoneStatus';
 import { InboundPlanDto } from '@modules/Inbound/Application/DTOs/InboundPlanDto';
 import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/IInboundPlanRepository';
 import { IReceivingRepository } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
+import { CaptureInboundDiscrepancyUseCase } from '@modules/Inbound/Application/UseCases/CaptureInboundDiscrepancyUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
@@ -22,6 +27,10 @@ import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCa
 import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
 import { InboundPlanEntity } from '@modules/Inbound/Domain/Entities/InboundPlanEntity';
 import { InboundPlanLineEntity } from '@modules/Inbound/Domain/Entities/InboundPlanLineEntity';
+import { InboundDiscrepancyEntity } from '@modules/Inbound/Domain/Entities/InboundDiscrepancyEntity';
+import { InboundDiscrepancyStatus } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyStatus';
+import { InboundDiscrepancyToleranceDecision } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyToleranceDecision';
+import { InboundDiscrepancyType } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyType';
 import { ReceiptEntity } from '@modules/Inbound/Domain/Entities/ReceiptEntity';
 import { ReceiptLineEntity } from '@modules/Inbound/Domain/Entities/ReceiptLineEntity';
 import { ReceivingSessionEntity } from '@modules/Inbound/Domain/Entities/ReceivingSessionEntity';
@@ -145,6 +154,7 @@ class FakeReceivingRepository implements IReceivingRepository {
   public Sessions: ReceivingSessionEntity[] = [];
   public Receipts: ReceiptEntity[] = [];
   public Lines: ReceiptLineEntity[] = [];
+  public Discrepancies: InboundDiscrepancyEntity[] = [];
 
   public async CreateSessionWithReceipt(
     session: ReceivingSessionEntity,
@@ -206,6 +216,65 @@ class FakeReceivingRepository implements IReceivingRepository {
   ): Promise<ReceiptLineEntity | null> {
     return this.Lines.find((item) => item.ReceiptId === receiptId && item.IdempotencyKey === idempotencyKey) ?? null;
   }
+
+  public async FindReceiptLineById(id: string): Promise<ReceiptLineEntity | null> {
+    return this.Lines.find((item) => item.Id === id) ?? null;
+  }
+
+  public async CreateInboundDiscrepancy(discrepancy: InboundDiscrepancyEntity): Promise<InboundDiscrepancyEntity> {
+    if (
+      this.Discrepancies.some(
+        (item) => item.ReceiptId === discrepancy.ReceiptId && item.IdempotencyKey === discrepancy.IdempotencyKey,
+      )
+    ) {
+      throw new ConflictException('Inbound discrepancy already exists');
+    }
+    this.Discrepancies.push(discrepancy);
+    return discrepancy;
+  }
+
+  public async FindInboundDiscrepancyByIdempotencyKey(
+    receiptId: string,
+    idempotencyKey: string,
+  ): Promise<InboundDiscrepancyEntity | null> {
+    return (
+      this.Discrepancies.find((item) => item.ReceiptId === receiptId && item.IdempotencyKey === idempotencyKey) ?? null
+    );
+  }
+
+  public async ListInboundDiscrepancies(
+    skip: number,
+    take: number,
+  ): Promise<{ Items: InboundDiscrepancyEntity[]; TotalItems: number }> {
+    return { Items: this.Discrepancies.slice(skip, skip + take), TotalItems: this.Discrepancies.length };
+  }
+}
+
+class FakeExceptionCaseRepository implements IExceptionCaseRepository {
+  public Cases: ExceptionCaseEntity[] = [];
+
+  public async FindById(id: string): Promise<ExceptionCaseEntity | null> {
+    return this.Cases.find((item) => item.Id === id) ?? null;
+  }
+
+  public async FindByIdForUpdate(id: string): Promise<ExceptionCaseEntity | null> {
+    return this.FindById(id);
+  }
+
+  public async Create(entity: ExceptionCaseEntity): Promise<ExceptionCaseEntity> {
+    this.Cases.push(entity);
+    return entity;
+  }
+
+  public async Update(entity: ExceptionCaseEntity): Promise<ExceptionCaseEntity> {
+    const index = this.Cases.findIndex((item) => item.Id === entity.Id);
+    if (index >= 0) this.Cases[index] = entity;
+    return entity;
+  }
+
+  public async List(): Promise<{ Items: ExceptionCaseEntity[]; TotalItems: number }> {
+    return { Items: this.Cases, TotalItems: this.Cases.length };
+  }
 }
 
 const supplier = () =>
@@ -266,7 +335,7 @@ const sku = () =>
     UpdatedAt: now,
   });
 
-const profile = (strategyPolicy: Record<string, unknown> = {}) =>
+const profile = (strategyPolicy: Record<string, unknown> = {}, thresholdPolicy: Record<string, unknown> = {}) =>
   new WarehouseProfileEntity({
     Id: 'profile-1',
     ProfileCode: 'WT01-PROFILE',
@@ -280,6 +349,7 @@ const profile = (strategyPolicy: Record<string, unknown> = {}) =>
     EffectiveFrom: now,
     EffectiveTo: null,
     StrategyPolicy: strategyPolicy,
+    ThresholdPolicy: thresholdPolicy,
     CreatedAt: now,
     UpdatedAt: now,
   });
@@ -299,6 +369,7 @@ const createRequest = () => ({
 const repoBundle = () => {
   const inbound = new FakeInboundRepository();
   const receiving = new FakeReceivingRepository();
+  const exceptionCases = new FakeExceptionCaseRepository();
   const partners = { FindById: jest.fn(async () => supplier()) };
   const owners = { FindById: jest.fn(async () => owner()) };
   const warehouses = { FindById: jest.fn(async () => warehouse()) };
@@ -334,6 +405,12 @@ const repoBundle = () => {
       ApprovalRequired: false,
     })),
   };
+  const controlExceptionCatalog = {
+    ValidateExceptionType: jest.fn(async () => ({
+      Code: 'CTRL-EX-04',
+      Severity: ControlExceptionSeverity.Medium,
+    })),
+  };
   const permissionChecker = {
     Check: jest.fn<Promise<PermissionDecision>, [PermissionCheckContext]>(async () => ({ Allowed: true })),
   };
@@ -349,6 +426,7 @@ const repoBundle = () => {
   return {
     inbound,
     receiving,
+    exceptionCases,
     partners,
     owners,
     warehouses,
@@ -358,6 +436,7 @@ const repoBundle = () => {
     integrations,
     profiles,
     reasonCatalog,
+    controlExceptionCatalog,
     permissionChecker,
     audited,
   };
@@ -411,6 +490,20 @@ const confirmReceiptLineUseCase = (bundle: ReturnType<typeof repoBundle>) =>
     bundle.integrations as unknown as IIntegrationRepository,
     bundle.reasonCatalog,
     readinessUseCase(bundle),
+    bundle.audited as unknown as AuditedTransaction,
+    bundle.permissionChecker,
+  );
+
+const captureInboundDiscrepancyUseCase = (bundle: ReturnType<typeof repoBundle>) =>
+  new CaptureInboundDiscrepancyUseCase(
+    bundle.inbound,
+    bundle.receiving,
+    bundle.exceptionCases,
+    bundle.controlExceptionCatalog as never,
+    bundle.profiles as unknown as IWarehouseProfileRepository,
+    bundle.coreFlows as unknown as ICoreFlowRepository,
+    bundle.integrations as unknown as IIntegrationRepository,
+    bundle.reasonCatalog,
     bundle.audited as unknown as AuditedTransaction,
     bundle.permissionChecker,
   );
@@ -842,5 +935,400 @@ describe('Inbound plan use cases', () => {
         { ...SystemAuditContext, ActorUserId: 'user-1' },
       ),
     ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('captures receipt-line discrepancy, links ExceptionCase, emits event and dedupes retry', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 14,
+        IdempotencyKey: 'receipt-line-disc-1',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const useCase = captureInboundDiscrepancyUseCase(bundle);
+    const discrepancy = await useCase.Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        DiscrepancyType: InboundDiscrepancyType.QuantityVariance,
+        ReasonCode: 'RC-V1-DISCREPANCY',
+        EvidenceRefs: ['photo://dock/over-qty-1'],
+        EvidenceJson: { ExpectedQuantity: 12, ActualQuantity: 14 },
+        IdempotencyKey: 'disc-1',
+      },
+      { ...SystemAuditContext, ActorUserId: 'supervisor-1' },
+    );
+    const duplicate = await useCase.Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        DiscrepancyType: InboundDiscrepancyType.QuantityVariance,
+        ReasonCode: 'RC-V1-DISCREPANCY',
+        EvidenceRefs: ['photo://dock/retry'],
+        IdempotencyKey: 'disc-1',
+      },
+      { ...SystemAuditContext, ActorUserId: 'supervisor-1' },
+    );
+    bundle.permissionChecker.Check.mockImplementation(async (context) =>
+      context.ObjectType === ObjectType.ExceptionCase ? { Allowed: false, Reason: 'OUT_OF_SCOPE' } : { Allowed: true },
+    );
+    const duplicateWithoutCreatePermission = await useCase.Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        DiscrepancyType: InboundDiscrepancyType.QuantityVariance,
+        ReasonCode: 'RC-V1-DISCREPANCY',
+        EvidenceRefs: ['photo://dock/retry-without-create-permission'],
+        IdempotencyKey: 'disc-1',
+      },
+      { ...SystemAuditContext, ActorUserId: 'supervisor-1' },
+    );
+    await expect(
+      useCase.Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          DiscrepancyType: InboundDiscrepancyType.DamagedGoods,
+          ReasonCode: 'RC-V1-DISCREPANCY',
+          EvidenceRefs: ['photo://dock/different-command'],
+          IdempotencyKey: 'disc-1',
+        },
+        { ...SystemAuditContext, ActorUserId: 'supervisor-1' },
+      ),
+    ).rejects.toThrow(ConflictException);
+
+    expect(discrepancy.Status).toBe(InboundDiscrepancyStatus.PendingApproval);
+    expect(discrepancy.ToleranceDecision).toBe(InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval);
+    expect(discrepancy.ExceptionState).toBe(ExceptionState.Detected);
+    expect(discrepancy.ExpectedQuantity).toBe(12);
+    expect(discrepancy.ActualQuantity).toBe(14);
+    expect(duplicate.IsDuplicate).toBe(true);
+    expect(duplicateWithoutCreatePermission.IsDuplicate).toBe(true);
+    expect(bundle.receiving.Discrepancies).toHaveLength(1);
+    expect(bundle.exceptionCases.Cases).toHaveLength(1);
+    expect(
+      bundle.integrations.Outbox.filter((item) => (item as { EventType?: string }).EventType === 'DiscrepancyRecorded'),
+    ).toHaveLength(1);
+    expect(
+      bundle.coreFlows.Milestones.filter(
+        (item) => (item as { StepCode?: CoreFlowStepCode }).StepCode === CoreFlowStepCode.DiscrepancyRecorded,
+      ),
+    ).toHaveLength(1);
+    expect(bundle.exceptionCases.Cases[0]).toMatchObject({
+      ReferenceType: 'ReceiptLine',
+      ReferenceId: line.Id,
+      WarehouseId: 'warehouse-1',
+      OwnerId: 'owner-1',
+    });
+    expect(bundle.integrations.Outbox[bundle.integrations.Outbox.length - 1]).toMatchObject({
+      EventType: 'DiscrepancyRecorded',
+      Payload: expect.objectContaining({ ExceptionCaseId: discrepancy.ExceptionCaseId }),
+    });
+    expect(bundle.coreFlows.Milestones[bundle.coreFlows.Milestones.length - 1]).toMatchObject({
+      StepCode: CoreFlowStepCode.DiscrepancyRecorded,
+    });
+    expect(
+      bundle.audited.Entries.filter(
+        (item) => (item as { ReferenceType?: string }).ReferenceType === 'InboundDiscrepancy',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('returns existing discrepancy when concurrent retry loses the unique insert race', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 14,
+        IdempotencyKey: 'receipt-line-disc-race',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const originalCreate = bundle.receiving.CreateInboundDiscrepancy.bind(bundle.receiving);
+    bundle.receiving.CreateInboundDiscrepancy = jest.fn(async (discrepancy: InboundDiscrepancyEntity) => {
+      bundle.receiving.Discrepancies.push(discrepancy);
+      throw new ConflictException('Inbound discrepancy already exists');
+    });
+
+    const duplicate = await captureInboundDiscrepancyUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        DiscrepancyType: InboundDiscrepancyType.QuantityVariance,
+        ReasonCode: 'RC-V1-DISCREPANCY',
+        EvidenceRefs: ['photo://dock/over-qty-race'],
+        IdempotencyKey: 'disc-race',
+      },
+      { ...SystemAuditContext, ActorUserId: 'supervisor-1' },
+    );
+
+    expect(duplicate.IsDuplicate).toBe(true);
+    expect(bundle.receiving.Discrepancies).toHaveLength(1);
+    bundle.receiving.CreateInboundDiscrepancy = originalCreate;
+  });
+
+  it('routes explicit damaged-goods discrepancy with evidence even when quantity matches', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-damaged-1',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const discrepancy = await captureInboundDiscrepancyUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        DiscrepancyType: InboundDiscrepancyType.DamagedGoods,
+        ReasonCode: 'RC-V1-DISCREPANCY',
+        ReasonNote: 'Carton crushed at dock',
+        EvidenceRefs: ['photo://dock/damaged-carton-1'],
+        IdempotencyKey: 'disc-damaged-1',
+      },
+      { ...SystemAuditContext, ActorUserId: 'supervisor-1' },
+    );
+
+    expect(line.DiscrepancySignals).toHaveLength(0);
+    expect(discrepancy.DiscrepancyType).toBe(InboundDiscrepancyType.DamagedGoods);
+    expect(discrepancy.ToleranceDecision).toBe(InboundDiscrepancyToleranceDecision.NotApplicable);
+    expect(discrepancy.Status).toBe(InboundDiscrepancyStatus.Routed);
+    expect(bundle.exceptionCases.Cases[0]).toMatchObject({
+      ReferenceType: 'ReceiptLine',
+      ReferenceId: line.Id,
+      WarehouseId: 'warehouse-1',
+      OwnerId: 'owner-1',
+      EvidenceRefs: expect.arrayContaining(['photo://dock/damaged-carton-1']),
+    });
+  });
+
+  it('rejects discrepancy type that does not match receipt-line signals', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 14,
+        IdempotencyKey: 'receipt-line-type-mismatch',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await expect(
+      captureInboundDiscrepancyUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          DiscrepancyType: InboundDiscrepancyType.WrongSku,
+          ReasonCode: 'RC-V1-DISCREPANCY',
+          EvidenceRefs: ['photo://dock/type-mismatch'],
+          IdempotencyKey: 'disc-type-mismatch',
+        },
+        { ...SystemAuditContext, ActorUserId: 'supervisor-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.receiving.Discrepancies).toHaveLength(0);
+    expect(bundle.exceptionCases.Cases).toHaveLength(0);
+  });
+
+  it('rejects discrepancy capture without reason or evidence and leaves no side effects', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 14,
+        IdempotencyKey: 'receipt-line-disc-2',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await expect(
+      captureInboundDiscrepancyUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          DiscrepancyType: InboundDiscrepancyType.QuantityVariance,
+          ReasonCode: '',
+          IdempotencyKey: 'disc-no-reason',
+        },
+        { ...SystemAuditContext, ActorUserId: 'supervisor-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.receiving.Discrepancies).toHaveLength(0);
+    expect(bundle.exceptionCases.Cases).toHaveLength(0);
+    expect(
+      bundle.integrations.Outbox.filter((item) => (item as { EventType?: string }).EventType === 'DiscrepancyRecorded'),
+    ).toHaveLength(0);
+  });
+
+  it('denies discrepancy capture when ExceptionCase create permission fails without side effects', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 14,
+        IdempotencyKey: 'receipt-line-disc-3',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    bundle.permissionChecker.Check.mockImplementation(async (context) =>
+      context.ObjectType === ObjectType.ExceptionCase ? { Allowed: false, Reason: 'OUT_OF_SCOPE' } : { Allowed: true },
+    );
+
+    await expect(
+      captureInboundDiscrepancyUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          DiscrepancyType: InboundDiscrepancyType.QuantityVariance,
+          ReasonCode: 'RC-V1-DISCREPANCY',
+          EvidenceRefs: ['photo://dock/over-qty-1'],
+          IdempotencyKey: 'disc-denied',
+        },
+        { ...SystemAuditContext, ActorUserId: 'supervisor-1' },
+      ),
+    ).rejects.toThrow(ForbiddenAppException);
+
+    expect(bundle.receiving.Discrepancies).toHaveLength(0);
+    expect(bundle.exceptionCases.Cases).toHaveLength(0);
+  });
+
+  it('denies discrepancy capture when Receipt update permission fails without side effects', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 14,
+        IdempotencyKey: 'receipt-line-disc-receipt-denied',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    bundle.permissionChecker.Check.mockImplementation(async (context) =>
+      context.ObjectType === ObjectType.Receipt ? { Allowed: false, Reason: 'OUT_OF_SCOPE' } : { Allowed: true },
+    );
+
+    await expect(
+      captureInboundDiscrepancyUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          DiscrepancyType: InboundDiscrepancyType.QuantityVariance,
+          ReasonCode: 'RC-V1-DISCREPANCY',
+          EvidenceRefs: ['photo://dock/over-qty-1'],
+          IdempotencyKey: 'disc-receipt-denied',
+        },
+        { ...SystemAuditContext, ActorUserId: 'supervisor-1' },
+      ),
+    ).rejects.toThrow(ForbiddenAppException);
+
+    expect(bundle.receiving.Discrepancies).toHaveLength(0);
+    expect(bundle.exceptionCases.Cases).toHaveLength(0);
+    expect(
+      bundle.integrations.Outbox.filter((item) => (item as { EventType?: string }).EventType === 'DiscrepancyRecorded'),
+    ).toHaveLength(0);
+    expect(
+      bundle.coreFlows.Milestones.filter(
+        (item) => (item as { StepCode?: CoreFlowStepCode }).StepCode === CoreFlowStepCode.DiscrepancyRecorded,
+      ),
+    ).toHaveLength(0);
+    expect(
+      bundle.audited.Entries.filter(
+        (item) => (item as { ReferenceType?: string }).ReferenceType === 'InboundDiscrepancy',
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('marks over-tolerance discrepancy hard blocked when WarehouseProfile policy requests hard block', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(
+      profile({ receivingOverToleranceMode: 'hard_block' }, { receivingOverTolerancePercent: 5 }),
+    );
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 14,
+        IdempotencyKey: 'receipt-line-disc-4',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const discrepancy = await captureInboundDiscrepancyUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        DiscrepancyType: InboundDiscrepancyType.QuantityVariance,
+        ReasonCode: 'RC-V1-DISCREPANCY',
+        EvidenceRefs: ['photo://dock/over-qty-1'],
+        IdempotencyKey: 'disc-hard-block',
+      },
+      { ...SystemAuditContext, ActorUserId: 'supervisor-1' },
+    );
+
+    expect(discrepancy.Status).toBe(InboundDiscrepancyStatus.Blocked);
+    expect(discrepancy.ToleranceDecision).toBe(InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked);
+    expect(discrepancy.Severity).toBe(ControlExceptionSeverity.High);
   });
 });

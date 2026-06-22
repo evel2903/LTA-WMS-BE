@@ -1,4 +1,10 @@
-import { ReceiptDto, ReceiptLineDto, ReceivingSessionDto } from '@modules/Inbound/Application/DTOs/InboundPlanDto';
+import {
+  InboundDiscrepancyDto,
+  ReceiptDto,
+  ReceiptLineDto,
+  ReceivingSessionDto,
+} from '@modules/Inbound/Application/DTOs/InboundPlanDto';
+import { InboundDiscrepancyEntity } from '@modules/Inbound/Domain/Entities/InboundDiscrepancyEntity';
 import { ReceiptEntity } from '@modules/Inbound/Domain/Entities/ReceiptEntity';
 import { ReceiptLineEntity } from '@modules/Inbound/Domain/Entities/ReceiptLineEntity';
 import { ReceivingSessionEntity } from '@modules/Inbound/Domain/Entities/ReceivingSessionEntity';
@@ -76,6 +82,40 @@ export class ReceivingDtoMapper {
       IsDuplicate: isDuplicate,
       CreatedAt: line.CreatedAt,
       UpdatedAt: line.UpdatedAt,
+    };
+  }
+
+  public static ToDiscrepancyDto(discrepancy: InboundDiscrepancyEntity, isDuplicate = false): InboundDiscrepancyDto {
+    return {
+      Id: discrepancy.Id,
+      ReceiptId: discrepancy.ReceiptId,
+      ReceiptLineId: discrepancy.ReceiptLineId,
+      InboundPlanId: discrepancy.InboundPlanId,
+      InboundPlanLineId: discrepancy.InboundPlanLineId,
+      OwnerId: discrepancy.OwnerId,
+      OwnerCode: discrepancy.OwnerCode,
+      WarehouseId: discrepancy.WarehouseId,
+      WarehouseCode: discrepancy.WarehouseCode,
+      DiscrepancyType: discrepancy.DiscrepancyType,
+      Signals: discrepancy.Signals,
+      Status: discrepancy.Status,
+      Severity: discrepancy.Severity,
+      ToleranceDecision: discrepancy.ToleranceDecision,
+      ExpectedQuantity: discrepancy.ExpectedQuantity,
+      ActualQuantity: discrepancy.ActualQuantity,
+      ReasonCode: discrepancy.ReasonCode,
+      ReasonCodeId: discrepancy.ReasonCodeId,
+      ReasonNote: discrepancy.ReasonNote,
+      EvidenceRefs: discrepancy.EvidenceRefs,
+      EvidenceJson: discrepancy.EvidenceJson,
+      ExceptionCaseId: discrepancy.ExceptionCaseId,
+      ExceptionState: discrepancy.ExceptionState,
+      IdempotencyKey: discrepancy.IdempotencyKey,
+      RecordedAt: discrepancy.RecordedAt,
+      RecordedBy: discrepancy.RecordedBy,
+      IsDuplicate: isDuplicate,
+      CreatedAt: discrepancy.CreatedAt,
+      UpdatedAt: discrepancy.UpdatedAt,
     };
   }
 }
