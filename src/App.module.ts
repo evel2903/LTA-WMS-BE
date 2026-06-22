@@ -21,6 +21,7 @@ import { JobsModule } from '@modules/Jobs/JobsModule';
 import { MasterDataModule } from '@modules/MasterData/MasterDataModule';
 import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfileModule';
 import { AccessControlModule } from '@modules/AccessControl/AccessControlModule';
+import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { AccessControlModule } from '@modules/AccessControl/AccessControlModule'
     CommonModule,
     UserModule,
     MasterDataModule,
+    PartnerMasterModule,
     WarehouseProfileModule,
     AccessControlModule,
     AuthenticationModule,
