@@ -71,9 +71,46 @@ const SKU_OWNER: ObjectType[] = [
 ];
 const PROFILE_RULE: ObjectType[] = [ObjectType.WarehouseProfile, ObjectType.Rule];
 const ACCESS: ObjectType[] = [ObjectType.Role, ObjectType.Permission, ObjectType.UserAssignment];
+const V1_FOUNDATION: ObjectType[] = [
+  ObjectType.Partner,
+  ObjectType.MobileTask,
+  ObjectType.LabelTemplate,
+  ObjectType.PrintJob,
+  ObjectType.IntegrationMessage,
+  ObjectType.DeadLetterMessage,
+  ObjectType.ReconciliationRun,
+];
+const V1_INBOUND: ObjectType[] = [
+  ObjectType.InboundPlan,
+  ObjectType.Receipt,
+  ObjectType.QcTask,
+  ObjectType.PutawayTask,
+];
+const V1_INVENTORY: ObjectType[] = [ObjectType.InventoryMovement, ObjectType.CycleCount, ObjectType.ReplenishmentTask];
+const V1_OUTBOUND: ObjectType[] = [
+  ObjectType.OutboundOrder,
+  ObjectType.Allocation,
+  ObjectType.PickTask,
+  ObjectType.Package,
+  ObjectType.Shipment,
+  ObjectType.Load,
+  ObjectType.GoodsIssue,
+];
+const V1_OPERATIONAL: ObjectType[] = [...V1_FOUNDATION, ...V1_INBOUND, ...V1_INVENTORY, ...V1_OUTBOUND];
+const V1_TASKS: ObjectType[] = [
+  ObjectType.QcTask,
+  ObjectType.PutawayTask,
+  ObjectType.ReplenishmentTask,
+  ObjectType.PickTask,
+  ObjectType.MobileTask,
+];
+const V1_LABELS: ObjectType[] = [ObjectType.LabelTemplate, ObjectType.PrintJob];
 
 const grant = (role: RoleCode, action: ActionCode, objects: ObjectType[]): RolePermissionGrant[] =>
   objects.map((objectType) => ({ Role: role, Action: action, ObjectType: objectType }));
+
+const grantActions = (role: RoleCode, actions: ActionCode[], objects: ObjectType[]): RolePermissionGrant[] =>
+  actions.flatMap((action) => grant(role, action, objects));
 
 const ADMIN_GRANTS: RolePermissionGrant[] = [
   ...grant(RoleCode.WmsAdmin, ActionCode.Create, [
@@ -119,6 +156,7 @@ const ADMIN_GRANTS: RolePermissionGrant[] = [
   ...grant(RoleCode.WmsAdmin, ActionCode.Unlock, [ObjectType.ExceptionCase]),
   ...grant(RoleCode.WmsAdmin, ActionCode.Reprint, [ObjectType.Location]),
   ...grant(RoleCode.WmsAdmin, ActionCode.Adjust, [ObjectType.InventoryStatus]),
+  ...grantActions(RoleCode.WmsAdmin, Object.values(ActionCode), V1_OPERATIONAL),
 ];
 
 const SUPERVISOR_GRANTS: RolePermissionGrant[] = [
@@ -142,6 +180,53 @@ const SUPERVISOR_GRANTS: RolePermissionGrant[] = [
   ...grant(RoleCode.WarehouseSupervisor, ActionCode.Update, [ObjectType.ExceptionCase]),
   ...grant(RoleCode.WarehouseSupervisor, ActionCode.Reprint, [ObjectType.Location]),
   ...grant(RoleCode.WarehouseSupervisor, ActionCode.Adjust, [ObjectType.InventoryStatus]),
+  ...grant(RoleCode.WarehouseSupervisor, ActionCode.Read, V1_OPERATIONAL),
+  ...grant(RoleCode.WarehouseSupervisor, ActionCode.Create, [
+    ObjectType.QcTask,
+    ObjectType.InventoryMovement,
+    ObjectType.CycleCount,
+    ObjectType.ReconciliationRun,
+    ObjectType.DeadLetterMessage,
+  ]),
+  ...grant(RoleCode.WarehouseSupervisor, ActionCode.Update, [
+    ...V1_TASKS,
+    ObjectType.Receipt,
+    ObjectType.InventoryMovement,
+    ObjectType.Shipment,
+    ObjectType.Load,
+    ObjectType.CycleCount,
+    ObjectType.GoodsIssue,
+    ObjectType.ReconciliationRun,
+    ObjectType.DeadLetterMessage,
+  ]),
+  ...grant(RoleCode.WarehouseSupervisor, ActionCode.DeleteCancel, [
+    ObjectType.InboundPlan,
+    ObjectType.Receipt,
+    ObjectType.OutboundOrder,
+    ObjectType.Shipment,
+    ObjectType.Load,
+    ObjectType.GoodsIssue,
+  ]),
+  ...grant(RoleCode.WarehouseSupervisor, ActionCode.Approve, [
+    ObjectType.QcTask,
+    ObjectType.CycleCount,
+    ObjectType.GoodsIssue,
+    ObjectType.ReconciliationRun,
+  ]),
+  ...grant(RoleCode.WarehouseSupervisor, ActionCode.Override, [
+    ObjectType.Allocation,
+    ObjectType.PutawayTask,
+    ObjectType.PickTask,
+    ObjectType.GoodsIssue,
+    ObjectType.IntegrationMessage,
+  ]),
+  ...grant(RoleCode.WarehouseSupervisor, ActionCode.Unlock, [ObjectType.CycleCount, ObjectType.DeadLetterMessage]),
+  ...grant(RoleCode.WarehouseSupervisor, ActionCode.Reprint, [
+    ObjectType.PrintJob,
+    ObjectType.Package,
+    ObjectType.Shipment,
+  ]),
+  ...grant(RoleCode.WarehouseSupervisor, ActionCode.Adjust, [ObjectType.InventoryMovement, ObjectType.CycleCount]),
 ];
 
 const COORDINATOR_GRANTS: RolePermissionGrant[] = [
@@ -155,6 +240,37 @@ const COORDINATOR_GRANTS: RolePermissionGrant[] = [
   ]),
   ...grant(RoleCode.WarehouseCoordinator, ActionCode.Create, [ObjectType.ApprovalRequest, ObjectType.ExceptionCase]),
   ...grant(RoleCode.WarehouseCoordinator, ActionCode.Update, [ObjectType.ExceptionCase]),
+  ...grant(RoleCode.WarehouseCoordinator, ActionCode.Read, V1_OPERATIONAL),
+  ...grant(RoleCode.WarehouseCoordinator, ActionCode.Create, [
+    ObjectType.Partner,
+    ObjectType.InboundPlan,
+    ObjectType.Receipt,
+    ObjectType.OutboundOrder,
+    ObjectType.Allocation,
+    ObjectType.PickTask,
+    ObjectType.Package,
+    ObjectType.Shipment,
+    ObjectType.Load,
+    ObjectType.IntegrationMessage,
+  ]),
+  ...grant(RoleCode.WarehouseCoordinator, ActionCode.Update, [
+    ObjectType.Partner,
+    ObjectType.InboundPlan,
+    ObjectType.Receipt,
+    ...V1_TASKS,
+    ObjectType.OutboundOrder,
+    ObjectType.Allocation,
+    ObjectType.Package,
+    ObjectType.Shipment,
+    ObjectType.Load,
+    ObjectType.IntegrationMessage,
+  ]),
+  ...grant(RoleCode.WarehouseCoordinator, ActionCode.DeleteCancel, [
+    ObjectType.InboundPlan,
+    ObjectType.OutboundOrder,
+    ObjectType.Shipment,
+  ]),
+  ...grant(RoleCode.WarehouseCoordinator, ActionCode.Reprint, V1_LABELS),
 ];
 
 const OPERATOR_GRANTS: RolePermissionGrant[] = [
@@ -165,6 +281,22 @@ const OPERATOR_GRANTS: RolePermissionGrant[] = [
     ObjectType.ExceptionCase,
   ]),
   ...grant(RoleCode.Operator, ActionCode.Create, [ObjectType.ApprovalRequest, ObjectType.ExceptionCase]),
+  ...grant(RoleCode.Operator, ActionCode.Read, [
+    ObjectType.Receipt,
+    ...V1_TASKS,
+    ObjectType.Package,
+    ObjectType.Shipment,
+    ObjectType.Load,
+    ObjectType.PrintJob,
+  ]),
+  ...grant(RoleCode.Operator, ActionCode.Update, [
+    ObjectType.Receipt,
+    ...V1_TASKS,
+    ObjectType.Package,
+    ObjectType.Load,
+    ObjectType.PrintJob,
+  ]),
+  ...grant(RoleCode.Operator, ActionCode.Reprint, [ObjectType.PrintJob]),
 ];
 
 const QC_GRANTS: RolePermissionGrant[] = [
@@ -180,6 +312,11 @@ const QC_GRANTS: RolePermissionGrant[] = [
   ...grant(RoleCode.Qc, ActionCode.Override, [ObjectType.OverrideLog]),
   ...grant(RoleCode.Qc, ActionCode.Create, [ObjectType.ExceptionCase]),
   ...grant(RoleCode.Qc, ActionCode.Update, [ObjectType.ExceptionCase]),
+  ...grant(RoleCode.Qc, ActionCode.Read, [ObjectType.Receipt, ObjectType.QcTask, ObjectType.InventoryMovement]),
+  ...grant(RoleCode.Qc, ActionCode.Create, [ObjectType.QcTask]),
+  ...grant(RoleCode.Qc, ActionCode.Update, [ObjectType.QcTask, ObjectType.InventoryMovement]),
+  ...grant(RoleCode.Qc, ActionCode.Approve, [ObjectType.QcTask]),
+  ...grant(RoleCode.Qc, ActionCode.Override, [ObjectType.QcTask]),
 ];
 
 const ACCOUNTANT_GRANTS: RolePermissionGrant[] = [
@@ -195,6 +332,28 @@ const ACCOUNTANT_GRANTS: RolePermissionGrant[] = [
   ...grant(RoleCode.InventoryAccountant, ActionCode.Approve, [ObjectType.ApprovalRequest, ObjectType.ExceptionCase]),
   ...grant(RoleCode.InventoryAccountant, ActionCode.Override, [ObjectType.OverrideLog]),
   ...grant(RoleCode.InventoryAccountant, ActionCode.Adjust, [ObjectType.InventoryStatus]),
+  ...grant(RoleCode.InventoryAccountant, ActionCode.Read, [
+    ObjectType.InventoryMovement,
+    ObjectType.CycleCount,
+    ObjectType.GoodsIssue,
+    ObjectType.IntegrationMessage,
+    ObjectType.DeadLetterMessage,
+    ObjectType.ReconciliationRun,
+  ]),
+  ...grant(RoleCode.InventoryAccountant, ActionCode.Approve, [ObjectType.GoodsIssue, ObjectType.ReconciliationRun]),
+  ...grant(RoleCode.InventoryAccountant, ActionCode.Override, [
+    ObjectType.IntegrationMessage,
+    ObjectType.DeadLetterMessage,
+    ObjectType.ReconciliationRun,
+  ]),
+  ...grant(RoleCode.InventoryAccountant, ActionCode.Adjust, [
+    ObjectType.InventoryMovement,
+    ObjectType.CycleCount,
+    ObjectType.Shipment,
+    ObjectType.Load,
+    ObjectType.GoodsIssue,
+    ObjectType.ReconciliationRun,
+  ]),
 ];
 
 export const ROLE_PERMISSION_GRANTS: ReadonlyArray<RolePermissionGrant> = [

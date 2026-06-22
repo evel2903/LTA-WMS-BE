@@ -1,4 +1,5 @@
 import { BusinessRuleException } from '@common/Exceptions/AppException';
+import { GoodsIssueTriggerPolicy } from '@modules/WarehouseProfile/Application/Services/GoodsIssueTriggerPolicy';
 import { PolicyConfig, ProfilePolicyKey } from '@modules/WarehouseProfile/Domain/ValueObjects/ProfilePolicyConfig';
 
 export class WarehouseProfilePolicyValidator {
@@ -12,7 +13,11 @@ export class WarehouseProfilePolicyValidator {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {
       throw new BusinessRuleException(`${key} must be a JSON object`);
     }
-    return value as PolicyConfig;
+    const policy = value as PolicyConfig;
+    if (key === 'StrategyPolicy') {
+      new GoodsIssueTriggerPolicy().Resolve(policy);
+    }
+    return policy;
   }
 
   public AssertWarehouseTypeCode(warehouseTypeCode: string | null | undefined): string {
