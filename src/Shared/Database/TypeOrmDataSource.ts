@@ -62,6 +62,8 @@ import { QcTaskOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Ent
 import { ReceiptOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptOrmEntity';
 import { ReceiptLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptLineOrmEntity';
 import { ReceivingSessionOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceivingSessionOrmEntity';
+import { InventoryMovementOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryMovementOrmEntity';
+import { InventoryTransactionOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryTransactionOrmEntity';
 import { PutawayTaskOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/PutawayTaskOrmEntity';
 
 const env = GetEnv();
@@ -136,6 +138,8 @@ export default new DataSource({
     ReceiptOrmEntity,
     ReceiptLineOrmEntity,
     PutawayTaskOrmEntity,
+    InventoryTransactionOrmEntity,
+    InventoryMovementOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

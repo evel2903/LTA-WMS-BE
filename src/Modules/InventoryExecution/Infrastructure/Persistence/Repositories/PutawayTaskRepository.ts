@@ -31,6 +31,16 @@ export class PutawayTaskRepository implements IPutawayTaskRepository {
     return entity ? PutawayTaskOrmMapper.ToDomain(entity) : null;
   }
 
+  public async FindByIdForUpdate(id: string, manager: EntityManager): Promise<PutawayTaskEntity | null> {
+    const entity = await manager
+      .getRepository(PutawayTaskOrmEntity)
+      .createQueryBuilder('task')
+      .setLock('pessimistic_write')
+      .where('task.id = :id', { id })
+      .getOne();
+    return entity ? PutawayTaskOrmMapper.ToDomain(entity) : null;
+  }
+
   public async FindByInboundPutawayReleaseId(inboundPutawayReleaseId: string): Promise<PutawayTaskEntity | null> {
     const entity = await this.tasks.findOne({ where: { InboundPutawayReleaseId: inboundPutawayReleaseId } });
     return entity ? PutawayTaskOrmMapper.ToDomain(entity) : null;
@@ -44,6 +54,12 @@ export class PutawayTaskRepository implements IPutawayTaskRepository {
       where: { InboundPutawayReleaseId: inboundPutawayReleaseId, IdempotencyKey: idempotencyKey },
     });
     return entity ? PutawayTaskOrmMapper.ToDomain(entity) : null;
+  }
+
+  public async Save(task: PutawayTaskEntity, manager?: EntityManager): Promise<PutawayTaskEntity> {
+    const repo = manager ? manager.getRepository(PutawayTaskOrmEntity) : this.tasks;
+    const saved = await repo.save(PutawayTaskOrmMapper.ToOrm(task));
+    return PutawayTaskOrmMapper.ToDomain(saved);
   }
 
   public async List(

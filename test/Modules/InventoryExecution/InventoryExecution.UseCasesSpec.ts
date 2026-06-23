@@ -97,6 +97,10 @@ class MemoryPutawayTaskRepository implements IPutawayTaskRepository {
     return this.tasks.find((task) => task.Id === id) ?? null;
   }
 
+  public async FindByIdForUpdate(id: string): Promise<PutawayTaskEntity | null> {
+    return this.FindById(id);
+  }
+
   public async FindByInboundPutawayReleaseId(inboundPutawayReleaseId: string): Promise<PutawayTaskEntity | null> {
     return this.tasks.find((task) => task.InboundPutawayReleaseId === inboundPutawayReleaseId) ?? null;
   }
@@ -110,6 +114,16 @@ class MemoryPutawayTaskRepository implements IPutawayTaskRepository {
         (task) => task.InboundPutawayReleaseId === inboundPutawayReleaseId && task.IdempotencyKey === idempotencyKey,
       ) ?? null
     );
+  }
+
+  public async Save(task: PutawayTaskEntity): Promise<PutawayTaskEntity> {
+    const index = this.tasks.findIndex((item) => item.Id === task.Id);
+    if (index >= 0) {
+      this.tasks[index] = task;
+    } else {
+      this.tasks.push(task);
+    }
+    return task;
   }
 
   public async List(

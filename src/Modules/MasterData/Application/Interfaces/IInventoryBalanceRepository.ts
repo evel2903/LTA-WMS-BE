@@ -10,7 +10,13 @@ export interface InventoryBalanceListFilter {
 export interface IInventoryBalanceRepository {
   FindById(id: string): Promise<InventoryBalanceEntity | null>;
   FindByDimensionId(dimensionId: string): Promise<InventoryBalanceEntity | null>;
+  FindByDimensionIdForUpdate(dimensionId: string, manager: EntityManager): Promise<InventoryBalanceEntity | null>;
+  FindOrCreateByDimensionIdForUpdate(
+    balance: InventoryBalanceEntity,
+    manager: EntityManager,
+  ): Promise<InventoryBalanceEntity>;
   Create(balance: InventoryBalanceEntity, manager?: EntityManager): Promise<InventoryBalanceEntity>;
+  Update(balance: InventoryBalanceEntity, manager?: EntityManager): Promise<InventoryBalanceEntity>;
   List(
     skip: number,
     take: number,

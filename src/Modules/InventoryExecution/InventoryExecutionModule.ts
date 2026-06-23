@@ -10,6 +10,11 @@ import {
   REASON_CODE_CATALOG,
 } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { ConfirmPutawayTaskUseCase } from '@modules/InventoryExecution/Application/UseCases/ConfirmPutawayTaskUseCase';
+import {
+  IInventoryTransactionRepository,
+  INVENTORY_TRANSACTION_REPOSITORY,
+} from '@modules/InventoryExecution/Application/Interfaces/IInventoryTransactionRepository';
 import {
   IReceivingRepository,
   RECEIVING_REPOSITORY,
@@ -28,8 +33,23 @@ import {
   PUTAWAY_TASK_REPOSITORY,
 } from '@modules/InventoryExecution/Application/Interfaces/IPutawayTaskRepository';
 import { PutawayTaskOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/PutawayTaskOrmEntity';
+import { InventoryMovementOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryMovementOrmEntity';
+import { InventoryTransactionOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryTransactionOrmEntity';
+import { InventoryTransactionRepository } from '@modules/InventoryExecution/Infrastructure/Persistence/Repositories/InventoryTransactionRepository';
 import { PutawayTaskRepository } from '@modules/InventoryExecution/Infrastructure/Persistence/Repositories/PutawayTaskRepository';
 import { PutawayTaskController } from '@modules/InventoryExecution/Presentation/Controllers/PutawayTaskController';
+import {
+  IInventoryBalanceRepository,
+  INVENTORY_BALANCE_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IInventoryBalanceRepository';
+import {
+  IInventoryDimensionRepository,
+  INVENTORY_DIMENSION_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IInventoryDimensionRepository';
+import {
+  IInventoryStatusRepository,
+  INVENTORY_STATUS_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IInventoryStatusRepository';
 import {
   ILocationProfileRepository,
   LOCATION_PROFILE_REPOSITORY,
@@ -38,6 +58,7 @@ import {
   ILocationRepository,
   LOCATION_REPOSITORY,
 } from '@modules/MasterData/Application/Interfaces/ILocationRepository';
+import { InventoryDimensionKeyService } from '@modules/MasterData/Application/Services/InventoryDimensionKeyService';
 import { MasterDataModule } from '@modules/MasterData/MasterDataModule';
 import {
   ITaskExecutionRepository,
@@ -47,7 +68,7 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PutawayTaskOrmEntity]),
+    TypeOrmModule.forFeature([PutawayTaskOrmEntity, InventoryTransactionOrmEntity, InventoryMovementOrmEntity]),
     AccessControlModule,
     MasterDataModule,
     InboundModule,
@@ -57,6 +78,7 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
   controllers: [PutawayTaskController],
   providers: [
     { provide: PUTAWAY_TASK_REPOSITORY, useClass: PutawayTaskRepository },
+    { provide: INVENTORY_TRANSACTION_REPOSITORY, useClass: InventoryTransactionRepository },
     {
       provide: ListPutawayTasksUseCase,
       useFactory: (tasks: IPutawayTaskRepository, checker: IPermissionChecker) =>
@@ -105,7 +127,49 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
         PERMISSION_CHECKER,
       ],
     },
+    {
+      provide: ConfirmPutawayTaskUseCase,
+      useFactory: (
+        putawayTasks: IPutawayTaskRepository,
+        inventoryTransactions: IInventoryTransactionRepository,
+        inventoryStatuses: IInventoryStatusRepository,
+        inventoryDimensions: IInventoryDimensionRepository,
+        inventoryBalances: IInventoryBalanceRepository,
+        integrations: IIntegrationRepository,
+        taskExecution: ITaskExecutionRepository,
+        dimensionKeyService: InventoryDimensionKeyService,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+        checker: IPermissionChecker,
+      ) =>
+        new ConfirmPutawayTaskUseCase(
+          putawayTasks,
+          inventoryTransactions,
+          inventoryStatuses,
+          inventoryDimensions,
+          inventoryBalances,
+          integrations,
+          taskExecution,
+          dimensionKeyService,
+          reasonCatalog,
+          audited,
+          checker,
+        ),
+      inject: [
+        PUTAWAY_TASK_REPOSITORY,
+        INVENTORY_TRANSACTION_REPOSITORY,
+        INVENTORY_STATUS_REPOSITORY,
+        INVENTORY_DIMENSION_REPOSITORY,
+        INVENTORY_BALANCE_REPOSITORY,
+        INTEGRATION_REPOSITORY,
+        TASK_EXECUTION_REPOSITORY,
+        InventoryDimensionKeyService,
+        REASON_CODE_CATALOG,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
   ],
-  exports: [PUTAWAY_TASK_REPOSITORY],
+  exports: [PUTAWAY_TASK_REPOSITORY, INVENTORY_TRANSACTION_REPOSITORY],
 })
 export class InventoryExecutionModule {}

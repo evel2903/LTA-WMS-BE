@@ -27,6 +27,53 @@ export class InventoryBalanceRepository implements IInventoryBalanceRepository {
     return entity ? InventoryBalanceOrmMapper.ToDomain(entity) : null;
   }
 
+  public async FindByDimensionIdForUpdate(
+    dimensionId: string,
+    manager: EntityManager,
+  ): Promise<InventoryBalanceEntity | null> {
+    const entity = await manager
+      .getRepository(InventoryBalanceOrmEntity)
+      .createQueryBuilder('balance')
+      .setLock('pessimistic_write')
+      .where('balance.dimension_id = :dimensionId', { dimensionId })
+      .getOne();
+    return entity ? InventoryBalanceOrmMapper.ToDomain(entity) : null;
+  }
+
+  public async FindOrCreateByDimensionIdForUpdate(
+    balance: InventoryBalanceEntity,
+    manager: EntityManager,
+  ): Promise<InventoryBalanceEntity> {
+    const repo = manager.getRepository(InventoryBalanceOrmEntity);
+    await repo
+      .createQueryBuilder()
+      .insert()
+      .values({
+        Id: balance.Id,
+        DimensionId: balance.DimensionId,
+        QtyOnHand: balance.QtyOnHand,
+        QtyReserved: balance.QtyReserved,
+        QtyAvailable: balance.QtyAvailable,
+        SourceSystem: balance.SourceSystem,
+        ReferenceId: balance.ReferenceId,
+        CreatedAt: balance.CreatedAt,
+        UpdatedAt: balance.UpdatedAt,
+        CreatedBy: balance.CreatedBy,
+        UpdatedBy: balance.UpdatedBy,
+      })
+      .orIgnore()
+      .execute();
+    const entity = await repo
+      .createQueryBuilder('balance')
+      .setLock('pessimistic_write')
+      .where('balance.dimension_id = :dimensionId', { dimensionId: balance.DimensionId })
+      .getOne();
+    if (!entity) {
+      throw new ConflictException('Inventory balance could not be locked after upsert');
+    }
+    return InventoryBalanceOrmMapper.ToDomain(entity);
+  }
+
   public async Create(balance: InventoryBalanceEntity, manager?: EntityManager): Promise<InventoryBalanceEntity> {
     const repo = manager ? manager.getRepository(InventoryBalanceOrmEntity) : this.inventoryBalances;
     try {
@@ -36,6 +83,12 @@ export class InventoryBalanceRepository implements IInventoryBalanceRepository {
       this.HandleUniqueViolation(error);
       throw error;
     }
+  }
+
+  public async Update(balance: InventoryBalanceEntity, manager?: EntityManager): Promise<InventoryBalanceEntity> {
+    const repo = manager ? manager.getRepository(InventoryBalanceOrmEntity) : this.inventoryBalances;
+    const saved = await repo.save(InventoryBalanceOrmMapper.ToOrm(balance));
+    return InventoryBalanceOrmMapper.ToDomain(saved);
   }
 
   public async List(

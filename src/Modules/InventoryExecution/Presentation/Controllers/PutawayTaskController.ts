@@ -6,9 +6,11 @@ import { CurrentAuditContext } from '@modules/AccessControl/Presentation/Decorat
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
+import { ConfirmPutawayTaskUseCase } from '@modules/InventoryExecution/Application/UseCases/ConfirmPutawayTaskUseCase';
 import { GetPutawayTaskUseCase } from '@modules/InventoryExecution/Application/UseCases/GetPutawayTaskUseCase';
 import { ListPutawayTasksUseCase } from '@modules/InventoryExecution/Application/UseCases/ListPutawayTasksUseCase';
 import { ReleasePutawayTaskUseCase } from '@modules/InventoryExecution/Application/UseCases/ReleasePutawayTaskUseCase';
+import { ConfirmPutawayTaskRequest } from '@modules/InventoryExecution/Presentation/Requests/ConfirmPutawayTaskRequest';
 import { ListPutawayTasksQuery } from '@modules/InventoryExecution/Presentation/Requests/ListPutawayTasksQuery';
 import { ReleasePutawayTaskRequest } from '@modules/InventoryExecution/Presentation/Requests/ReleasePutawayTaskRequest';
 
@@ -19,6 +21,7 @@ export class PutawayTaskController {
     private readonly listPutawayTasksUseCase: ListPutawayTasksUseCase,
     private readonly getPutawayTaskUseCase: GetPutawayTaskUseCase,
     private readonly releasePutawayTaskUseCase: ReleasePutawayTaskUseCase,
+    private readonly confirmPutawayTaskUseCase: ConfirmPutawayTaskUseCase,
   ) {}
 
   @Get()
@@ -40,5 +43,15 @@ export class PutawayTaskController {
   @RequirePermission(ActionCode.Create, ObjectType.PutawayTask)
   public async Release(@Body() request: ReleasePutawayTaskRequest, @CurrentAuditContext() context: AuditContext) {
     return await this.releasePutawayTaskUseCase.Execute(request, context);
+  }
+
+  @Post(':id/confirm')
+  @RequirePermission(ActionCode.Update, ObjectType.PutawayTask)
+  public async Confirm(
+    @Param('id') id: string,
+    @Body() request: ConfirmPutawayTaskRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.confirmPutawayTaskUseCase.Execute(id, request, context);
   }
 }
