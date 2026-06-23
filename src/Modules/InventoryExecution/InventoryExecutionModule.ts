@@ -11,6 +11,7 @@ import {
 } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { ConfirmPutawayTaskUseCase } from '@modules/InventoryExecution/Application/UseCases/ConfirmPutawayTaskUseCase';
+import { InventoryControlUseCase } from '@modules/InventoryExecution/Application/UseCases/InventoryControlUseCase';
 import {
   IInventoryTransactionRepository,
   INVENTORY_TRANSACTION_REPOSITORY,
@@ -37,6 +38,7 @@ import { InventoryMovementOrmEntity } from '@modules/InventoryExecution/Infrastr
 import { InventoryTransactionOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryTransactionOrmEntity';
 import { InventoryTransactionRepository } from '@modules/InventoryExecution/Infrastructure/Persistence/Repositories/InventoryTransactionRepository';
 import { PutawayTaskRepository } from '@modules/InventoryExecution/Infrastructure/Persistence/Repositories/PutawayTaskRepository';
+import { InventoryControlController } from '@modules/InventoryExecution/Presentation/Controllers/InventoryControlController';
 import { PutawayTaskController } from '@modules/InventoryExecution/Presentation/Controllers/PutawayTaskController';
 import {
   IInventoryBalanceRepository,
@@ -75,7 +77,7 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
     IntegrationModule,
     TaskExecutionModule,
   ],
-  controllers: [PutawayTaskController],
+  controllers: [PutawayTaskController, InventoryControlController],
   providers: [
     { provide: PUTAWAY_TASK_REPOSITORY, useClass: PutawayTaskRepository },
     { provide: INVENTORY_TRANSACTION_REPOSITORY, useClass: InventoryTransactionRepository },
@@ -163,6 +165,45 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
         INVENTORY_BALANCE_REPOSITORY,
         INTEGRATION_REPOSITORY,
         TASK_EXECUTION_REPOSITORY,
+        InventoryDimensionKeyService,
+        REASON_CODE_CATALOG,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
+    {
+      provide: InventoryControlUseCase,
+      useFactory: (
+        inventoryTransactions: IInventoryTransactionRepository,
+        inventoryStatuses: IInventoryStatusRepository,
+        inventoryDimensions: IInventoryDimensionRepository,
+        inventoryBalances: IInventoryBalanceRepository,
+        locations: ILocationRepository,
+        integrations: IIntegrationRepository,
+        dimensionKeyService: InventoryDimensionKeyService,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+        checker: IPermissionChecker,
+      ) =>
+        new InventoryControlUseCase(
+          inventoryTransactions,
+          inventoryStatuses,
+          inventoryDimensions,
+          inventoryBalances,
+          locations,
+          integrations,
+          dimensionKeyService,
+          reasonCatalog,
+          audited,
+          checker,
+        ),
+      inject: [
+        INVENTORY_TRANSACTION_REPOSITORY,
+        INVENTORY_STATUS_REPOSITORY,
+        INVENTORY_DIMENSION_REPOSITORY,
+        INVENTORY_BALANCE_REPOSITORY,
+        LOCATION_REPOSITORY,
+        INTEGRATION_REPOSITORY,
         InventoryDimensionKeyService,
         REASON_CODE_CATALOG,
         AuditedTransaction,

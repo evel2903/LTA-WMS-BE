@@ -8,8 +8,8 @@ export interface InventoryTransactionDto {
   TransactionCode: string;
   TransactionType: InventoryTransactionType;
   TransactionStatus: InventoryTransactionStatus;
-  PutawayTaskId: string;
-  PutawayTaskCode: string;
+  PutawayTaskId: string | null;
+  PutawayTaskCode: string | null;
   InventoryMovementId: string | null;
   OwnerId: string;
   OwnerCode: string | null;
@@ -17,7 +17,7 @@ export interface InventoryTransactionDto {
   WarehouseCode: string | null;
   SkuId: string;
   SkuCode: string | null;
-  UomId: string;
+  UomId: string | null;
   UomCode: string | null;
   Quantity: number;
   FromInventoryStatusCode: string;
@@ -45,15 +45,15 @@ export interface InventoryMovementDto {
   MovementCode: string;
   MovementStatus: InventoryMovementStatus;
   InventoryTransactionId: string;
-  PutawayTaskId: string;
-  PutawayTaskCode: string;
+  PutawayTaskId: string | null;
+  PutawayTaskCode: string | null;
   OwnerId: string;
   OwnerCode: string | null;
   WarehouseId: string;
   WarehouseCode: string | null;
   SkuId: string;
   SkuCode: string | null;
-  UomId: string;
+  UomId: string | null;
   UomCode: string | null;
   Quantity: number;
   FromDimensionId: string;
@@ -109,5 +109,15 @@ export interface ConfirmPutawayTaskResultDto {
   TargetBalance: InventoryBalanceSnapshotDto;
   ScanResults: PutawayConfirmScanDto[];
   OutboxMessageId: string | null;
+  IsDuplicate: boolean;
+}
+
+export interface InventoryControlResultDto {
+  InventoryTransaction: InventoryTransactionDto;
+  InventoryMovement: InventoryMovementDto;
+  SourceBalance: InventoryBalanceSnapshotDto;
+  TargetBalance: InventoryBalanceSnapshotDto;
+  OutboxMessageId: string | null;
+  EventType: 'InventoryStatusChanged' | 'InventoryMoved';
   IsDuplicate: boolean;
 }

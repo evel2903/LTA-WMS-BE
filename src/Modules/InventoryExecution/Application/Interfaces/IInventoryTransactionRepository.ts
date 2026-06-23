@@ -1,6 +1,7 @@
 import { EntityManager } from 'typeorm';
 import { InventoryMovementEntity } from '@modules/InventoryExecution/Domain/Entities/InventoryMovementEntity';
 import { InventoryTransactionEntity } from '@modules/InventoryExecution/Domain/Entities/InventoryTransactionEntity';
+import { InventoryTransactionType } from '@modules/InventoryExecution/Domain/Enums/InventoryTransactionType';
 
 export const INVENTORY_TRANSACTION_REPOSITORY = Symbol('IInventoryTransactionRepository');
 
@@ -19,5 +20,10 @@ export interface IInventoryTransactionRepository {
     idempotencyKey: string,
     manager?: EntityManager,
   ): Promise<InventoryTransactionEntity | null>;
-  FindMovementByTransactionId(transactionId: string): Promise<InventoryMovementEntity | null>;
+  FindTransactionByTypeAndIdempotencyKey(
+    transactionType: InventoryTransactionType,
+    idempotencyKey: string,
+    manager?: EntityManager,
+  ): Promise<InventoryTransactionEntity | null>;
+  FindMovementByTransactionId(transactionId: string, manager?: EntityManager): Promise<InventoryMovementEntity | null>;
 }

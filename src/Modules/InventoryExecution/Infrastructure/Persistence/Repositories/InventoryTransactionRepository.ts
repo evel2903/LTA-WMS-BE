@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager, IsNull, Repository } from 'typeorm';
 import { IInventoryTransactionRepository } from '@modules/InventoryExecution/Application/Interfaces/IInventoryTransactionRepository';
 import { InventoryMovementEntity } from '@modules/InventoryExecution/Domain/Entities/InventoryMovementEntity';
 import { InventoryTransactionEntity } from '@modules/InventoryExecution/Domain/Entities/InventoryTransactionEntity';
+import { InventoryTransactionType } from '@modules/InventoryExecution/Domain/Enums/InventoryTransactionType';
 import { InventoryTransactionOrmMapper } from '@modules/InventoryExecution/Infrastructure/Mappers/InventoryTransactionOrmMapper';
 import { InventoryMovementOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryMovementOrmEntity';
 import { InventoryTransactionOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryTransactionOrmEntity';
@@ -67,8 +68,24 @@ export class InventoryTransactionRepository implements IInventoryTransactionRepo
     return entity ? InventoryTransactionOrmMapper.TransactionToDomain(entity) : null;
   }
 
-  public async FindMovementByTransactionId(transactionId: string): Promise<InventoryMovementEntity | null> {
-    const entity = await this.movements.findOne({ where: { InventoryTransactionId: transactionId } });
+  public async FindTransactionByTypeAndIdempotencyKey(
+    transactionType: InventoryTransactionType,
+    idempotencyKey: string,
+    manager?: EntityManager,
+  ): Promise<InventoryTransactionEntity | null> {
+    const repo = manager ? manager.getRepository(InventoryTransactionOrmEntity) : this.transactions;
+    const entity = await repo.findOne({
+      where: { PutawayTaskId: IsNull(), TransactionType: transactionType, IdempotencyKey: idempotencyKey },
+    });
+    return entity ? InventoryTransactionOrmMapper.TransactionToDomain(entity) : null;
+  }
+
+  public async FindMovementByTransactionId(
+    transactionId: string,
+    manager?: EntityManager,
+  ): Promise<InventoryMovementEntity | null> {
+    const repo = manager ? manager.getRepository(InventoryMovementOrmEntity) : this.movements;
+    const entity = await repo.findOne({ where: { InventoryTransactionId: transactionId } });
     return entity ? InventoryTransactionOrmMapper.MovementToDomain(entity) : null;
   }
 

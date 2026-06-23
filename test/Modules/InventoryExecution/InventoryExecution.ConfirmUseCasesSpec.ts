@@ -173,6 +173,20 @@ class MemoryInventoryTransactionRepository implements IInventoryTransactionRepos
     );
   }
 
+  public async FindTransactionByTypeAndIdempotencyKey(
+    transactionType: InventoryTransactionType,
+    idempotencyKey: string,
+  ): Promise<InventoryTransactionEntity | null> {
+    return (
+      this.transactions.find(
+        (transaction) =>
+          transaction.PutawayTaskId === null &&
+          transaction.TransactionType === transactionType &&
+          transaction.IdempotencyKey === idempotencyKey,
+      ) ?? null
+    );
+  }
+
   public async FindMovementByTransactionId(transactionId: string): Promise<InventoryMovementEntity | null> {
     return this.movements.find((movement) => movement.InventoryTransactionId === transactionId) ?? null;
   }

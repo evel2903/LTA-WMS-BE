@@ -19,11 +19,11 @@ export class InventoryMovementOrmEntity {
   @Column({ name: 'inventory_transaction_id', type: 'char', length: 36 })
   public InventoryTransactionId!: string;
 
-  @Column({ name: 'putaway_task_id', type: 'char', length: 36 })
-  public PutawayTaskId!: string;
+  @Column({ name: 'putaway_task_id', type: 'char', length: 36, nullable: true })
+  public PutawayTaskId!: string | null;
 
-  @Column({ name: 'putaway_task_code', type: 'varchar', length: 80 })
-  public PutawayTaskCode!: string;
+  @Column({ name: 'putaway_task_code', type: 'varchar', length: 80, nullable: true })
+  public PutawayTaskCode!: string | null;
 
   @Column({ name: 'owner_id', type: 'char', length: 36 })
   public OwnerId!: string;
@@ -43,8 +43,8 @@ export class InventoryMovementOrmEntity {
   @Column({ name: 'sku_code', type: 'varchar', length: 80, nullable: true })
   public SkuCode!: string | null;
 
-  @Column({ name: 'uom_id', type: 'char', length: 36 })
-  public UomId!: string;
+  @Column({ name: 'uom_id', type: 'char', length: 36, nullable: true })
+  public UomId!: string | null;
 
   @Column({ name: 'uom_code', type: 'varchar', length: 40, nullable: true })
   public UomCode!: string | null;

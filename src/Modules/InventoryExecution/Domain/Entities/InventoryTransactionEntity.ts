@@ -7,8 +7,8 @@ export interface InventoryTransactionEntityProps {
   TransactionCode: string;
   TransactionType: InventoryTransactionType;
   TransactionStatus: InventoryTransactionStatus;
-  PutawayTaskId: string;
-  PutawayTaskCode: string;
+  PutawayTaskId?: string | null;
+  PutawayTaskCode?: string | null;
   InventoryMovementId?: string | null;
   OwnerId: string;
   OwnerCode?: string | null;
@@ -16,7 +16,7 @@ export interface InventoryTransactionEntityProps {
   WarehouseCode?: string | null;
   SkuId: string;
   SkuCode?: string | null;
-  UomId: string;
+  UomId?: string | null;
   UomCode?: string | null;
   Quantity: number;
   FromInventoryStatusCode: string;
@@ -44,8 +44,8 @@ export class InventoryTransactionEntity {
   public TransactionCode: string;
   public TransactionType: InventoryTransactionType;
   public TransactionStatus: InventoryTransactionStatus;
-  public PutawayTaskId: string;
-  public PutawayTaskCode: string;
+  public PutawayTaskId: string | null;
+  public PutawayTaskCode: string | null;
   public InventoryMovementId: string | null;
   public OwnerId: string;
   public OwnerCode: string | null;
@@ -53,7 +53,7 @@ export class InventoryTransactionEntity {
   public WarehouseCode: string | null;
   public SkuId: string;
   public SkuCode: string | null;
-  public UomId: string;
+  public UomId: string | null;
   public UomCode: string | null;
   public Quantity: number;
   public FromInventoryStatusCode: string;
@@ -81,8 +81,8 @@ export class InventoryTransactionEntity {
     this.TransactionCode = props.TransactionCode;
     this.TransactionType = props.TransactionType;
     this.TransactionStatus = props.TransactionStatus;
-    this.PutawayTaskId = props.PutawayTaskId;
-    this.PutawayTaskCode = props.PutawayTaskCode;
+    this.PutawayTaskId = props.PutawayTaskId ?? null;
+    this.PutawayTaskCode = props.PutawayTaskCode ?? null;
     this.InventoryMovementId = props.InventoryMovementId ?? null;
     this.OwnerId = props.OwnerId;
     this.OwnerCode = props.OwnerCode ?? null;
@@ -90,7 +90,7 @@ export class InventoryTransactionEntity {
     this.WarehouseCode = props.WarehouseCode ?? null;
     this.SkuId = props.SkuId;
     this.SkuCode = props.SkuCode ?? null;
-    this.UomId = props.UomId;
+    this.UomId = props.UomId ?? null;
     this.UomCode = props.UomCode ?? null;
     this.Quantity = props.Quantity;
     this.FromInventoryStatusCode = props.FromInventoryStatusCode;
