@@ -4,7 +4,7 @@ import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ActorType } from '@modules/AccessControl/Domain/Enums/ActorType';
 import { AuditEntry } from '@modules/AccessControl/Application/DTOs/AuditEntry';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
-import { FakeAuditWriter } from '@modules/AccessControl/Test/AccessControlTestDoubles';
+import { FakeAuditWriter } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
 /**
  * Always-run (no-DB) proof of the C5 atomicity contract for AuditedTransaction.Run: the audit

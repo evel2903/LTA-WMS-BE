@@ -12,7 +12,7 @@ import {
   InMemoryRoleRepository,
   InMemoryPermissionRepository,
   InMemoryRolePermissionRepository,
-} from '@modules/AccessControl/Test/AccessControlTestDoubles';
+} from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
 const seedFreshRepositories = async () => {
   const roles = new InMemoryRoleRepository();

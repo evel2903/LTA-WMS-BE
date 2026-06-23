@@ -17,7 +17,7 @@ import { WarehouseProfilePolicyValidator } from '@modules/WarehouseProfile/Appli
 import {
   InMemoryWarehouseProfileAssignmentRepository,
   InMemoryWarehouseProfileRepository,
-} from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
 
 class MemorySiteRepository implements ISiteRepository {
   private readonly sites = new Map<string, SiteEntity>();

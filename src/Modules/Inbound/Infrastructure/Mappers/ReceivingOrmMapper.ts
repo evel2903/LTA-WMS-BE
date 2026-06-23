@@ -2,6 +2,8 @@ import { ReceiptEntity } from '@modules/Inbound/Domain/Entities/ReceiptEntity';
 import { ReceiptLineEntity } from '@modules/Inbound/Domain/Entities/ReceiptLineEntity';
 import { ReceivingSessionEntity } from '@modules/Inbound/Domain/Entities/ReceivingSessionEntity';
 import { InboundDiscrepancyEntity } from '@modules/Inbound/Domain/Entities/InboundDiscrepancyEntity';
+import { InboundLpnEntity } from '@modules/Inbound/Domain/Entities/InboundLpnEntity';
+import { InboundPutawayReleaseEntity } from '@modules/Inbound/Domain/Entities/InboundPutawayReleaseEntity';
 import { ExceptionState } from '@modules/AccessControl/Domain/Enums/ExceptionState';
 import { ControlExceptionSeverity } from '@modules/AccessControl/Domain/Enums/ControlExceptionSeverity';
 import { InboundDiscrepancyStatus } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyStatus';
@@ -17,6 +19,8 @@ import { ReceiptLineDiscrepancySignal } from '@modules/Inbound/Domain/Enums/Rece
 import { ReceiptLineStatus } from '@modules/Inbound/Domain/Enums/ReceiptLineStatus';
 import { ReceivingSessionStatus } from '@modules/Inbound/Domain/Enums/ReceivingSessionStatus';
 import { InboundDiscrepancyOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundDiscrepancyOrmEntity';
+import { InboundLpnOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundLpnOrmEntity';
+import { InboundPutawayReleaseOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPutawayReleaseOrmEntity';
 import { QcResultOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcResultOrmEntity';
 import { QcTaskOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcTaskOrmEntity';
 import { ReceiptOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptOrmEntity';
@@ -125,6 +129,77 @@ export class ReceivingOrmMapper {
     });
   }
 
+  public static ToInboundLpnDomain(entity: InboundLpnOrmEntity): InboundLpnEntity {
+    return new InboundLpnEntity({
+      Id: entity.Id,
+      ReceiptId: entity.ReceiptId,
+      ReceiptLineId: entity.ReceiptLineId,
+      InboundPlanId: entity.InboundPlanId,
+      InboundPlanLineId: entity.InboundPlanLineId,
+      OwnerId: entity.OwnerId,
+      OwnerCode: entity.OwnerCode,
+      WarehouseId: entity.WarehouseId,
+      WarehouseCode: entity.WarehouseCode,
+      SkuId: entity.SkuId,
+      SkuCode: entity.SkuCode,
+      UomId: entity.UomId,
+      UomCode: entity.UomCode,
+      Quantity: Number(entity.Quantity),
+      LpnCode: entity.LpnCode,
+      SsccCode: entity.SsccCode,
+      ReasonCode: entity.ReasonCode,
+      ReasonCodeId: entity.ReasonCodeId,
+      ReasonNote: entity.ReasonNote,
+      EvidenceRefs: entity.EvidenceRefs ?? [],
+      IdempotencyKey: entity.IdempotencyKey,
+      ConfirmedAt: entity.ConfirmedAt,
+      ConfirmedBy: entity.ConfirmedBy,
+      CreatedAt: entity.CreatedAt,
+      UpdatedAt: entity.UpdatedAt,
+    });
+  }
+
+  public static ToInboundPutawayReleaseDomain(entity: InboundPutawayReleaseOrmEntity): InboundPutawayReleaseEntity {
+    return new InboundPutawayReleaseEntity({
+      Id: entity.Id,
+      InboundLpnId: entity.InboundLpnId,
+      ReceiptId: entity.ReceiptId,
+      ReceiptLineId: entity.ReceiptLineId,
+      InboundPlanId: entity.InboundPlanId,
+      InboundPlanLineId: entity.InboundPlanLineId,
+      OwnerId: entity.OwnerId,
+      OwnerCode: entity.OwnerCode,
+      WarehouseId: entity.WarehouseId,
+      WarehouseCode: entity.WarehouseCode,
+      SkuId: entity.SkuId,
+      SkuCode: entity.SkuCode,
+      UomId: entity.UomId,
+      UomCode: entity.UomCode,
+      Quantity: Number(entity.Quantity),
+      LpnCode: entity.LpnCode,
+      SsccCode: entity.SsccCode,
+      InventoryStatusCode: entity.InventoryStatusCode,
+      CurrentLocationId: entity.CurrentLocationId,
+      CurrentLocationCode: entity.CurrentLocationCode,
+      WarehouseProfileId: entity.WarehouseProfileId,
+      LabelDecision: entity.LabelDecision,
+      LabelReason: entity.LabelReason,
+      MatchedPrintJobId: entity.MatchedPrintJobId,
+      ConstraintJson: entity.ConstraintJson,
+      OutboxMessageId: entity.OutboxMessageId,
+      CoreFlowMilestoneId: entity.CoreFlowMilestoneId,
+      ReasonCode: entity.ReasonCode,
+      ReasonCodeId: entity.ReasonCodeId,
+      ReasonNote: entity.ReasonNote,
+      EvidenceRefs: entity.EvidenceRefs ?? [],
+      IdempotencyKey: entity.IdempotencyKey,
+      ReleasedAt: entity.ReleasedAt,
+      ReleasedBy: entity.ReleasedBy,
+      CreatedAt: entity.CreatedAt,
+      UpdatedAt: entity.UpdatedAt,
+    });
+  }
+
   public static ToQcTaskDomain(entity: QcTaskOrmEntity): QcTaskEntity {
     return new QcTaskEntity({
       Id: entity.Id,
@@ -212,6 +287,18 @@ export class ReceivingOrmMapper {
 
   public static ToDiscrepancyOrm(entity: InboundDiscrepancyEntity): InboundDiscrepancyOrmEntity {
     const orm = new InboundDiscrepancyOrmEntity();
+    Object.assign(orm, entity);
+    return orm;
+  }
+
+  public static ToInboundLpnOrm(entity: InboundLpnEntity): InboundLpnOrmEntity {
+    const orm = new InboundLpnOrmEntity();
+    Object.assign(orm, entity);
+    return orm;
+  }
+
+  public static ToInboundPutawayReleaseOrm(entity: InboundPutawayReleaseEntity): InboundPutawayReleaseOrmEntity {
+    const orm = new InboundPutawayReleaseOrmEntity();
     Object.assign(orm, entity);
     return orm;
   }

@@ -3,7 +3,7 @@ import {
   SeedRuleGroupCatalog,
   RuleGroupCatalogEntries,
 } from '@modules/WarehouseProfile/Application/Services/RuleGroupCatalogSeed';
-import { InMemoryRuleGroupRepository } from '@modules/WarehouseProfile/Test/RuleTestDoubles';
+import { InMemoryRuleGroupRepository } from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
 
 describe('Rule group catalog seed', () => {
   it('defines the four V0 active groups R-MD, R-RBAC, R-COM, R-INT', () => {

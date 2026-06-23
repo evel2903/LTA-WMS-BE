@@ -33,14 +33,14 @@ import {
   InMemoryUserRoleRepository,
   InMemoryDataScopeRepository,
   FakeAuditWriter,
-} from '@modules/AccessControl/Test/AccessControlTestDoubles';
+} from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 import { RuleControlMode } from '@modules/WarehouseProfile/Domain/Enums/RuleControlMode';
 import { RulePrecedenceTier } from '@modules/WarehouseProfile/Domain/Enums/RulePrecedenceTier';
 import { RequestOverrideUseCase } from '@modules/WarehouseProfile/Application/UseCases/RequestOverrideUseCase';
 import {
   InMemoryOverrideLogRepository,
   InMemoryRuleDefinitionRepository,
-} from '@modules/WarehouseProfile/Test/RuleTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
 import { BuildRule } from '@test/Modules/WarehouseProfile/WarehouseProfile.RuleResolverTestHelpers';
 
 /**

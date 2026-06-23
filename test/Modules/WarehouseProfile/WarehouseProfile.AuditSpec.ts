@@ -3,7 +3,7 @@ import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ActorType } from '@modules/AccessControl/Domain/Enums/ActorType';
 import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
-import { FakeAuditWriter, StubAuditedTransaction } from '@modules/AccessControl/Test/AccessControlTestDoubles';
+import { FakeAuditWriter, StubAuditedTransaction } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 import { IOwnerRepository } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
@@ -29,12 +29,12 @@ import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/W
 import {
   InMemoryWarehouseProfileAssignmentRepository,
   InMemoryWarehouseProfileRepository,
-} from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
 import {
   InMemoryRuleDefinitionRepository,
   InMemoryWarehouseProfileRuleRepository,
   StubRuleResolver,
-} from '@modules/WarehouseProfile/Test/RuleTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
 import { BuildBinding, BuildRule } from '@test/Modules/WarehouseProfile/WarehouseProfile.RuleResolverTestHelpers';
 
 /**

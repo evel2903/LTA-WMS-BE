@@ -22,13 +22,13 @@ import { RuleGroupCatalogState } from '@modules/WarehouseProfile/Domain/Enums/Ru
 import { RulePrecedenceTier } from '@modules/WarehouseProfile/Domain/Enums/RulePrecedenceTier';
 import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/WarehouseProfileStatus';
 import { RuleGroupEntity } from '@modules/WarehouseProfile/Domain/Entities/RuleGroupEntity';
-import { InMemoryWarehouseProfileRepository } from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
+import { InMemoryWarehouseProfileRepository } from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
 import {
   InMemoryRuleDefinitionRepository,
   InMemoryRuleGroupRepository,
   InMemoryWarehouseProfileRuleRepository,
   StubRuleResolver,
-} from '@modules/WarehouseProfile/Test/RuleTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
 import { BuildBinding, BuildRule } from '@test/Modules/WarehouseProfile/WarehouseProfile.RuleResolverTestHelpers';
 
 class MemorySiteRepository implements ISiteRepository {

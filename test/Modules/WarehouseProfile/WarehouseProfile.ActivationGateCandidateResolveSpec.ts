@@ -15,8 +15,8 @@ import {
   InMemoryRuleDefinitionRepository,
   InMemoryRuleGroupRepository,
   InMemoryWarehouseProfileRuleRepository,
-} from '@modules/WarehouseProfile/Test/RuleTestDoubles';
-import { InMemoryWarehouseProfileRepository } from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
+import { InMemoryWarehouseProfileRepository } from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
 import { BuildBinding, BuildRule } from '@test/Modules/WarehouseProfile/WarehouseProfile.RuleResolverTestHelpers';
 
 /**

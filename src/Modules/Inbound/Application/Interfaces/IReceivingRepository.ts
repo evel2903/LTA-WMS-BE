@@ -1,6 +1,8 @@
 import { EntityManager } from 'typeorm';
 import { InboundDiscrepancyEntity } from '@modules/Inbound/Domain/Entities/InboundDiscrepancyEntity';
 import { InboundDiscrepancyStatus } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyStatus';
+import { InboundLpnEntity } from '@modules/Inbound/Domain/Entities/InboundLpnEntity';
+import { InboundPutawayReleaseEntity } from '@modules/Inbound/Domain/Entities/InboundPutawayReleaseEntity';
 import { QcResultEntity } from '@modules/Inbound/Domain/Entities/QcResultEntity';
 import { QcTaskEntity } from '@modules/Inbound/Domain/Entities/QcTaskEntity';
 import { ReceiptEntity } from '@modules/Inbound/Domain/Entities/ReceiptEntity';
@@ -47,10 +49,25 @@ export interface IReceivingRepository {
       Status?: InboundDiscrepancyStatus;
     },
   ): Promise<{ Items: InboundDiscrepancyEntity[]; TotalItems: number }>;
+  CreateInboundLpn(lpn: InboundLpnEntity, manager?: EntityManager): Promise<InboundLpnEntity>;
+  FindInboundLpnById(id: string): Promise<InboundLpnEntity | null>;
+  FindInboundLpnByReceiptLineId(receiptLineId: string): Promise<InboundLpnEntity | null>;
+  FindInboundLpnByIdempotencyKey(receiptLineId: string, idempotencyKey: string): Promise<InboundLpnEntity | null>;
+  FindInboundLpnByScopeCode(warehouseId: string, ownerId: string, lpnCode: string): Promise<InboundLpnEntity | null>;
+  CreateInboundPutawayRelease(
+    release: InboundPutawayReleaseEntity,
+    manager?: EntityManager,
+  ): Promise<InboundPutawayReleaseEntity>;
+  FindInboundPutawayReleaseByIdempotencyKey(
+    receiptLineId: string,
+    idempotencyKey: string,
+  ): Promise<InboundPutawayReleaseEntity | null>;
   CreateQcTask(task: QcTaskEntity, manager?: EntityManager): Promise<QcTaskEntity>;
   UpdateQcTask(task: QcTaskEntity, manager?: EntityManager): Promise<QcTaskEntity>;
   FindQcTaskById(id: string): Promise<QcTaskEntity | null>;
   FindQcTaskByIdempotencyKey(receiptId: string, idempotencyKey: string): Promise<QcTaskEntity | null>;
+  FindLatestQcTaskByReceiptLineId(receiptLineId: string): Promise<QcTaskEntity | null>;
   CreateQcResult(result: QcResultEntity, manager?: EntityManager): Promise<QcResultEntity>;
   FindQcResultByIdempotencyKey(qcTaskId: string, idempotencyKey: string): Promise<QcResultEntity | null>;
+  FindLatestQcResultByReceiptLineId(receiptLineId: string): Promise<QcResultEntity | null>;
 }

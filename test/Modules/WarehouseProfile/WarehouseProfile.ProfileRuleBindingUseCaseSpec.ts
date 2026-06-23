@@ -12,8 +12,8 @@ import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entitie
 import {
   InMemoryRuleDefinitionRepository,
   InMemoryWarehouseProfileRuleRepository,
-} from '@modules/WarehouseProfile/Test/RuleTestDoubles';
-import { InMemoryWarehouseProfileRepository } from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
+import { InMemoryWarehouseProfileRepository } from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
 
 const Now = new Date('2026-01-01T00:00:00.000Z');
 

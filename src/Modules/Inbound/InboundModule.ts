@@ -28,14 +28,18 @@ import {
   IIntegrationRepository,
 } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
 import { IntegrationModule } from '@modules/Integration/IntegrationModule';
+import { BarcodeLabelModule } from '@modules/BarcodeLabel/BarcodeLabelModule';
+import { ValidateLabelBlockingUseCase } from '@modules/BarcodeLabel/Application/UseCases/ValidateLabelBlockingUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
 import { CaptureInboundDiscrepancyUseCase } from '@modules/Inbound/Application/UseCases/CaptureInboundDiscrepancyUseCase';
+import { ConfirmInboundLpnUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundLpnUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { EvaluateQcTaskUseCase } from '@modules/Inbound/Application/UseCases/EvaluateQcTaskUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
 import { RecordQcResultUseCase } from '@modules/Inbound/Application/UseCases/RecordQcResultUseCase';
+import { ReleaseInboundToPutawayUseCase } from '@modules/Inbound/Application/UseCases/ReleaseInboundToPutawayUseCase';
 import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCases/StartReceivingSessionUseCase';
 import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
 import {
@@ -49,6 +53,8 @@ import {
 import { InboundPlanOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanOrmEntity';
 import { InboundPlanLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanLineOrmEntity';
 import { InboundDiscrepancyOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundDiscrepancyOrmEntity';
+import { InboundLpnOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundLpnOrmEntity';
+import { InboundPutawayReleaseOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPutawayReleaseOrmEntity';
 import { QcResultOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcResultOrmEntity';
 import { QcTaskOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcTaskOrmEntity';
 import { ReceiptOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptOrmEntity';
@@ -87,6 +93,8 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
       ReceiptOrmEntity,
       ReceiptLineOrmEntity,
       InboundDiscrepancyOrmEntity,
+      InboundLpnOrmEntity,
+      InboundPutawayReleaseOrmEntity,
       QcTaskOrmEntity,
       QcResultOrmEntity,
     ]),
@@ -95,6 +103,7 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
     PartnerMasterModule,
     CoreFlowModule,
     IntegrationModule,
+    BarcodeLabelModule,
     WarehouseProfileModule,
   ],
   controllers: [InboundPlanController, ReceiptController, QcTaskController],
@@ -269,6 +278,23 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
       ],
     },
     {
+      provide: ConfirmInboundLpnUseCase,
+      useFactory: (
+        inboundPlans: IInboundPlanRepository,
+        receiving: IReceivingRepository,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) => new ConfirmInboundLpnUseCase(inboundPlans, receiving, reasonCatalog, audited, permissionChecker),
+      inject: [
+        INBOUND_PLAN_REPOSITORY,
+        RECEIVING_REPOSITORY,
+        REASON_CODE_CATALOG,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
+    {
       provide: EvaluateQcTaskUseCase,
       useFactory: (
         inboundPlans: IInboundPlanRepository,
@@ -297,6 +323,42 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
         RECEIVING_REPOSITORY,
         WAREHOUSE_PROFILE_REPOSITORY,
         SKU_REPOSITORY,
+        CORE_FLOW_REPOSITORY,
+        INTEGRATION_REPOSITORY,
+        REASON_CODE_CATALOG,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
+    {
+      provide: ReleaseInboundToPutawayUseCase,
+      useFactory: (
+        inboundPlans: IInboundPlanRepository,
+        receiving: IReceivingRepository,
+        profiles: IWarehouseProfileRepository,
+        labelBlocking: ValidateLabelBlockingUseCase,
+        coreFlows: ICoreFlowRepository,
+        integrations: IIntegrationRepository,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) =>
+        new ReleaseInboundToPutawayUseCase(
+          inboundPlans,
+          receiving,
+          profiles,
+          labelBlocking,
+          coreFlows,
+          integrations,
+          reasonCatalog,
+          audited,
+          permissionChecker,
+        ),
+      inject: [
+        INBOUND_PLAN_REPOSITORY,
+        RECEIVING_REPOSITORY,
+        WAREHOUSE_PROFILE_REPOSITORY,
+        ValidateLabelBlockingUseCase,
         CORE_FLOW_REPOSITORY,
         INTEGRATION_REPOSITORY,
         REASON_CODE_CATALOG,

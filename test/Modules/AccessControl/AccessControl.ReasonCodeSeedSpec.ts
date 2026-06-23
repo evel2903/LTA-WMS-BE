@@ -7,7 +7,7 @@ import {
   ReasonCodeCatalogEntries,
   SeedReasonCodeCatalog,
 } from '@modules/AccessControl/Application/Services/ReasonCodeCatalogSeed';
-import { InMemoryReasonCodeRepository } from '@modules/AccessControl/Test/AccessControlTestDoubles';
+import { InMemoryReasonCodeRepository } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
 const REQUIRED_ACTIONS: ActionCode[] = [
   ActionCode.Create,

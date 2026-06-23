@@ -4,7 +4,7 @@ import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ActorType } from '@modules/AccessControl/Domain/Enums/ActorType';
 import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
-import { StubAuditedTransaction } from '@modules/AccessControl/Test/AccessControlTestDoubles';
+import { StubAuditedTransaction } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 import { CreatePartnerUseCase } from '@modules/PartnerMaster/Application/UseCases/CreatePartnerUseCase';
 import { DeactivatePartnerUseCase } from '@modules/PartnerMaster/Application/UseCases/DeactivatePartnerUseCase';
 import { ListPartnersUseCase } from '@modules/PartnerMaster/Application/UseCases/ListPartnersUseCase';

@@ -16,7 +16,7 @@ import { ControlExceptionCatalog } from '@modules/AccessControl/Application/Serv
 import {
   InMemoryControlExceptionCatalogRepository,
   InMemoryValidationRuleCatalogRepository,
-} from '@modules/AccessControl/Test/AccessControlTestDoubles';
+} from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
 const REQUIRED_EX_CODES = ['CTRL-EX-01', 'CTRL-EX-02', 'CTRL-EX-03', 'CTRL-EX-04', 'CTRL-EX-05', 'CTRL-EX-08'];
 const DEFERRED_V1PLUS_EX_CODES = ['CTRL-EX-06', 'CTRL-EX-07', 'CTRL-EX-09'];

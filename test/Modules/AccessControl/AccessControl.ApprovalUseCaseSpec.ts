@@ -29,7 +29,7 @@ import {
   InMemoryRolePermissionRepository,
   InMemoryRoleRepository,
   StubAuditedTransaction,
-} from '@modules/AccessControl/Test/AccessControlTestDoubles';
+} from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
 const REQUESTER = 'requester-1';
 const APPROVER = 'approver-1';

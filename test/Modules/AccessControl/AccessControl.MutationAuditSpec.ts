@@ -15,7 +15,7 @@ import {
   InMemoryUserRoleRepository,
   InMemoryReasonCodeRepository,
   StubAuditedTransaction,
-} from '@modules/AccessControl/Test/AccessControlTestDoubles';
+} from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 import { AssignRoleToUserUseCase } from '@modules/AccessControl/Application/UseCases/AssignRoleToUserUseCase';
 import { RemoveRoleFromUserUseCase } from '@modules/AccessControl/Application/UseCases/RemoveRoleFromUserUseCase';
 import { CreateReasonCodeUseCase } from '@modules/AccessControl/Application/UseCases/CreateReasonCodeUseCase';

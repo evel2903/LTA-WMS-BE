@@ -15,8 +15,8 @@ import { RuleGroupEntity } from '@modules/WarehouseProfile/Domain/Entities/RuleG
 import {
   InMemoryRuleDefinitionRepository,
   InMemoryRuleGroupRepository,
-} from '@modules/WarehouseProfile/Test/RuleTestDoubles';
-import { MasterDataReferenceStub } from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
+import { MasterDataReferenceStub } from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
 
 const Now = new Date('2026-01-01T00:00:00.000Z');
 

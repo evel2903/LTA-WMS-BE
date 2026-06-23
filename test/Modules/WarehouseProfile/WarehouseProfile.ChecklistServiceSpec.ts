@@ -12,12 +12,12 @@ import { RulePrecedenceTier } from '@modules/WarehouseProfile/Domain/Enums/RuleP
 import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/WarehouseProfileStatus';
 import { RuleGroupEntity } from '@modules/WarehouseProfile/Domain/Entities/RuleGroupEntity';
 import { WarehouseProfileChecklistItemDto } from '@modules/WarehouseProfile/Application/DTOs/WarehouseProfileChecklistDto';
-import { InMemoryWarehouseProfileRepository } from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
+import { InMemoryWarehouseProfileRepository } from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
 import {
   InMemoryRuleDefinitionRepository,
   InMemoryRuleGroupRepository,
   InMemoryWarehouseProfileRuleRepository,
-} from '@modules/WarehouseProfile/Test/RuleTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
 import {
   BuildBinding,
   BuildProfile,

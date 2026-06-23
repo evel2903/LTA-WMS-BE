@@ -24,12 +24,16 @@ import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/Get
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
 import { EvaluateQcTaskUseCase } from '@modules/Inbound/Application/UseCases/EvaluateQcTaskUseCase';
+import { ConfirmInboundLpnUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundLpnUseCase';
+import { ReleaseInboundToPutawayUseCase } from '@modules/Inbound/Application/UseCases/ReleaseInboundToPutawayUseCase';
 import { RecordQcResultUseCase } from '@modules/Inbound/Application/UseCases/RecordQcResultUseCase';
 import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCases/StartReceivingSessionUseCase';
 import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
 import { InboundPlanEntity } from '@modules/Inbound/Domain/Entities/InboundPlanEntity';
 import { InboundPlanLineEntity } from '@modules/Inbound/Domain/Entities/InboundPlanLineEntity';
 import { InboundDiscrepancyEntity } from '@modules/Inbound/Domain/Entities/InboundDiscrepancyEntity';
+import { InboundLpnEntity } from '@modules/Inbound/Domain/Entities/InboundLpnEntity';
+import { InboundPutawayReleaseEntity } from '@modules/Inbound/Domain/Entities/InboundPutawayReleaseEntity';
 import { QcResultEntity } from '@modules/Inbound/Domain/Entities/QcResultEntity';
 import { QcTaskEntity } from '@modules/Inbound/Domain/Entities/QcTaskEntity';
 import { InboundDiscrepancyStatus } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyStatus';
@@ -162,6 +166,8 @@ class FakeReceivingRepository implements IReceivingRepository {
   public Receipts: ReceiptEntity[] = [];
   public Lines: ReceiptLineEntity[] = [];
   public Discrepancies: InboundDiscrepancyEntity[] = [];
+  public Lpns: InboundLpnEntity[] = [];
+  public PutawayReleases: InboundPutawayReleaseEntity[] = [];
   public QcTasks: QcTaskEntity[] = [];
   public QcResults: QcResultEntity[] = [];
 
@@ -258,6 +264,75 @@ class FakeReceivingRepository implements IReceivingRepository {
     return { Items: this.Discrepancies.slice(skip, skip + take), TotalItems: this.Discrepancies.length };
   }
 
+  public async CreateInboundLpn(lpn: InboundLpnEntity): Promise<InboundLpnEntity> {
+    if (
+      this.Lpns.some((item) => item.ReceiptLineId === lpn.ReceiptLineId && item.IdempotencyKey === lpn.IdempotencyKey)
+    ) {
+      throw new ConflictException('Inbound LPN already exists');
+    }
+    if (
+      this.Lpns.some(
+        (item) => item.WarehouseId === lpn.WarehouseId && item.OwnerId === lpn.OwnerId && item.LpnCode === lpn.LpnCode,
+      )
+    ) {
+      throw new ConflictException('Inbound LPN scope already exists');
+    }
+    this.Lpns.push(lpn);
+    return lpn;
+  }
+
+  public async FindInboundLpnById(id: string): Promise<InboundLpnEntity | null> {
+    return this.Lpns.find((item) => item.Id === id) ?? null;
+  }
+
+  public async FindInboundLpnByReceiptLineId(receiptLineId: string): Promise<InboundLpnEntity | null> {
+    return this.Lpns.find((item) => item.ReceiptLineId === receiptLineId) ?? null;
+  }
+
+  public async FindInboundLpnByIdempotencyKey(
+    receiptLineId: string,
+    idempotencyKey: string,
+  ): Promise<InboundLpnEntity | null> {
+    return (
+      this.Lpns.find((item) => item.ReceiptLineId === receiptLineId && item.IdempotencyKey === idempotencyKey) ?? null
+    );
+  }
+
+  public async FindInboundLpnByScopeCode(
+    warehouseId: string,
+    ownerId: string,
+    lpnCode: string,
+  ): Promise<InboundLpnEntity | null> {
+    return (
+      this.Lpns.find(
+        (item) => item.WarehouseId === warehouseId && item.OwnerId === ownerId && item.LpnCode === lpnCode,
+      ) ?? null
+    );
+  }
+
+  public async CreateInboundPutawayRelease(release: InboundPutawayReleaseEntity): Promise<InboundPutawayReleaseEntity> {
+    if (
+      this.PutawayReleases.some(
+        (item) => item.ReceiptLineId === release.ReceiptLineId && item.IdempotencyKey === release.IdempotencyKey,
+      )
+    ) {
+      throw new ConflictException('Inbound putaway release already exists');
+    }
+    this.PutawayReleases.push(release);
+    return release;
+  }
+
+  public async FindInboundPutawayReleaseByIdempotencyKey(
+    receiptLineId: string,
+    idempotencyKey: string,
+  ): Promise<InboundPutawayReleaseEntity | null> {
+    return (
+      this.PutawayReleases.find(
+        (item) => item.ReceiptLineId === receiptLineId && item.IdempotencyKey === idempotencyKey,
+      ) ?? null
+    );
+  }
+
   public async CreateQcTask(task: QcTaskEntity): Promise<QcTaskEntity> {
     if (this.QcTasks.some((item) => item.ReceiptId === task.ReceiptId && item.IdempotencyKey === task.IdempotencyKey)) {
       throw new ConflictException('QC task already exists');
@@ -281,6 +356,14 @@ class FakeReceivingRepository implements IReceivingRepository {
     return this.QcTasks.find((item) => item.ReceiptId === receiptId && item.IdempotencyKey === idempotencyKey) ?? null;
   }
 
+  public async FindLatestQcTaskByReceiptLineId(receiptLineId: string): Promise<QcTaskEntity | null> {
+    return (
+      [...this.QcTasks]
+        .filter((item) => item.ReceiptLineId === receiptLineId)
+        .sort((a, b) => b.CreatedAt.getTime() - a.CreatedAt.getTime())[0] ?? null
+    );
+  }
+
   public async CreateQcResult(result: QcResultEntity): Promise<QcResultEntity> {
     if (
       this.QcResults.some((item) => item.QcTaskId === result.QcTaskId && item.IdempotencyKey === result.IdempotencyKey)
@@ -293,6 +376,14 @@ class FakeReceivingRepository implements IReceivingRepository {
 
   public async FindQcResultByIdempotencyKey(qcTaskId: string, idempotencyKey: string): Promise<QcResultEntity | null> {
     return this.QcResults.find((item) => item.QcTaskId === qcTaskId && item.IdempotencyKey === idempotencyKey) ?? null;
+  }
+
+  public async FindLatestQcResultByReceiptLineId(receiptLineId: string): Promise<QcResultEntity | null> {
+    return (
+      [...this.QcResults]
+        .filter((item) => item.ReceiptLineId === receiptLineId)
+        .sort((a, b) => b.RecordedAt.getTime() - a.RecordedAt.getTime())[0] ?? null
+    );
   }
 }
 
@@ -457,6 +548,21 @@ const repoBundle = () => {
       Severity: ControlExceptionSeverity.Medium,
     })),
   };
+  const labelBlocking = {
+    Execute: jest.fn(async () => ({
+      Allowed: true,
+      Blocked: false,
+      Decision: 'NotRequired',
+      RequiredLabelType: null,
+      PolicyMode: 'None',
+      OverrideAllowed: false,
+      OverrideAccepted: false,
+      Reason: 'No label blocking rule required for this action.',
+      MatchedPrintJobId: null,
+      MatchedPrintJobCode: null,
+      ValidationDetails: {},
+    })),
+  };
   const permissionChecker = {
     Check: jest.fn<Promise<PermissionDecision>, [PermissionCheckContext]>(async () => ({ Allowed: true })),
   };
@@ -483,6 +589,7 @@ const repoBundle = () => {
     profiles,
     reasonCatalog,
     controlExceptionCatalog,
+    labelBlocking,
     permissionChecker,
     audited,
   };
@@ -560,6 +667,28 @@ const evaluateQcTaskUseCase = (bundle: ReturnType<typeof repoBundle>) =>
     bundle.receiving,
     bundle.profiles as unknown as IWarehouseProfileRepository,
     bundle.skus as unknown as ISkuRepository,
+    bundle.coreFlows as unknown as ICoreFlowRepository,
+    bundle.integrations as unknown as IIntegrationRepository,
+    bundle.reasonCatalog,
+    bundle.audited as unknown as AuditedTransaction,
+    bundle.permissionChecker,
+  );
+
+const confirmInboundLpnUseCase = (bundle: ReturnType<typeof repoBundle>) =>
+  new ConfirmInboundLpnUseCase(
+    bundle.inbound,
+    bundle.receiving,
+    bundle.reasonCatalog,
+    bundle.audited as unknown as AuditedTransaction,
+    bundle.permissionChecker,
+  );
+
+const releaseInboundToPutawayUseCase = (bundle: ReturnType<typeof repoBundle>) =>
+  new ReleaseInboundToPutawayUseCase(
+    bundle.inbound,
+    bundle.receiving,
+    bundle.profiles as unknown as IWarehouseProfileRepository,
+    bundle.labelBlocking as never,
     bundle.coreFlows as unknown as ICoreFlowRepository,
     bundle.integrations as unknown as IIntegrationRepository,
     bundle.reasonCatalog,
@@ -1753,6 +1882,263 @@ describe('Inbound plan use cases', () => {
     expect(bundle.receiving.QcResults).toHaveLength(0);
     expect(
       bundle.integrations.Outbox.filter((item) => (item as { EventType?: string }).EventType === 'QCResultRecorded'),
+    ).toHaveLength(0);
+  });
+
+  it('confirms LPN/SSCC with Receipt update permission, audit trace, uniqueness and idempotency', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-lpn',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const useCase = confirmInboundLpnUseCase(bundle);
+    const lpn = await useCase.Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        LpnCode: ' lpn-0001 ',
+        SsccCode: '003456789012345678',
+        IdempotencyKey: 'lpn-confirm-1',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const duplicate = await useCase.Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        LpnCode: 'LPN-0001',
+        SsccCode: '003456789012345678',
+        IdempotencyKey: 'lpn-confirm-1',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await expect(
+      useCase.Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          LpnCode: 'LPN-0001',
+          IdempotencyKey: 'lpn-confirm-conflict',
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(ConflictException);
+
+    expect(lpn.LpnCode).toBe('LPN-0001');
+    expect(lpn.SsccCode).toBe('003456789012345678');
+    expect(lpn.Quantity).toBe(12);
+    expect(duplicate.IsDuplicate).toBe(true);
+    expect(bundle.receiving.Lpns).toHaveLength(1);
+    expect(bundle.permissionChecker.Check).toHaveBeenCalledWith(
+      expect.objectContaining({ Action: ActionCode.Update, ObjectType: ObjectType.Receipt }),
+    );
+    expect(bundle.audited.Entries[bundle.audited.Entries.length - 1]).toMatchObject({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.Receipt,
+      ReferenceType: 'InboundLpn',
+    });
+  });
+
+  it('blocks release to putaway when profile requires LPN and receipt line has no LPN', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundLpnRequired: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-release-no-lpn',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'qc-release-no-lpn' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          IdempotencyKey: 'release-no-lpn',
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.receiving.PutawayReleases).toHaveLength(0);
+    expect(
+      bundle.integrations.Outbox.filter(
+        (item) => (item as { EventType?: string }).EventType === 'InboundReleasedToPutaway',
+      ),
+    ).toHaveLength(0);
+    expect(bundle.audited.Entries[bundle.audited.Entries.length - 1]).toMatchObject({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.Receipt,
+      ReferenceType: 'InboundPutawayReleaseBlocked',
+    });
+  });
+
+  it('releases READY_FOR_PUTAWAY receipt line to putaway with label validation, outbox and CoreFlow milestone', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-release-ready',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'qc-release-ready' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    const lpn = await confirmInboundLpnUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        LpnCode: 'LPN-READY-1',
+        IdempotencyKey: 'lpn-release-ready',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const useCase = releaseInboundToPutawayUseCase(bundle);
+    const release = await useCase.Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        CurrentLocationCode: 'RCV-01',
+        ReasonCode: 'RC-V1-HANDOFF',
+        IdempotencyKey: 'release-ready',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const duplicate = await useCase.Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        CurrentLocationCode: 'RCV-01',
+        ReasonCode: 'RC-V1-HANDOFF',
+        IdempotencyKey: 'release-ready',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await expect(
+      useCase.Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          CurrentLocationCode: 'STAGE-01',
+          IdempotencyKey: 'release-ready',
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(ConflictException);
+
+    expect(release.InboundLpnId).toBe(lpn.Id);
+    expect(release.LpnCode).toBe('LPN-READY-1');
+    expect(release.InventoryStatusCode).toBe('READY_FOR_PUTAWAY');
+    expect(release.InventoryStatusCode).not.toBe('AVAILABLE');
+    expect(release.CurrentLocationCode).toBe('RCV-01');
+    expect(release.ReasonCodeId).toBe('reason-1');
+    expect(duplicate.IsDuplicate).toBe(true);
+    expect(bundle.receiving.PutawayReleases).toHaveLength(1);
+    expect(bundle.reasonCatalog.ValidateReason).toHaveBeenCalledWith({
+      ReasonCode: 'RC-V1-HANDOFF',
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.Receipt,
+    });
+    expect(bundle.labelBlocking.Execute).toHaveBeenCalledWith(
+      expect.objectContaining({ DownstreamAction: 'putaway', BusinessObjectType: 'ReceiptLine' }),
+      expect.objectContaining({ ActorUserId: 'user-1' }),
+    );
+    expect(
+      bundle.integrations.Outbox.filter(
+        (item) => (item as { EventType?: string }).EventType === 'InboundReleasedToPutaway',
+      ),
+    ).toHaveLength(1);
+    expect(
+      bundle.coreFlows.Milestones.filter(
+        (item) => (item as { StepCode?: CoreFlowStepCode }).StepCode === CoreFlowStepCode.InboundReleasedToPutaway,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('blocks release while QC target is pending or blocked and does not emit putaway event', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundQcRequired: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-release-pending-qc',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'qc-release-pending' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    await confirmInboundLpnUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        LpnCode: 'LPN-PENDING-QC',
+        IdempotencyKey: 'lpn-release-pending',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          IdempotencyKey: 'release-pending-qc',
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.receiving.PutawayReleases).toHaveLength(0);
+    expect(
+      bundle.integrations.Outbox.filter(
+        (item) => (item as { EventType?: string }).EventType === 'InboundReleasedToPutaway',
+      ),
     ).toHaveLength(0);
   });
 });

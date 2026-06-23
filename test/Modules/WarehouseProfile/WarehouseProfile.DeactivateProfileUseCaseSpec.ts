@@ -4,7 +4,7 @@ import { DeactivateWarehouseProfileUseCase } from '@modules/WarehouseProfile/App
 import { ScopeKeyService } from '@modules/WarehouseProfile/Application/Services/ScopeKeyService';
 import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileEntity';
 import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/WarehouseProfileStatus';
-import { InMemoryWarehouseProfileRepository } from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
+import { InMemoryWarehouseProfileRepository } from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
 
 const scopeKeyService = new ScopeKeyService();
 

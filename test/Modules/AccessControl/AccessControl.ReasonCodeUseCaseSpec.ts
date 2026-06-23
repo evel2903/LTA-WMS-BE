@@ -6,7 +6,7 @@ import { ReasonCodeStatus } from '@modules/AccessControl/Domain/Enums/ReasonCode
 import { CreateReasonCodeUseCase } from '@modules/AccessControl/Application/UseCases/CreateReasonCodeUseCase';
 import { GetReasonCodeUseCase } from '@modules/AccessControl/Application/UseCases/GetReasonCodeUseCase';
 import { UpdateReasonCodeUseCase } from '@modules/AccessControl/Application/UseCases/UpdateReasonCodeUseCase';
-import { InMemoryReasonCodeRepository } from '@modules/AccessControl/Test/AccessControlTestDoubles';
+import { InMemoryReasonCodeRepository } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
 const validCreate = {
   ReasonCode: 'RC-TEST',

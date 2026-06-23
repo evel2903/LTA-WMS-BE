@@ -18,7 +18,7 @@ import {
   ValidateReasonResult,
 } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
 import { IApprovalRequestRepository } from '@modules/AccessControl/Application/Interfaces/IApprovalRequestRepository';
-import { StubAuditedTransaction } from '@modules/AccessControl/Test/AccessControlTestDoubles';
+import { StubAuditedTransaction } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 import { RuleControlMode } from '@modules/WarehouseProfile/Domain/Enums/RuleControlMode';
 import { RulePrecedenceTier } from '@modules/WarehouseProfile/Domain/Enums/RulePrecedenceTier';
 import { OverrideLogEntity } from '@modules/WarehouseProfile/Domain/Entities/OverrideLogEntity';
@@ -28,7 +28,7 @@ import { ListOverrideLogsUseCase } from '@modules/WarehouseProfile/Application/U
 import {
   InMemoryOverrideLogRepository,
   InMemoryRuleDefinitionRepository,
-} from '@modules/WarehouseProfile/Test/RuleTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
 import { BuildRule } from '@test/Modules/WarehouseProfile/WarehouseProfile.RuleResolverTestHelpers';
 
 const ACTOR = 'actor-1';

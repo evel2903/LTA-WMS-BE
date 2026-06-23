@@ -4,7 +4,7 @@ import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ActorType } from '@modules/AccessControl/Domain/Enums/ActorType';
 import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
-import { StubAuditedTransaction } from '@modules/AccessControl/Test/AccessControlTestDoubles';
+import { StubAuditedTransaction } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 import { CreateCoreFlowInstanceUseCase } from '@modules/CoreFlow/Application/UseCases/CreateCoreFlowInstanceUseCase';
 import { CreateWorkflowHandoffUseCase } from '@modules/CoreFlow/Application/UseCases/CreateWorkflowHandoffUseCase';
 import { GetCoreFlowInstanceUseCase } from '@modules/CoreFlow/Application/UseCases/GetCoreFlowInstanceUseCase';

@@ -9,8 +9,8 @@ import { RuleControlMode } from '@modules/WarehouseProfile/Domain/Enums/RuleCont
 import { RulePrecedenceTier } from '@modules/WarehouseProfile/Domain/Enums/RulePrecedenceTier';
 import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/WarehouseProfileStatus';
 import { RuleDecision } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleDecision';
-import { InMemoryWarehouseProfileRepository } from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
-import { StubRuleResolver } from '@modules/WarehouseProfile/Test/RuleTestDoubles';
+import { InMemoryWarehouseProfileRepository } from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
+import { StubRuleResolver } from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
 import { BuildRule } from '@test/Modules/WarehouseProfile/WarehouseProfile.RuleResolverTestHelpers';
 
 const scopeKeyService = new ScopeKeyService();

@@ -216,6 +216,100 @@ export interface ReceiptLineDto {
   UpdatedAt: Date;
 }
 
+export interface ConfirmInboundLpnDto {
+  ReceiptId: string;
+  ReceiptLineId: string;
+  LpnCode: string;
+  SsccCode?: string | null;
+  Quantity?: number | null;
+  ReasonCode?: string | null;
+  ReasonNote?: string | null;
+  EvidenceRefs?: string[];
+  IdempotencyKey: string;
+}
+
+export interface InboundLpnDto {
+  Id: string;
+  ReceiptId: string;
+  ReceiptLineId: string;
+  InboundPlanId: string;
+  InboundPlanLineId: string;
+  OwnerId: string;
+  OwnerCode: string | null;
+  WarehouseId: string;
+  WarehouseCode: string | null;
+  SkuId: string;
+  SkuCode: string | null;
+  UomId: string;
+  UomCode: string | null;
+  Quantity: number;
+  LpnCode: string;
+  SsccCode: string | null;
+  ReasonCode: string | null;
+  ReasonCodeId: string | null;
+  ReasonNote: string | null;
+  EvidenceRefs: string[];
+  IdempotencyKey: string;
+  ConfirmedAt: Date;
+  ConfirmedBy: string | null;
+  IsDuplicate: boolean;
+  CreatedAt: Date;
+  UpdatedAt: Date;
+}
+
+export interface ReleaseInboundToPutawayDto {
+  ReceiptId: string;
+  ReceiptLineId: string;
+  CurrentLocationId?: string | null;
+  CurrentLocationCode?: string | null;
+  RequireLpn?: boolean;
+  AttemptLabelOverride?: boolean;
+  ReasonCode?: string | null;
+  ReasonNote?: string | null;
+  EvidenceRefs?: string[];
+  IdempotencyKey: string;
+}
+
+export interface InboundPutawayReleaseDto {
+  Id: string;
+  InboundLpnId: string | null;
+  ReceiptId: string;
+  ReceiptLineId: string;
+  InboundPlanId: string;
+  InboundPlanLineId: string;
+  OwnerId: string;
+  OwnerCode: string | null;
+  WarehouseId: string;
+  WarehouseCode: string | null;
+  SkuId: string;
+  SkuCode: string | null;
+  UomId: string;
+  UomCode: string | null;
+  Quantity: number;
+  LpnCode: string | null;
+  SsccCode: string | null;
+  InventoryStatusCode: string;
+  CurrentLocationId: string | null;
+  CurrentLocationCode: string | null;
+  WarehouseProfileId: string | null;
+  LabelDecision: string | null;
+  LabelReason: string | null;
+  MatchedPrintJobId: string | null;
+  ConstraintJson: Record<string, unknown> | null;
+  OutboxMessageId: string | null;
+  CoreFlowMilestoneId: string | null;
+  ReasonCode: string | null;
+  ReasonCodeId: string | null;
+  ReasonNote: string | null;
+  EvidenceRefs: string[];
+  IdempotencyKey: string;
+  ReleasedAt: Date;
+  ReleasedBy: string | null;
+  IsDuplicate: boolean;
+  CreatedAt: Date;
+  UpdatedAt: Date;
+}
+
 export interface CaptureInboundDiscrepancyDto {
   ReceiptId: string;
   ReceiptLineId: string;
