@@ -76,6 +76,8 @@ describe('Inventory status catalog seed', () => {
     expect(sql).not.toContain('SHIPPED');
     expect(sql).not.toContain('GATE_OUT');
     expect(sql).not.toContain('GOODS_ISSUE_POSTED');
+    expect(sql).not.toContain('QC_PASSED');
+    expect(sql).not.toContain('QC_REJECTED');
     expect(sql).toContain("'AVAILABLE', 'Available', 'StorageControl', true");
     expect(sql).toContain("'HOLD', 'Hold', 'StorageControl', false");
     expect(sql).toContain("'QUARANTINE', 'Quarantine', 'StorageControl', false");

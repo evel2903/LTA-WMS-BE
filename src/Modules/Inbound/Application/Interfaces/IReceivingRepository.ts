@@ -1,6 +1,8 @@
 import { EntityManager } from 'typeorm';
 import { InboundDiscrepancyEntity } from '@modules/Inbound/Domain/Entities/InboundDiscrepancyEntity';
 import { InboundDiscrepancyStatus } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyStatus';
+import { QcResultEntity } from '@modules/Inbound/Domain/Entities/QcResultEntity';
+import { QcTaskEntity } from '@modules/Inbound/Domain/Entities/QcTaskEntity';
 import { ReceiptEntity } from '@modules/Inbound/Domain/Entities/ReceiptEntity';
 import { ReceiptLineEntity } from '@modules/Inbound/Domain/Entities/ReceiptLineEntity';
 import { ReceivingSessionEntity } from '@modules/Inbound/Domain/Entities/ReceivingSessionEntity';
@@ -45,4 +47,10 @@ export interface IReceivingRepository {
       Status?: InboundDiscrepancyStatus;
     },
   ): Promise<{ Items: InboundDiscrepancyEntity[]; TotalItems: number }>;
+  CreateQcTask(task: QcTaskEntity, manager?: EntityManager): Promise<QcTaskEntity>;
+  UpdateQcTask(task: QcTaskEntity, manager?: EntityManager): Promise<QcTaskEntity>;
+  FindQcTaskById(id: string): Promise<QcTaskEntity | null>;
+  FindQcTaskByIdempotencyKey(receiptId: string, idempotencyKey: string): Promise<QcTaskEntity | null>;
+  CreateQcResult(result: QcResultEntity, manager?: EntityManager): Promise<QcResultEntity>;
+  FindQcResultByIdempotencyKey(qcTaskId: string, idempotencyKey: string): Promise<QcResultEntity | null>;
 }

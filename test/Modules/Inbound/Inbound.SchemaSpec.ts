@@ -3,14 +3,20 @@ import DataSource from '@shared/Database/TypeOrmDataSource';
 import { CreateInboundPlans1781643000000 } from '@shared/Database/Migrations/1781643000000-CreateInboundPlans';
 import { CreateReceivingReceipts1781643300000 } from '@shared/Database/Migrations/1781643300000-CreateReceivingReceipts';
 import { CreateInboundDiscrepancies1781643600000 } from '@shared/Database/Migrations/1781643600000-CreateInboundDiscrepancies';
+import { CreateQcTasksAndResults1781643900000 } from '@shared/Database/Migrations/1781643900000-CreateQcTasksAndResults';
 import { InboundDiscrepancyOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundDiscrepancyOrmEntity';
 import { InboundPlanOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanOrmEntity';
 import { InboundPlanLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanLineOrmEntity';
+import { QcResultOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcResultOrmEntity';
+import { QcTaskOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcTaskOrmEntity';
 import { ReceiptOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptOrmEntity';
 import { ReceiptLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptLineOrmEntity';
 import { ReceivingSessionOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceivingSessionOrmEntity';
 import { InboundGateInStatus } from '@modules/Inbound/Domain/Enums/InboundGateInStatus';
 import { InboundPlanDocumentStatus } from '@modules/Inbound/Domain/Enums/InboundPlanDocumentStatus';
+import { QcDispositionCode } from '@modules/Inbound/Domain/Enums/QcDispositionCode';
+import { QcResultStatus } from '@modules/Inbound/Domain/Enums/QcResultStatus';
+import { QcTaskStatus } from '@modules/Inbound/Domain/Enums/QcTaskStatus';
 import { ReceiptDocumentStatus } from '@modules/Inbound/Domain/Enums/ReceiptDocumentStatus';
 import { ReceiptLineStatus } from '@modules/Inbound/Domain/Enums/ReceiptLineStatus';
 import { ReceivingSessionStatus } from '@modules/Inbound/Domain/Enums/ReceivingSessionStatus';
@@ -28,6 +34,8 @@ describe('Inbound schema registration', () => {
         InboundPlanOrmEntity,
         InboundPlanLineOrmEntity,
         InboundDiscrepancyOrmEntity,
+        QcTaskOrmEntity,
+        QcResultOrmEntity,
         ReceivingSessionOrmEntity,
         ReceiptOrmEntity,
         ReceiptLineOrmEntity,
@@ -81,6 +89,24 @@ describe('Inbound schema registration', () => {
     expect(sql).toContain('CREATE UNIQUE INDEX "UQ_inbound_discrepancies_idempotency"');
   });
 
+  it('creates QC task and result tables with idempotency, split quantities and status targets', async () => {
+    const { runner, queries } = fakeRunner();
+    await new CreateQcTasksAndResults1781643900000().up(runner);
+    const sql = queries.join('\n');
+    expect(sql).toContain('CREATE TABLE "qc_tasks"');
+    expect(sql).toContain('CREATE TABLE "qc_results"');
+    expect(sql).toContain('"task_status" varchar(40) NOT NULL');
+    expect(sql).toContain('"result_status" varchar(40) NOT NULL');
+    expect(sql).toContain('"accepted_quantity" numeric(18,4) NOT NULL');
+    expect(sql).toContain('"rejected_quantity" numeric(18,4) NOT NULL');
+    expect(sql).toContain('"accepted_inventory_status_code" varchar(80)');
+    expect(sql).toContain('"rejected_inventory_status_code" varchar(80)');
+    expect(sql).toContain('CREATE UNIQUE INDEX "UQ_qc_tasks_idempotency"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "UQ_qc_results_idempotency"');
+    expect(sql).not.toContain('QC_PASSED');
+    expect(sql).not.toContain('QC_REJECTED');
+  });
+
   it('keeps inbound document and gate states separate from InventoryStatus terms', () => {
     expect(Object.values(InboundPlanDocumentStatus)).toEqual(
       expect.arrayContaining([
@@ -98,12 +124,24 @@ describe('Inbound schema registration', () => {
     expect(Object.values(ReceivingSessionStatus)).toEqual(['Open', 'Closed']);
     expect(Object.values(ReceiptDocumentStatus)).toEqual(['Open', 'PartiallyReceived', 'Received']);
     expect(Object.values(ReceiptLineStatus)).toEqual(['Received', 'Discrepancy']);
+    expect(Object.values(QcTaskStatus)).toEqual([
+      'NotRequired',
+      'PendingQc',
+      'InInspection',
+      'Dispositioned',
+      'Closed',
+    ]);
+    expect(Object.values(QcResultStatus)).toEqual(['Passed', 'ConditionalPassed', 'Failed', 'Hold']);
+    expect(Object.values(QcDispositionCode)).toEqual(['Release', 'Hold', 'Quarantine', 'Reject', 'Damage']);
     expect([
       ...Object.values(InboundPlanDocumentStatus),
       ...Object.values(InboundGateInStatus),
       ...Object.values(ReceivingSessionStatus),
       ...Object.values(ReceiptDocumentStatus),
       ...Object.values(ReceiptLineStatus),
-    ]).not.toEqual(expect.arrayContaining(['SHIPPED', 'GATE_OUT', 'GOODS_ISSUE_POSTED']));
+      ...Object.values(QcTaskStatus),
+      ...Object.values(QcResultStatus),
+      ...Object.values(QcDispositionCode),
+    ]).not.toEqual(expect.arrayContaining(['SHIPPED', 'GATE_OUT', 'GOODS_ISSUE_POSTED', 'QC_PASSED', 'QC_REJECTED']));
   });
 });

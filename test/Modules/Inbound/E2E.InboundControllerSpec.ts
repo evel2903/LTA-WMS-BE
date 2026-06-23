@@ -9,12 +9,15 @@ import { REQUIRE_PERMISSION_KEY } from '@modules/AccessControl/Presentation/Deco
 import { CaptureInboundDiscrepancyUseCase } from '@modules/Inbound/Application/UseCases/CaptureInboundDiscrepancyUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
+import { EvaluateQcTaskUseCase } from '@modules/Inbound/Application/UseCases/EvaluateQcTaskUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
+import { RecordQcResultUseCase } from '@modules/Inbound/Application/UseCases/RecordQcResultUseCase';
 import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCases/StartReceivingSessionUseCase';
 import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
 import { InboundPlanController } from '@modules/Inbound/Presentation/Controllers/InboundPlanController';
+import { QcTaskController } from '@modules/Inbound/Presentation/Controllers/QcTaskController';
 import { ReceiptController } from '@modules/Inbound/Presentation/Controllers/ReceiptController';
 import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 
@@ -29,10 +32,12 @@ describe('E2E InboundPlanController (no DB)', () => {
   const startReceivingExecute = jest.fn();
   const confirmReceiptLineExecute = jest.fn();
   const captureDiscrepancyExecute = jest.fn();
+  const evaluateQcTaskExecute = jest.fn();
+  const recordQcResultExecute = jest.fn();
 
   const buildModule = () =>
     Test.createTestingModule({
-      controllers: [InboundPlanController, ReceiptController],
+      controllers: [InboundPlanController, ReceiptController, QcTaskController],
       providers: [
         Reflector,
         { provide: CreateInboundPlanUseCase, useValue: { Execute: createExecute } },
@@ -43,6 +48,8 @@ describe('E2E InboundPlanController (no DB)', () => {
         { provide: StartReceivingSessionUseCase, useValue: { Execute: startReceivingExecute } },
         { provide: ConfirmReceiptLineUseCase, useValue: { Execute: confirmReceiptLineExecute } },
         { provide: CaptureInboundDiscrepancyUseCase, useValue: { Execute: captureDiscrepancyExecute } },
+        { provide: EvaluateQcTaskUseCase, useValue: { Execute: evaluateQcTaskExecute } },
+        { provide: RecordQcResultUseCase, useValue: { Execute: recordQcResultExecute } },
       ],
     });
 
@@ -67,6 +74,8 @@ describe('E2E InboundPlanController (no DB)', () => {
     startReceivingExecute.mockReset();
     confirmReceiptLineExecute.mockReset();
     captureDiscrepancyExecute.mockReset();
+    evaluateQcTaskExecute.mockReset();
+    recordQcResultExecute.mockReset();
   });
 
   it('declares InboundPlan and Receipt permissions on inbound and receiving endpoints', () => {
@@ -105,6 +114,14 @@ describe('E2E InboundPlanController (no DB)', () => {
     expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ReceiptController.prototype.CaptureDiscrepancy)).toMatchObject({
       Action: ActionCode.Update,
       ObjectType: ObjectType.Receipt,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ReceiptController.prototype.EvaluateQcTask)).toMatchObject({
+      Action: ActionCode.Create,
+      ObjectType: ObjectType.QcTask,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, QcTaskController.prototype.RecordResult)).toMatchObject({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.QcTask,
     });
   });
 
@@ -188,6 +205,27 @@ describe('E2E InboundPlanController (no DB)', () => {
     expect(captureDiscrepancyExecute).not.toHaveBeenCalled();
   });
 
+  it('POST /receipts/:id/qc-tasks and /qc-tasks/:id/results validate request fields', async () => {
+    await request(app.getHttpServer())
+      .post('/receipts/receipt-1/qc-tasks')
+      .send({ ReceiptLineId: 'receipt-line-1', IdempotencyKey: 'I'.repeat(161) })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/qc-tasks/qc-task-1/results')
+      .send({
+        IdempotencyKey: 'qc-result-1',
+        ResultStatus: 'QC_PASSED',
+        DispositionCode: 'Release',
+        InspectedQuantity: 12,
+        AcceptedQuantity: 12,
+        RejectedQuantity: 0,
+      })
+      .expect(400);
+
+    expect(evaluateQcTaskExecute).not.toHaveBeenCalled();
+    expect(recordQcResultExecute).not.toHaveBeenCalled();
+  });
+
   it('GET detail, gate-in, readiness and receiving endpoints call use cases', async () => {
     getExecute.mockResolvedValue({ Id: 'inbound-plan-1' });
     gateInExecute.mockResolvedValue({ Id: 'inbound-plan-1', GateInStatus: 'Recorded' });
@@ -198,6 +236,17 @@ describe('E2E InboundPlanController (no DB)', () => {
       Id: 'discrepancy-1',
       ReceiptId: 'receipt-1',
       ExceptionCaseId: 'exception-1',
+    });
+    evaluateQcTaskExecute.mockResolvedValue({
+      Id: 'qc-task-1',
+      ReceiptId: 'receipt-1',
+      ReceiptLineId: 'receipt-line-1',
+      TaskStatus: 'PendingQc',
+    });
+    recordQcResultExecute.mockResolvedValue({
+      Id: 'qc-result-1',
+      QcTaskId: 'qc-task-1',
+      ResultStatus: 'Passed',
     });
 
     await request(app.getHttpServer()).get('/inbound-plans/inbound-plan-1').expect(200);
@@ -233,6 +282,24 @@ describe('E2E InboundPlanController (no DB)', () => {
         IdempotencyKey: 'disc-1',
       })
       .expect(201);
+    await request(app.getHttpServer())
+      .post('/receipts/receipt-1/qc-tasks')
+      .send({
+        ReceiptLineId: 'receipt-line-1',
+        IdempotencyKey: 'qc-task-1',
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/qc-tasks/qc-task-1/results')
+      .send({
+        IdempotencyKey: 'qc-result-1',
+        ResultStatus: 'Passed',
+        DispositionCode: 'Release',
+        InspectedQuantity: 12,
+        AcceptedQuantity: 12,
+        RejectedQuantity: 0,
+      })
+      .expect(201);
 
     expect(getExecute).toHaveBeenCalledWith('inbound-plan-1', 'test-admin');
     expect(gateInExecute).toHaveBeenCalledWith(
@@ -260,6 +327,22 @@ describe('E2E InboundPlanController (no DB)', () => {
         ReceiptId: 'receipt-1',
         ReceiptLineId: 'receipt-line-1',
         DiscrepancyType: 'QuantityVariance',
+      }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(evaluateQcTaskExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ReceiptId: 'receipt-1',
+        ReceiptLineId: 'receipt-line-1',
+        IdempotencyKey: 'qc-task-1',
+      }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(recordQcResultExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        QcTaskId: 'qc-task-1',
+        ResultStatus: 'Passed',
+        DispositionCode: 'Release',
       }),
       expect.objectContaining({ ActorUserId: 'test-admin' }),
     );

@@ -8,8 +8,10 @@ import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/Perm
 import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
 import { CaptureInboundDiscrepancyUseCase } from '@modules/Inbound/Application/UseCases/CaptureInboundDiscrepancyUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
+import { EvaluateQcTaskUseCase } from '@modules/Inbound/Application/UseCases/EvaluateQcTaskUseCase';
 import { CaptureInboundDiscrepancyRequest } from '@modules/Inbound/Presentation/Requests/CaptureInboundDiscrepancyRequest';
 import { ConfirmReceiptLineRequest } from '@modules/Inbound/Presentation/Requests/ConfirmReceiptLineRequest';
+import { EvaluateQcTaskRequest } from '@modules/Inbound/Presentation/Requests/EvaluateQcTaskRequest';
 
 @UseGuards(JwtAuthGuard, PermissionGuard)
 @Controller('receipts')
@@ -17,6 +19,7 @@ export class ReceiptController {
   constructor(
     private readonly confirmReceiptLineUseCase: ConfirmReceiptLineUseCase,
     private readonly captureInboundDiscrepancyUseCase: CaptureInboundDiscrepancyUseCase,
+    private readonly evaluateQcTaskUseCase: EvaluateQcTaskUseCase,
   ) {}
 
   @Post(':receiptId/lines')
@@ -37,5 +40,15 @@ export class ReceiptController {
     @CurrentAuditContext() context: AuditContext,
   ) {
     return await this.captureInboundDiscrepancyUseCase.Execute({ ReceiptId: receiptId, ...request }, context);
+  }
+
+  @Post(':receiptId/qc-tasks')
+  @RequirePermission(ActionCode.Create, ObjectType.QcTask)
+  public async EvaluateQcTask(
+    @Param('receiptId') receiptId: string,
+    @Body() request: EvaluateQcTaskRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.evaluateQcTaskUseCase.Execute({ ReceiptId: receiptId, ...request }, context);
   }
 }

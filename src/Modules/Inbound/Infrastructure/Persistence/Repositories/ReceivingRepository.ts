@@ -8,12 +8,16 @@ import {
 } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
 import { InboundDiscrepancyEntity } from '@modules/Inbound/Domain/Entities/InboundDiscrepancyEntity';
 import { InboundDiscrepancyStatus } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyStatus';
+import { QcResultEntity } from '@modules/Inbound/Domain/Entities/QcResultEntity';
+import { QcTaskEntity } from '@modules/Inbound/Domain/Entities/QcTaskEntity';
 import { ReceiptEntity } from '@modules/Inbound/Domain/Entities/ReceiptEntity';
 import { ReceiptLineEntity } from '@modules/Inbound/Domain/Entities/ReceiptLineEntity';
 import { ReceivingSessionEntity } from '@modules/Inbound/Domain/Entities/ReceivingSessionEntity';
 import { ReceivingSessionStatus } from '@modules/Inbound/Domain/Enums/ReceivingSessionStatus';
 import { ReceivingOrmMapper } from '@modules/Inbound/Infrastructure/Mappers/ReceivingOrmMapper';
 import { InboundDiscrepancyOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundDiscrepancyOrmEntity';
+import { QcResultOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcResultOrmEntity';
+import { QcTaskOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcTaskOrmEntity';
 import { ReceiptOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptOrmEntity';
 import { ReceiptLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptLineOrmEntity';
 import { ReceivingSessionOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceivingSessionOrmEntity';
@@ -29,6 +33,10 @@ export class ReceivingRepository implements IReceivingRepository {
     private readonly lines: Repository<ReceiptLineOrmEntity>,
     @InjectRepository(InboundDiscrepancyOrmEntity)
     private readonly discrepancies: Repository<InboundDiscrepancyOrmEntity>,
+    @InjectRepository(QcTaskOrmEntity)
+    private readonly qcTasks: Repository<QcTaskOrmEntity>,
+    @InjectRepository(QcResultOrmEntity)
+    private readonly qcResults: Repository<QcResultOrmEntity>,
   ) {}
 
   public async CreateSessionWithReceipt(
@@ -155,6 +163,49 @@ export class ReceivingRepository implements IReceivingRepository {
     query.orderBy('d.CreatedAt', 'DESC').skip(skip).take(take);
     const [entities, total] = await query.getManyAndCount();
     return { Items: entities.map(ReceivingOrmMapper.ToDiscrepancyDomain), TotalItems: total };
+  }
+
+  public async CreateQcTask(task: QcTaskEntity, manager?: EntityManager): Promise<QcTaskEntity> {
+    const repo = manager ? manager.getRepository(QcTaskOrmEntity) : this.qcTasks;
+    try {
+      const saved = await repo.save(ReceivingOrmMapper.ToQcTaskOrm(task));
+      return ReceivingOrmMapper.ToQcTaskDomain(saved);
+    } catch (error) {
+      this.HandleUniqueViolation(error, 'QC task idempotency key already exists');
+      throw error;
+    }
+  }
+
+  public async UpdateQcTask(task: QcTaskEntity, manager?: EntityManager): Promise<QcTaskEntity> {
+    const repo = manager ? manager.getRepository(QcTaskOrmEntity) : this.qcTasks;
+    const saved = await repo.save(ReceivingOrmMapper.ToQcTaskOrm(task));
+    return ReceivingOrmMapper.ToQcTaskDomain(saved);
+  }
+
+  public async FindQcTaskById(id: string): Promise<QcTaskEntity | null> {
+    const entity = await this.qcTasks.findOne({ where: { Id: id } });
+    return entity ? ReceivingOrmMapper.ToQcTaskDomain(entity) : null;
+  }
+
+  public async FindQcTaskByIdempotencyKey(receiptId: string, idempotencyKey: string): Promise<QcTaskEntity | null> {
+    const entity = await this.qcTasks.findOne({ where: { ReceiptId: receiptId, IdempotencyKey: idempotencyKey } });
+    return entity ? ReceivingOrmMapper.ToQcTaskDomain(entity) : null;
+  }
+
+  public async CreateQcResult(result: QcResultEntity, manager?: EntityManager): Promise<QcResultEntity> {
+    const repo = manager ? manager.getRepository(QcResultOrmEntity) : this.qcResults;
+    try {
+      const saved = await repo.save(ReceivingOrmMapper.ToQcResultOrm(result));
+      return ReceivingOrmMapper.ToQcResultDomain(saved);
+    } catch (error) {
+      this.HandleUniqueViolation(error, 'QC result idempotency key already exists');
+      throw error;
+    }
+  }
+
+  public async FindQcResultByIdempotencyKey(qcTaskId: string, idempotencyKey: string): Promise<QcResultEntity | null> {
+    const entity = await this.qcResults.findOne({ where: { QcTaskId: qcTaskId, IdempotencyKey: idempotencyKey } });
+    return entity ? ReceivingOrmMapper.ToQcResultDomain(entity) : null;
   }
 
   private HandleUniqueViolation(error: unknown, message: string): void {

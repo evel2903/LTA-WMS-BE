@@ -7,11 +7,18 @@ import { ControlExceptionSeverity } from '@modules/AccessControl/Domain/Enums/Co
 import { InboundDiscrepancyStatus } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyStatus';
 import { InboundDiscrepancyToleranceDecision } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyToleranceDecision';
 import { InboundDiscrepancyType } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyType';
+import { QcDispositionCode } from '@modules/Inbound/Domain/Enums/QcDispositionCode';
+import { QcResultStatus } from '@modules/Inbound/Domain/Enums/QcResultStatus';
+import { QcTaskStatus } from '@modules/Inbound/Domain/Enums/QcTaskStatus';
+import { QcResultEntity } from '@modules/Inbound/Domain/Entities/QcResultEntity';
+import { QcTaskEntity } from '@modules/Inbound/Domain/Entities/QcTaskEntity';
 import { ReceiptDocumentStatus } from '@modules/Inbound/Domain/Enums/ReceiptDocumentStatus';
 import { ReceiptLineDiscrepancySignal } from '@modules/Inbound/Domain/Enums/ReceiptLineDiscrepancySignal';
 import { ReceiptLineStatus } from '@modules/Inbound/Domain/Enums/ReceiptLineStatus';
 import { ReceivingSessionStatus } from '@modules/Inbound/Domain/Enums/ReceivingSessionStatus';
 import { InboundDiscrepancyOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundDiscrepancyOrmEntity';
+import { QcResultOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcResultOrmEntity';
+import { QcTaskOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcTaskOrmEntity';
 import { ReceiptOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptOrmEntity';
 import { ReceiptLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptLineOrmEntity';
 import { ReceivingSessionOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceivingSessionOrmEntity';
@@ -118,6 +125,73 @@ export class ReceivingOrmMapper {
     });
   }
 
+  public static ToQcTaskDomain(entity: QcTaskOrmEntity): QcTaskEntity {
+    return new QcTaskEntity({
+      Id: entity.Id,
+      ReceiptId: entity.ReceiptId,
+      ReceiptLineId: entity.ReceiptLineId,
+      InboundPlanId: entity.InboundPlanId,
+      InboundPlanLineId: entity.InboundPlanLineId,
+      OwnerId: entity.OwnerId,
+      OwnerCode: entity.OwnerCode,
+      WarehouseId: entity.WarehouseId,
+      WarehouseCode: entity.WarehouseCode,
+      SkuId: entity.SkuId,
+      SkuCode: entity.SkuCode,
+      UomId: entity.UomId,
+      UomCode: entity.UomCode,
+      ActualQuantity: Number(entity.ActualQuantity),
+      TaskStatus: entity.TaskStatus as QcTaskStatus,
+      Required: entity.Required,
+      TriggerReason: entity.TriggerReason,
+      TriggerPolicyJson: entity.TriggerPolicyJson,
+      InventoryStatusCode: entity.InventoryStatusCode,
+      TargetInventoryStatusCode: entity.TargetInventoryStatusCode,
+      ReasonCode: entity.ReasonCode,
+      ReasonCodeId: entity.ReasonCodeId,
+      ReasonNote: entity.ReasonNote,
+      EvidenceRefs: entity.EvidenceRefs ?? [],
+      IdempotencyKey: entity.IdempotencyKey,
+      CreatedBy: entity.CreatedBy,
+      UpdatedBy: entity.UpdatedBy,
+      CreatedAt: entity.CreatedAt,
+      UpdatedAt: entity.UpdatedAt,
+    });
+  }
+
+  public static ToQcResultDomain(entity: QcResultOrmEntity): QcResultEntity {
+    return new QcResultEntity({
+      Id: entity.Id,
+      QcTaskId: entity.QcTaskId,
+      ReceiptId: entity.ReceiptId,
+      ReceiptLineId: entity.ReceiptLineId,
+      InboundPlanId: entity.InboundPlanId,
+      InboundPlanLineId: entity.InboundPlanLineId,
+      OwnerId: entity.OwnerId,
+      OwnerCode: entity.OwnerCode,
+      WarehouseId: entity.WarehouseId,
+      WarehouseCode: entity.WarehouseCode,
+      ResultStatus: entity.ResultStatus as QcResultStatus,
+      DispositionCode: entity.DispositionCode as QcDispositionCode,
+      InspectedQuantity: Number(entity.InspectedQuantity),
+      AcceptedQuantity: Number(entity.AcceptedQuantity),
+      RejectedQuantity: Number(entity.RejectedQuantity),
+      AcceptedInventoryStatusCode: entity.AcceptedInventoryStatusCode,
+      RejectedInventoryStatusCode: entity.RejectedInventoryStatusCode,
+      TargetInventoryStatusCode: entity.TargetInventoryStatusCode,
+      ReasonCode: entity.ReasonCode,
+      ReasonCodeId: entity.ReasonCodeId,
+      ReasonNote: entity.ReasonNote,
+      EvidenceRefs: entity.EvidenceRefs ?? [],
+      EvidenceJson: entity.EvidenceJson,
+      IdempotencyKey: entity.IdempotencyKey,
+      RecordedAt: entity.RecordedAt,
+      RecordedBy: entity.RecordedBy,
+      CreatedAt: entity.CreatedAt,
+      UpdatedAt: entity.UpdatedAt,
+    });
+  }
+
   public static ToSessionOrm(entity: ReceivingSessionEntity): ReceivingSessionOrmEntity {
     const orm = new ReceivingSessionOrmEntity();
     Object.assign(orm, entity);
@@ -138,6 +212,18 @@ export class ReceivingOrmMapper {
 
   public static ToDiscrepancyOrm(entity: InboundDiscrepancyEntity): InboundDiscrepancyOrmEntity {
     const orm = new InboundDiscrepancyOrmEntity();
+    Object.assign(orm, entity);
+    return orm;
+  }
+
+  public static ToQcTaskOrm(entity: QcTaskEntity): QcTaskOrmEntity {
+    const orm = new QcTaskOrmEntity();
+    Object.assign(orm, entity);
+    return orm;
+  }
+
+  public static ToQcResultOrm(entity: QcResultEntity): QcResultOrmEntity {
+    const orm = new QcResultOrmEntity();
     Object.assign(orm, entity);
     return orm;
   }

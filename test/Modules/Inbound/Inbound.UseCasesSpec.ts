@@ -23,14 +23,21 @@ import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
+import { EvaluateQcTaskUseCase } from '@modules/Inbound/Application/UseCases/EvaluateQcTaskUseCase';
+import { RecordQcResultUseCase } from '@modules/Inbound/Application/UseCases/RecordQcResultUseCase';
 import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCases/StartReceivingSessionUseCase';
 import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
 import { InboundPlanEntity } from '@modules/Inbound/Domain/Entities/InboundPlanEntity';
 import { InboundPlanLineEntity } from '@modules/Inbound/Domain/Entities/InboundPlanLineEntity';
 import { InboundDiscrepancyEntity } from '@modules/Inbound/Domain/Entities/InboundDiscrepancyEntity';
+import { QcResultEntity } from '@modules/Inbound/Domain/Entities/QcResultEntity';
+import { QcTaskEntity } from '@modules/Inbound/Domain/Entities/QcTaskEntity';
 import { InboundDiscrepancyStatus } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyStatus';
 import { InboundDiscrepancyToleranceDecision } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyToleranceDecision';
 import { InboundDiscrepancyType } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyType';
+import { QcDispositionCode } from '@modules/Inbound/Domain/Enums/QcDispositionCode';
+import { QcResultStatus } from '@modules/Inbound/Domain/Enums/QcResultStatus';
+import { QcTaskStatus } from '@modules/Inbound/Domain/Enums/QcTaskStatus';
 import { ReceiptEntity } from '@modules/Inbound/Domain/Entities/ReceiptEntity';
 import { ReceiptLineEntity } from '@modules/Inbound/Domain/Entities/ReceiptLineEntity';
 import { ReceivingSessionEntity } from '@modules/Inbound/Domain/Entities/ReceivingSessionEntity';
@@ -155,6 +162,8 @@ class FakeReceivingRepository implements IReceivingRepository {
   public Receipts: ReceiptEntity[] = [];
   public Lines: ReceiptLineEntity[] = [];
   public Discrepancies: InboundDiscrepancyEntity[] = [];
+  public QcTasks: QcTaskEntity[] = [];
+  public QcResults: QcResultEntity[] = [];
 
   public async CreateSessionWithReceipt(
     session: ReceivingSessionEntity,
@@ -247,6 +256,43 @@ class FakeReceivingRepository implements IReceivingRepository {
     take: number,
   ): Promise<{ Items: InboundDiscrepancyEntity[]; TotalItems: number }> {
     return { Items: this.Discrepancies.slice(skip, skip + take), TotalItems: this.Discrepancies.length };
+  }
+
+  public async CreateQcTask(task: QcTaskEntity): Promise<QcTaskEntity> {
+    if (this.QcTasks.some((item) => item.ReceiptId === task.ReceiptId && item.IdempotencyKey === task.IdempotencyKey)) {
+      throw new ConflictException('QC task already exists');
+    }
+    this.QcTasks.push(task);
+    return task;
+  }
+
+  public async UpdateQcTask(task: QcTaskEntity): Promise<QcTaskEntity> {
+    const index = this.QcTasks.findIndex((item) => item.Id === task.Id);
+    if (index >= 0) this.QcTasks[index] = task;
+    else this.QcTasks.push(task);
+    return task;
+  }
+
+  public async FindQcTaskById(id: string): Promise<QcTaskEntity | null> {
+    return this.QcTasks.find((item) => item.Id === id) ?? null;
+  }
+
+  public async FindQcTaskByIdempotencyKey(receiptId: string, idempotencyKey: string): Promise<QcTaskEntity | null> {
+    return this.QcTasks.find((item) => item.ReceiptId === receiptId && item.IdempotencyKey === idempotencyKey) ?? null;
+  }
+
+  public async CreateQcResult(result: QcResultEntity): Promise<QcResultEntity> {
+    if (
+      this.QcResults.some((item) => item.QcTaskId === result.QcTaskId && item.IdempotencyKey === result.IdempotencyKey)
+    ) {
+      throw new ConflictException('QC result already exists');
+    }
+    this.QcResults.push(result);
+    return result;
+  }
+
+  public async FindQcResultByIdempotencyKey(qcTaskId: string, idempotencyKey: string): Promise<QcResultEntity | null> {
+    return this.QcResults.find((item) => item.QcTaskId === qcTaskId && item.IdempotencyKey === idempotencyKey) ?? null;
   }
 }
 
@@ -501,6 +547,30 @@ const captureInboundDiscrepancyUseCase = (bundle: ReturnType<typeof repoBundle>)
     bundle.exceptionCases,
     bundle.controlExceptionCatalog as never,
     bundle.profiles as unknown as IWarehouseProfileRepository,
+    bundle.coreFlows as unknown as ICoreFlowRepository,
+    bundle.integrations as unknown as IIntegrationRepository,
+    bundle.reasonCatalog,
+    bundle.audited as unknown as AuditedTransaction,
+    bundle.permissionChecker,
+  );
+
+const evaluateQcTaskUseCase = (bundle: ReturnType<typeof repoBundle>) =>
+  new EvaluateQcTaskUseCase(
+    bundle.inbound,
+    bundle.receiving,
+    bundle.profiles as unknown as IWarehouseProfileRepository,
+    bundle.skus as unknown as ISkuRepository,
+    bundle.coreFlows as unknown as ICoreFlowRepository,
+    bundle.integrations as unknown as IIntegrationRepository,
+    bundle.reasonCatalog,
+    bundle.audited as unknown as AuditedTransaction,
+    bundle.permissionChecker,
+  );
+
+const recordQcResultUseCase = (bundle: ReturnType<typeof repoBundle>) =>
+  new RecordQcResultUseCase(
+    bundle.inbound,
+    bundle.receiving,
     bundle.coreFlows as unknown as ICoreFlowRepository,
     bundle.integrations as unknown as IIntegrationRepository,
     bundle.reasonCatalog,
@@ -1330,5 +1400,359 @@ describe('Inbound plan use cases', () => {
     expect(discrepancy.Status).toBe(InboundDiscrepancyStatus.Blocked);
     expect(discrepancy.ToleranceDecision).toBe(InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked);
     expect(discrepancy.Severity).toBe(ControlExceptionSeverity.High);
+  });
+
+  it('creates QC task when profile requires QC and never marks inventory Available before QC result', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundQcRequired: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-qc-required',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const useCase = evaluateQcTaskUseCase(bundle);
+    const task = await useCase.Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        IdempotencyKey: 'qc-task-required',
+      },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    const duplicate = await useCase.Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        IdempotencyKey: 'qc-task-required',
+      },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    expect(task.Required).toBe(true);
+    expect(task.TaskStatus).toBe(QcTaskStatus.PendingQc);
+    expect(task.TriggerReason).toBe('WarehouseProfile');
+    expect(task.InventoryStatusCode).toBe('PENDING_QC');
+    expect(task.InventoryStatusCode).not.toBe('AVAILABLE');
+    expect(duplicate.IsDuplicate).toBe(true);
+    expect(bundle.receiving.QcTasks).toHaveLength(1);
+    expect(
+      bundle.integrations.Outbox.filter((item) => (item as { EventType?: string }).EventType === 'QCRequired'),
+    ).toHaveLength(1);
+  });
+
+  it('records skipped QC trace and QcCompleted skipped milestone when profile does not require QC', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-qc-skipped',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        IdempotencyKey: 'qc-task-skipped',
+      },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    expect(task.Required).toBe(false);
+    expect(task.TaskStatus).toBe(QcTaskStatus.NotRequired);
+    expect(task.InventoryStatusCode).toBe('READY_FOR_PUTAWAY');
+    expect(task.InventoryStatusCode).not.toBe('AVAILABLE');
+    expect(
+      bundle.integrations.Outbox.filter((item) => (item as { EventType?: string }).EventType === 'QCRequired'),
+    ).toHaveLength(0);
+    expect(
+      bundle.coreFlows.Milestones.filter(
+        (item) =>
+          (item as { StepCode?: CoreFlowStepCode; MilestoneStatus?: WorkflowMilestoneStatus }).StepCode ===
+            CoreFlowStepCode.QcCompleted &&
+          (item as { MilestoneStatus?: WorkflowMilestoneStatus }).MilestoneStatus === WorkflowMilestoneStatus.Skipped,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('records QC pass result, closes task and emits QCResultRecorded idempotently', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundQcRequired: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-qc-pass',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        IdempotencyKey: 'qc-task-pass',
+      },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    const useCase = recordQcResultUseCase(bundle);
+    const result = await useCase.Execute(
+      {
+        QcTaskId: task.Id,
+        ResultStatus: QcResultStatus.Passed,
+        DispositionCode: QcDispositionCode.Release,
+        InspectedQuantity: 12,
+        AcceptedQuantity: 12,
+        RejectedQuantity: 0,
+        IdempotencyKey: 'qc-result-pass',
+      },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    const duplicate = await useCase.Execute(
+      {
+        QcTaskId: task.Id,
+        ResultStatus: QcResultStatus.Passed,
+        DispositionCode: QcDispositionCode.Release,
+        InspectedQuantity: 12,
+        AcceptedQuantity: 12,
+        RejectedQuantity: 0,
+        IdempotencyKey: 'qc-result-pass',
+      },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    await expect(
+      useCase.Execute(
+        {
+          QcTaskId: task.Id,
+          ResultStatus: QcResultStatus.Passed,
+          DispositionCode: QcDispositionCode.Release,
+          InspectedQuantity: 12,
+          AcceptedQuantity: 12,
+          RejectedQuantity: 0,
+          IdempotencyKey: 'qc-result-pass-second',
+        },
+        { ...SystemAuditContext, ActorUserId: 'qc-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(result.TaskStatus).toBe(QcTaskStatus.Closed);
+    expect(result.TargetInventoryStatusCode).toBe('READY_FOR_PUTAWAY');
+    expect(result.TargetInventoryStatusCode).not.toBe('AVAILABLE');
+    expect(duplicate.IsDuplicate).toBe(true);
+    expect(bundle.receiving.QcResults).toHaveLength(1);
+    expect(
+      bundle.integrations.Outbox.filter((item) => (item as { EventType?: string }).EventType === 'QCResultRecorded'),
+    ).toHaveLength(1);
+    expect(
+      bundle.coreFlows.Milestones.filter(
+        (item) => (item as { StepCode?: CoreFlowStepCode }).StepCode === CoreFlowStepCode.QcCompleted,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('records split QC fail disposition with reason, evidence and blocked target status', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundQcRequired: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-qc-split',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        IdempotencyKey: 'qc-task-split',
+      },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    const result = await recordQcResultUseCase(bundle).Execute(
+      {
+        QcTaskId: task.Id,
+        ResultStatus: QcResultStatus.Failed,
+        DispositionCode: QcDispositionCode.Quarantine,
+        InspectedQuantity: 12,
+        AcceptedQuantity: 8,
+        RejectedQuantity: 4,
+        ReasonCode: 'RC-V1-DISCREPANCY',
+        EvidenceRefs: ['photo://qc/damaged-4'],
+        EvidenceJson: { AcceptedQuantity: 8, RejectedQuantity: 4 },
+        IdempotencyKey: 'qc-result-split',
+      },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    expect(result.TaskStatus).toBe(QcTaskStatus.Dispositioned);
+    expect(result.AcceptedInventoryStatusCode).toBe('READY_FOR_PUTAWAY');
+    expect(result.RejectedInventoryStatusCode).toBe('QUARANTINE');
+    expect(result.TargetInventoryStatusCode).toBe('QUARANTINE');
+    expect(result.TargetInventoryStatusCode).not.toBe('AVAILABLE');
+    expect(bundle.receiving.QcTasks[0].InventoryStatusCode).toBe('QUARANTINE');
+    expect(
+      bundle.audited.Entries.filter((item) => (item as { ReferenceType?: string }).ReferenceType === 'QcResult'),
+    ).toHaveLength(1);
+  });
+
+  it('rejects QC fail disposition without reason/evidence and leaves no side effects', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundQcRequired: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-qc-reject',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        IdempotencyKey: 'qc-task-reject',
+      },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    await expect(
+      recordQcResultUseCase(bundle).Execute(
+        {
+          QcTaskId: task.Id,
+          ResultStatus: QcResultStatus.Failed,
+          DispositionCode: QcDispositionCode.Quarantine,
+          InspectedQuantity: 12,
+          AcceptedQuantity: 8,
+          RejectedQuantity: 4,
+          IdempotencyKey: 'qc-result-reject',
+        },
+        { ...SystemAuditContext, ActorUserId: 'qc-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.receiving.QcResults).toHaveLength(0);
+    expect(
+      bundle.integrations.Outbox.filter((item) => (item as { EventType?: string }).EventType === 'QCResultRecorded'),
+    ).toHaveLength(0);
+    expect(bundle.receiving.QcTasks[0].TaskStatus).toBe(QcTaskStatus.PendingQc);
+  });
+
+  it('denies QC create and update permissions without side effects', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundQcRequired: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-qc-denied',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    bundle.permissionChecker.Check.mockImplementation(async (context) =>
+      context.ObjectType === ObjectType.QcTask && context.Action === ActionCode.Create
+        ? { Allowed: false, Reason: 'OUT_OF_SCOPE' }
+        : { Allowed: true },
+    );
+
+    await expect(
+      evaluateQcTaskUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          IdempotencyKey: 'qc-task-create-denied',
+        },
+        { ...SystemAuditContext, ActorUserId: 'qc-1' },
+      ),
+    ).rejects.toThrow(ForbiddenAppException);
+
+    expect(bundle.receiving.QcTasks).toHaveLength(0);
+    expect(
+      bundle.integrations.Outbox.filter((item) => (item as { EventType?: string }).EventType === 'QCRequired'),
+    ).toHaveLength(0);
+
+    bundle.permissionChecker.Check.mockResolvedValue({ Allowed: true });
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        IdempotencyKey: 'qc-task-update-denied',
+      },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    bundle.permissionChecker.Check.mockImplementation(async (context) =>
+      context.ObjectType === ObjectType.QcTask && context.Action === ActionCode.Update
+        ? { Allowed: false, Reason: 'OUT_OF_SCOPE' }
+        : { Allowed: true },
+    );
+
+    await expect(
+      recordQcResultUseCase(bundle).Execute(
+        {
+          QcTaskId: task.Id,
+          ResultStatus: QcResultStatus.Passed,
+          DispositionCode: QcDispositionCode.Release,
+          InspectedQuantity: 12,
+          AcceptedQuantity: 12,
+          RejectedQuantity: 0,
+          IdempotencyKey: 'qc-result-update-denied',
+        },
+        { ...SystemAuditContext, ActorUserId: 'qc-1' },
+      ),
+    ).rejects.toThrow(ForbiddenAppException);
+
+    expect(bundle.receiving.QcResults).toHaveLength(0);
+    expect(
+      bundle.integrations.Outbox.filter((item) => (item as { EventType?: string }).EventType === 'QCResultRecorded'),
+    ).toHaveLength(0);
   });
 });

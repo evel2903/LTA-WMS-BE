@@ -5,6 +5,9 @@ import { InboundDiscrepancyStatus } from '@modules/Inbound/Domain/Enums/InboundD
 import { InboundDiscrepancyToleranceDecision } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyToleranceDecision';
 import { InboundDiscrepancyType } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyType';
 import { InboundPlanDocumentStatus } from '@modules/Inbound/Domain/Enums/InboundPlanDocumentStatus';
+import { QcDispositionCode } from '@modules/Inbound/Domain/Enums/QcDispositionCode';
+import { QcResultStatus } from '@modules/Inbound/Domain/Enums/QcResultStatus';
+import { QcTaskStatus } from '@modules/Inbound/Domain/Enums/QcTaskStatus';
 import { ReceiptDocumentStatus } from '@modules/Inbound/Domain/Enums/ReceiptDocumentStatus';
 import { ReceiptLineDiscrepancySignal } from '@modules/Inbound/Domain/Enums/ReceiptLineDiscrepancySignal';
 import { ReceiptLineStatus } from '@modules/Inbound/Domain/Enums/ReceiptLineStatus';
@@ -259,6 +262,96 @@ export interface InboundDiscrepancyDto {
   EvidenceJson: Record<string, unknown> | null;
   ExceptionCaseId: string;
   ExceptionState: ExceptionState;
+  IdempotencyKey: string;
+  RecordedAt: Date;
+  RecordedBy: string | null;
+  IsDuplicate: boolean;
+  CreatedAt: Date;
+  UpdatedAt: Date;
+}
+
+export interface EvaluateQcTaskDto {
+  ReceiptId: string;
+  ReceiptLineId: string;
+  IdempotencyKey: string;
+  ForceRequired?: boolean;
+  ReasonCode?: string | null;
+  ReasonNote?: string | null;
+  EvidenceRefs?: string[];
+}
+
+export interface QcTaskDto {
+  Id: string;
+  ReceiptId: string;
+  ReceiptLineId: string;
+  InboundPlanId: string;
+  InboundPlanLineId: string;
+  OwnerId: string;
+  OwnerCode: string | null;
+  WarehouseId: string;
+  WarehouseCode: string | null;
+  SkuId: string;
+  SkuCode: string | null;
+  UomId: string;
+  UomCode: string | null;
+  ActualQuantity: number;
+  TaskStatus: QcTaskStatus;
+  Required: boolean;
+  TriggerReason: string;
+  TriggerPolicyJson: Record<string, unknown> | null;
+  InventoryStatusCode: string;
+  TargetInventoryStatusCode: string | null;
+  ReasonCode: string | null;
+  ReasonCodeId: string | null;
+  ReasonNote: string | null;
+  EvidenceRefs: string[];
+  IdempotencyKey: string;
+  IsDuplicate: boolean;
+  CreatedBy: string | null;
+  UpdatedBy: string | null;
+  CreatedAt: Date;
+  UpdatedAt: Date;
+}
+
+export interface RecordQcResultDto {
+  QcTaskId: string;
+  IdempotencyKey: string;
+  ResultStatus: QcResultStatus;
+  DispositionCode: QcDispositionCode;
+  InspectedQuantity: number;
+  AcceptedQuantity: number;
+  RejectedQuantity: number;
+  ReasonCode?: string | null;
+  ReasonNote?: string | null;
+  EvidenceRefs?: string[];
+  EvidenceJson?: Record<string, unknown> | null;
+}
+
+export interface QcResultDto {
+  Id: string;
+  QcTaskId: string;
+  ReceiptId: string;
+  ReceiptLineId: string;
+  InboundPlanId: string;
+  InboundPlanLineId: string;
+  OwnerId: string;
+  OwnerCode: string | null;
+  WarehouseId: string;
+  WarehouseCode: string | null;
+  ResultStatus: QcResultStatus;
+  DispositionCode: QcDispositionCode;
+  TaskStatus: QcTaskStatus;
+  InspectedQuantity: number;
+  AcceptedQuantity: number;
+  RejectedQuantity: number;
+  AcceptedInventoryStatusCode: string | null;
+  RejectedInventoryStatusCode: string | null;
+  TargetInventoryStatusCode: string;
+  ReasonCode: string | null;
+  ReasonCodeId: string | null;
+  ReasonNote: string | null;
+  EvidenceRefs: string[];
+  EvidenceJson: Record<string, unknown> | null;
   IdempotencyKey: string;
   RecordedAt: Date;
   RecordedBy: string | null;
