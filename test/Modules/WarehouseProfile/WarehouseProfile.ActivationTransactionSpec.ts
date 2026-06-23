@@ -11,8 +11,8 @@ import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entitie
 import { RuleControlMode } from '@modules/WarehouseProfile/Domain/Enums/RuleControlMode';
 import { RulePrecedenceTier } from '@modules/WarehouseProfile/Domain/Enums/RulePrecedenceTier';
 import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/WarehouseProfileStatus';
-import { InMemoryWarehouseProfileRepository } from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
-import { StubRuleResolver } from '@modules/WarehouseProfile/Test/RuleTestDoubles';
+import { InMemoryWarehouseProfileRepository } from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
+import { StubRuleResolver } from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
 import { BuildRule } from '@test/Modules/WarehouseProfile/WarehouseProfile.RuleResolverTestHelpers';
 
 /**

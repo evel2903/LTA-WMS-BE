@@ -14,7 +14,7 @@ import {
   InMemoryRolePermissionRepository,
   InMemoryUserRoleRepository,
   InMemoryDataScopeRepository,
-} from '@modules/AccessControl/Test/AccessControlTestDoubles';
+} from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
 const buildWorld = async () => {
   const roles = new InMemoryRoleRepository();

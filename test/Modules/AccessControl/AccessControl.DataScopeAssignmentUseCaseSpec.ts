@@ -12,7 +12,7 @@ import { RemoveDataScopeFromUserUseCase } from '@modules/AccessControl/Applicati
 import {
   InMemoryDataScopeRepository,
   StubAuditedTransaction,
-} from '@modules/AccessControl/Test/AccessControlTestDoubles';
+} from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
 const ctx: AuditContext = {
   ActorUserId: 'admin-1',

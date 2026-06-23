@@ -4,7 +4,10 @@ import { CreateInboundPlans1781643000000 } from '@shared/Database/Migrations/178
 import { CreateReceivingReceipts1781643300000 } from '@shared/Database/Migrations/1781643300000-CreateReceivingReceipts';
 import { CreateInboundDiscrepancies1781643600000 } from '@shared/Database/Migrations/1781643600000-CreateInboundDiscrepancies';
 import { CreateQcTasksAndResults1781643900000 } from '@shared/Database/Migrations/1781643900000-CreateQcTasksAndResults';
+import { CreateInboundLpnsAndPutawayReleases1781644200000 } from '@shared/Database/Migrations/1781644200000-CreateInboundLpnsAndPutawayReleases';
 import { InboundDiscrepancyOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundDiscrepancyOrmEntity';
+import { InboundLpnOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundLpnOrmEntity';
+import { InboundPutawayReleaseOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPutawayReleaseOrmEntity';
 import { InboundPlanOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanOrmEntity';
 import { InboundPlanLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanLineOrmEntity';
 import { QcResultOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcResultOrmEntity';
@@ -34,6 +37,8 @@ describe('Inbound schema registration', () => {
         InboundPlanOrmEntity,
         InboundPlanLineOrmEntity,
         InboundDiscrepancyOrmEntity,
+        InboundLpnOrmEntity,
+        InboundPutawayReleaseOrmEntity,
         QcTaskOrmEntity,
         QcResultOrmEntity,
         ReceivingSessionOrmEntity,
@@ -107,6 +112,22 @@ describe('Inbound schema registration', () => {
     expect(sql).not.toContain('QC_REJECTED');
   });
 
+  it('creates inbound LPN and putaway release tables without adding InventoryStatus terms', async () => {
+    const { runner, queries } = fakeRunner();
+    await new CreateInboundLpnsAndPutawayReleases1781644200000().up(runner);
+    const sql = queries.join('\n');
+    expect(sql).toContain('CREATE TABLE "inbound_lpns"');
+    expect(sql).toContain('CREATE TABLE "inbound_putaway_releases"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "UQ_inbound_lpns_scope_lpn"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "UQ_inbound_lpns_idempotency"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "UQ_inbound_putaway_releases_idempotency"');
+    expect(sql).toContain('"inventory_status_code" varchar(80) NOT NULL');
+    expect(sql).not.toContain('LPN_READY');
+    expect(sql).not.toContain('LABEL_PRINTED');
+    expect(sql).not.toContain('PUTAWAY_RELEASED');
+    expect(sql).not.toContain('PUTAWAY_IN_PROGRESS');
+  });
+
   it('keeps inbound document and gate states separate from InventoryStatus terms', () => {
     expect(Object.values(InboundPlanDocumentStatus)).toEqual(
       expect.arrayContaining([
@@ -142,6 +163,18 @@ describe('Inbound schema registration', () => {
       ...Object.values(QcTaskStatus),
       ...Object.values(QcResultStatus),
       ...Object.values(QcDispositionCode),
-    ]).not.toEqual(expect.arrayContaining(['SHIPPED', 'GATE_OUT', 'GOODS_ISSUE_POSTED', 'QC_PASSED', 'QC_REJECTED']));
+    ]).not.toEqual(
+      expect.arrayContaining([
+        'SHIPPED',
+        'GATE_OUT',
+        'GOODS_ISSUE_POSTED',
+        'QC_PASSED',
+        'QC_REJECTED',
+        'LPN_READY',
+        'LABEL_PRINTED',
+        'PUTAWAY_RELEASED',
+        'PUTAWAY_IN_PROGRESS',
+      ]),
+    );
   });
 });

@@ -55,6 +55,8 @@ import { ReprintRequestOrmEntity } from '@modules/BarcodeLabel/Infrastructure/Pe
 import { InboundPlanOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanOrmEntity';
 import { InboundPlanLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPlanLineOrmEntity';
 import { InboundDiscrepancyOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundDiscrepancyOrmEntity';
+import { InboundLpnOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundLpnOrmEntity';
+import { InboundPutawayReleaseOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPutawayReleaseOrmEntity';
 import { QcResultOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcResultOrmEntity';
 import { QcTaskOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcTaskOrmEntity';
 import { ReceiptOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptOrmEntity';
@@ -125,6 +127,8 @@ export default new DataSource({
     InboundPlanOrmEntity,
     InboundPlanLineOrmEntity,
     InboundDiscrepancyOrmEntity,
+    InboundLpnOrmEntity,
+    InboundPutawayReleaseOrmEntity,
     QcTaskOrmEntity,
     QcResultOrmEntity,
     ReceivingSessionOrmEntity,

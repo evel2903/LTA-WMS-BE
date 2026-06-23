@@ -37,7 +37,7 @@ import {
   InMemoryRoleRepository,
   InMemoryUserRoleRepository,
   StubAuditedTransaction,
-} from '@modules/AccessControl/Test/AccessControlTestDoubles';
+} from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 import { IMasterDataOwnershipPolicyRepository } from '@modules/MasterData/Application/Interfaces/IMasterDataOwnershipPolicyRepository';
 import { DefaultMasterDataOwnershipPolicies } from '@modules/MasterData/Application/Services/DefaultMasterDataOwnershipPolicies';
 import { Tier1MasterDataChecklistService } from '@modules/MasterData/Application/Services/Tier1MasterDataChecklistService';
@@ -65,8 +65,8 @@ import {
   InMemoryRuleDefinitionRepository,
   InMemoryRuleGroupRepository,
   InMemoryWarehouseProfileRuleRepository,
-} from '@modules/WarehouseProfile/Test/RuleTestDoubles';
-import { InMemoryWarehouseProfileRepository } from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
+import { InMemoryWarehouseProfileRepository } from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
 import {
   At,
   BuildBinding,

@@ -26,7 +26,7 @@ import {
   InMemoryRolePermissionRepository,
   InMemoryRoleRepository,
   InMemoryUserRoleRepository,
-} from '@modules/AccessControl/Test/AccessControlTestDoubles';
+} from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import {

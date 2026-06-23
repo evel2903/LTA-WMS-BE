@@ -25,8 +25,8 @@ import { WarehouseProfileController } from '@modules/WarehouseProfile/Presentati
 import {
   InMemoryWarehouseProfileRepository,
   MasterDataReferenceStub,
-} from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
-import { StubRuleResolver } from '@modules/WarehouseProfile/Test/RuleTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
+import { StubRuleResolver } from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
 import { BuildRule } from '@test/Modules/WarehouseProfile/WarehouseProfile.RuleResolverTestHelpers';
 
 /**

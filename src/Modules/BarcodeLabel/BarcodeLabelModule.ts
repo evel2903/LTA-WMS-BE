@@ -113,6 +113,6 @@ import { BarcodeLabelRepository } from '@modules/BarcodeLabel/Infrastructure/Per
       ],
     },
   ],
-  exports: [BARCODE_LABEL_REPOSITORY],
+  exports: [BARCODE_LABEL_REPOSITORY, ValidateLabelBlockingUseCase],
 })
 export class BarcodeLabelModule {}

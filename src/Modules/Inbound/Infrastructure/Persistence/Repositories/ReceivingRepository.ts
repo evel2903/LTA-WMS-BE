@@ -8,6 +8,8 @@ import {
 } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
 import { InboundDiscrepancyEntity } from '@modules/Inbound/Domain/Entities/InboundDiscrepancyEntity';
 import { InboundDiscrepancyStatus } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyStatus';
+import { InboundLpnEntity } from '@modules/Inbound/Domain/Entities/InboundLpnEntity';
+import { InboundPutawayReleaseEntity } from '@modules/Inbound/Domain/Entities/InboundPutawayReleaseEntity';
 import { QcResultEntity } from '@modules/Inbound/Domain/Entities/QcResultEntity';
 import { QcTaskEntity } from '@modules/Inbound/Domain/Entities/QcTaskEntity';
 import { ReceiptEntity } from '@modules/Inbound/Domain/Entities/ReceiptEntity';
@@ -16,6 +18,8 @@ import { ReceivingSessionEntity } from '@modules/Inbound/Domain/Entities/Receivi
 import { ReceivingSessionStatus } from '@modules/Inbound/Domain/Enums/ReceivingSessionStatus';
 import { ReceivingOrmMapper } from '@modules/Inbound/Infrastructure/Mappers/ReceivingOrmMapper';
 import { InboundDiscrepancyOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundDiscrepancyOrmEntity';
+import { InboundLpnOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundLpnOrmEntity';
+import { InboundPutawayReleaseOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPutawayReleaseOrmEntity';
 import { QcResultOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcResultOrmEntity';
 import { QcTaskOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/QcTaskOrmEntity';
 import { ReceiptOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptOrmEntity';
@@ -33,6 +37,10 @@ export class ReceivingRepository implements IReceivingRepository {
     private readonly lines: Repository<ReceiptLineOrmEntity>,
     @InjectRepository(InboundDiscrepancyOrmEntity)
     private readonly discrepancies: Repository<InboundDiscrepancyOrmEntity>,
+    @InjectRepository(InboundLpnOrmEntity)
+    private readonly lpns: Repository<InboundLpnOrmEntity>,
+    @InjectRepository(InboundPutawayReleaseOrmEntity)
+    private readonly putawayReleases: Repository<InboundPutawayReleaseOrmEntity>,
     @InjectRepository(QcTaskOrmEntity)
     private readonly qcTasks: Repository<QcTaskOrmEntity>,
     @InjectRepository(QcResultOrmEntity)
@@ -165,6 +173,68 @@ export class ReceivingRepository implements IReceivingRepository {
     return { Items: entities.map(ReceivingOrmMapper.ToDiscrepancyDomain), TotalItems: total };
   }
 
+  public async CreateInboundLpn(lpn: InboundLpnEntity, manager?: EntityManager): Promise<InboundLpnEntity> {
+    const repo = manager ? manager.getRepository(InboundLpnOrmEntity) : this.lpns;
+    try {
+      const saved = await repo.save(ReceivingOrmMapper.ToInboundLpnOrm(lpn));
+      return ReceivingOrmMapper.ToInboundLpnDomain(saved);
+    } catch (error) {
+      this.HandleUniqueViolation(error, 'Inbound LPN already exists');
+      throw error;
+    }
+  }
+
+  public async FindInboundLpnById(id: string): Promise<InboundLpnEntity | null> {
+    const entity = await this.lpns.findOne({ where: { Id: id } });
+    return entity ? ReceivingOrmMapper.ToInboundLpnDomain(entity) : null;
+  }
+
+  public async FindInboundLpnByReceiptLineId(receiptLineId: string): Promise<InboundLpnEntity | null> {
+    const entity = await this.lpns.findOne({ where: { ReceiptLineId: receiptLineId } });
+    return entity ? ReceivingOrmMapper.ToInboundLpnDomain(entity) : null;
+  }
+
+  public async FindInboundLpnByIdempotencyKey(
+    receiptLineId: string,
+    idempotencyKey: string,
+  ): Promise<InboundLpnEntity | null> {
+    const entity = await this.lpns.findOne({ where: { ReceiptLineId: receiptLineId, IdempotencyKey: idempotencyKey } });
+    return entity ? ReceivingOrmMapper.ToInboundLpnDomain(entity) : null;
+  }
+
+  public async FindInboundLpnByScopeCode(
+    warehouseId: string,
+    ownerId: string,
+    lpnCode: string,
+  ): Promise<InboundLpnEntity | null> {
+    const entity = await this.lpns.findOne({ where: { WarehouseId: warehouseId, OwnerId: ownerId, LpnCode: lpnCode } });
+    return entity ? ReceivingOrmMapper.ToInboundLpnDomain(entity) : null;
+  }
+
+  public async CreateInboundPutawayRelease(
+    release: InboundPutawayReleaseEntity,
+    manager?: EntityManager,
+  ): Promise<InboundPutawayReleaseEntity> {
+    const repo = manager ? manager.getRepository(InboundPutawayReleaseOrmEntity) : this.putawayReleases;
+    try {
+      const saved = await repo.save(ReceivingOrmMapper.ToInboundPutawayReleaseOrm(release));
+      return ReceivingOrmMapper.ToInboundPutawayReleaseDomain(saved);
+    } catch (error) {
+      this.HandleUniqueViolation(error, 'Inbound putaway release already exists');
+      throw error;
+    }
+  }
+
+  public async FindInboundPutawayReleaseByIdempotencyKey(
+    receiptLineId: string,
+    idempotencyKey: string,
+  ): Promise<InboundPutawayReleaseEntity | null> {
+    const entity = await this.putawayReleases.findOne({
+      where: { ReceiptLineId: receiptLineId, IdempotencyKey: idempotencyKey },
+    });
+    return entity ? ReceivingOrmMapper.ToInboundPutawayReleaseDomain(entity) : null;
+  }
+
   public async CreateQcTask(task: QcTaskEntity, manager?: EntityManager): Promise<QcTaskEntity> {
     const repo = manager ? manager.getRepository(QcTaskOrmEntity) : this.qcTasks;
     try {
@@ -192,6 +262,14 @@ export class ReceivingRepository implements IReceivingRepository {
     return entity ? ReceivingOrmMapper.ToQcTaskDomain(entity) : null;
   }
 
+  public async FindLatestQcTaskByReceiptLineId(receiptLineId: string): Promise<QcTaskEntity | null> {
+    const entity = await this.qcTasks.findOne({
+      where: { ReceiptLineId: receiptLineId },
+      order: { CreatedAt: 'DESC' },
+    });
+    return entity ? ReceivingOrmMapper.ToQcTaskDomain(entity) : null;
+  }
+
   public async CreateQcResult(result: QcResultEntity, manager?: EntityManager): Promise<QcResultEntity> {
     const repo = manager ? manager.getRepository(QcResultOrmEntity) : this.qcResults;
     try {
@@ -205,6 +283,14 @@ export class ReceivingRepository implements IReceivingRepository {
 
   public async FindQcResultByIdempotencyKey(qcTaskId: string, idempotencyKey: string): Promise<QcResultEntity | null> {
     const entity = await this.qcResults.findOne({ where: { QcTaskId: qcTaskId, IdempotencyKey: idempotencyKey } });
+    return entity ? ReceivingOrmMapper.ToQcResultDomain(entity) : null;
+  }
+
+  public async FindLatestQcResultByReceiptLineId(receiptLineId: string): Promise<QcResultEntity | null> {
+    const entity = await this.qcResults.findOne({
+      where: { ReceiptLineId: receiptLineId },
+      order: { RecordedAt: 'DESC' },
+    });
     return entity ? ReceivingOrmMapper.ToQcResultDomain(entity) : null;
   }
 

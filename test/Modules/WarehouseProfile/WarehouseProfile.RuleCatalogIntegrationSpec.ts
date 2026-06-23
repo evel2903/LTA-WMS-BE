@@ -14,11 +14,11 @@ import {
   InMemoryRuleDefinitionRepository,
   InMemoryRuleGroupRepository,
   InMemoryWarehouseProfileRuleRepository,
-} from '@modules/WarehouseProfile/Test/RuleTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
 import {
   InMemoryWarehouseProfileRepository,
   MasterDataReferenceStub,
-} from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
 
 describe('Rule catalog integration (B2 catalog + definition + binding only)', () => {
   it('creates rules across 3 precedence tiers and 4 distinct scopes, then binds into a draft profile', async () => {

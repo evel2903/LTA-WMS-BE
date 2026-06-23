@@ -13,7 +13,7 @@ import {
   InMemoryPermissionRepository,
   InMemoryRolePermissionRepository,
   InMemoryUserRoleRepository,
-} from '@modules/AccessControl/Test/AccessControlTestDoubles';
+} from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
 /**
  * AC5 end-to-end (no DB): seed RBAC -> bridge legacy users -> prove a user has

@@ -4,7 +4,7 @@ import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ActorType } from '@modules/AccessControl/Domain/Enums/ActorType';
 import { AuditLogEntity } from '@modules/AccessControl/Domain/Entities/AuditLogEntity';
 import { QueryAuditLogsUseCase } from '@modules/AccessControl/Application/UseCases/QueryAuditLogsUseCase';
-import { InMemoryAuditLogRepository } from '@modules/AccessControl/Test/AccessControlTestDoubles';
+import { InMemoryAuditLogRepository } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
 const log = (overrides: Partial<AuditLogEntity> & { OccurredAt: Date }) =>
   new AuditLogEntity({

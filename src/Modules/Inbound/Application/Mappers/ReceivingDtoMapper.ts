@@ -1,5 +1,7 @@
 import {
   InboundDiscrepancyDto,
+  InboundLpnDto,
+  InboundPutawayReleaseDto,
   QcResultDto,
   QcTaskDto,
   ReceiptDto,
@@ -7,6 +9,8 @@ import {
   ReceivingSessionDto,
 } from '@modules/Inbound/Application/DTOs/InboundPlanDto';
 import { InboundDiscrepancyEntity } from '@modules/Inbound/Domain/Entities/InboundDiscrepancyEntity';
+import { InboundLpnEntity } from '@modules/Inbound/Domain/Entities/InboundLpnEntity';
+import { InboundPutawayReleaseEntity } from '@modules/Inbound/Domain/Entities/InboundPutawayReleaseEntity';
 import { QcResultEntity } from '@modules/Inbound/Domain/Entities/QcResultEntity';
 import { QcTaskEntity } from '@modules/Inbound/Domain/Entities/QcTaskEntity';
 import { QcTaskStatus } from '@modules/Inbound/Domain/Enums/QcTaskStatus';
@@ -121,6 +125,82 @@ export class ReceivingDtoMapper {
       IsDuplicate: isDuplicate,
       CreatedAt: discrepancy.CreatedAt,
       UpdatedAt: discrepancy.UpdatedAt,
+    };
+  }
+
+  public static ToInboundLpnDto(lpn: InboundLpnEntity, isDuplicate = false): InboundLpnDto {
+    return {
+      Id: lpn.Id,
+      ReceiptId: lpn.ReceiptId,
+      ReceiptLineId: lpn.ReceiptLineId,
+      InboundPlanId: lpn.InboundPlanId,
+      InboundPlanLineId: lpn.InboundPlanLineId,
+      OwnerId: lpn.OwnerId,
+      OwnerCode: lpn.OwnerCode,
+      WarehouseId: lpn.WarehouseId,
+      WarehouseCode: lpn.WarehouseCode,
+      SkuId: lpn.SkuId,
+      SkuCode: lpn.SkuCode,
+      UomId: lpn.UomId,
+      UomCode: lpn.UomCode,
+      Quantity: lpn.Quantity,
+      LpnCode: lpn.LpnCode,
+      SsccCode: lpn.SsccCode,
+      ReasonCode: lpn.ReasonCode,
+      ReasonCodeId: lpn.ReasonCodeId,
+      ReasonNote: lpn.ReasonNote,
+      EvidenceRefs: lpn.EvidenceRefs,
+      IdempotencyKey: lpn.IdempotencyKey,
+      ConfirmedAt: lpn.ConfirmedAt,
+      ConfirmedBy: lpn.ConfirmedBy,
+      IsDuplicate: isDuplicate,
+      CreatedAt: lpn.CreatedAt,
+      UpdatedAt: lpn.UpdatedAt,
+    };
+  }
+
+  public static ToInboundPutawayReleaseDto(
+    release: InboundPutawayReleaseEntity,
+    isDuplicate = false,
+  ): InboundPutawayReleaseDto {
+    return {
+      Id: release.Id,
+      InboundLpnId: release.InboundLpnId,
+      ReceiptId: release.ReceiptId,
+      ReceiptLineId: release.ReceiptLineId,
+      InboundPlanId: release.InboundPlanId,
+      InboundPlanLineId: release.InboundPlanLineId,
+      OwnerId: release.OwnerId,
+      OwnerCode: release.OwnerCode,
+      WarehouseId: release.WarehouseId,
+      WarehouseCode: release.WarehouseCode,
+      SkuId: release.SkuId,
+      SkuCode: release.SkuCode,
+      UomId: release.UomId,
+      UomCode: release.UomCode,
+      Quantity: release.Quantity,
+      LpnCode: release.LpnCode,
+      SsccCode: release.SsccCode,
+      InventoryStatusCode: release.InventoryStatusCode,
+      CurrentLocationId: release.CurrentLocationId,
+      CurrentLocationCode: release.CurrentLocationCode,
+      WarehouseProfileId: release.WarehouseProfileId,
+      LabelDecision: release.LabelDecision,
+      LabelReason: release.LabelReason,
+      MatchedPrintJobId: release.MatchedPrintJobId,
+      ConstraintJson: release.ConstraintJson,
+      OutboxMessageId: release.OutboxMessageId,
+      CoreFlowMilestoneId: release.CoreFlowMilestoneId,
+      ReasonCode: release.ReasonCode,
+      ReasonCodeId: release.ReasonCodeId,
+      ReasonNote: release.ReasonNote,
+      EvidenceRefs: release.EvidenceRefs,
+      IdempotencyKey: release.IdempotencyKey,
+      ReleasedAt: release.ReleasedAt,
+      ReleasedBy: release.ReleasedBy,
+      IsDuplicate: isDuplicate,
+      CreatedAt: release.CreatedAt,
+      UpdatedAt: release.UpdatedAt,
     };
   }
 

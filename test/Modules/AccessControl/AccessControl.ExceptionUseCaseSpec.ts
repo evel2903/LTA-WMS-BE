@@ -35,7 +35,7 @@ import {
   InMemoryApprovalRequestRepository,
   InMemoryExceptionCaseRepository,
   StubAuditedTransaction,
-} from '@modules/AccessControl/Test/AccessControlTestDoubles';
+} from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
 const ACTOR = 'actor-1';
 

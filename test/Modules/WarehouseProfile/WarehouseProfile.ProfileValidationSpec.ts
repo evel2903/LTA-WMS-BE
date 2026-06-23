@@ -8,7 +8,7 @@ import { WarehouseProfilePolicyValidator } from '@modules/WarehouseProfile/Appli
 import {
   InMemoryWarehouseProfileRepository,
   MasterDataReferenceStub,
-} from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
 
 const Build = (permissionChecker?: IPermissionChecker) => {
   const profiles = new InMemoryWarehouseProfileRepository();

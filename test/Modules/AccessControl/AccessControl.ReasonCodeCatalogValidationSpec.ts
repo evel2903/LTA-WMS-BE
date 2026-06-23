@@ -7,7 +7,7 @@ import { ReasonCodeStatus } from '@modules/AccessControl/Domain/Enums/ReasonCode
 import { ReasonCodeEntity } from '@modules/AccessControl/Domain/Entities/ReasonCodeEntity';
 import { ReasonCodeCatalog } from '@modules/AccessControl/Application/Services/ReasonCodeCatalog';
 import { SeedReasonCodeCatalog } from '@modules/AccessControl/Application/Services/ReasonCodeCatalogSeed';
-import { InMemoryReasonCodeRepository } from '@modules/AccessControl/Test/AccessControlTestDoubles';
+import { InMemoryReasonCodeRepository } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
 const buildCatalog = async () => {
   const repo = new InMemoryReasonCodeRepository();

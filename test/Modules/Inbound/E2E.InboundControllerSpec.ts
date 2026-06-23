@@ -7,6 +7,7 @@ import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { REQUIRE_PERMISSION_KEY } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
 import { CaptureInboundDiscrepancyUseCase } from '@modules/Inbound/Application/UseCases/CaptureInboundDiscrepancyUseCase';
+import { ConfirmInboundLpnUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundLpnUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
 import { EvaluateQcTaskUseCase } from '@modules/Inbound/Application/UseCases/EvaluateQcTaskUseCase';
@@ -16,6 +17,7 @@ import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/Recor
 import { RecordQcResultUseCase } from '@modules/Inbound/Application/UseCases/RecordQcResultUseCase';
 import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCases/StartReceivingSessionUseCase';
 import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
+import { ReleaseInboundToPutawayUseCase } from '@modules/Inbound/Application/UseCases/ReleaseInboundToPutawayUseCase';
 import { InboundPlanController } from '@modules/Inbound/Presentation/Controllers/InboundPlanController';
 import { QcTaskController } from '@modules/Inbound/Presentation/Controllers/QcTaskController';
 import { ReceiptController } from '@modules/Inbound/Presentation/Controllers/ReceiptController';
@@ -31,6 +33,8 @@ describe('E2E InboundPlanController (no DB)', () => {
   const readinessExecute = jest.fn();
   const startReceivingExecute = jest.fn();
   const confirmReceiptLineExecute = jest.fn();
+  const confirmInboundLpnExecute = jest.fn();
+  const releaseInboundToPutawayExecute = jest.fn();
   const captureDiscrepancyExecute = jest.fn();
   const evaluateQcTaskExecute = jest.fn();
   const recordQcResultExecute = jest.fn();
@@ -47,6 +51,8 @@ describe('E2E InboundPlanController (no DB)', () => {
         { provide: ValidateReceivingReadinessUseCase, useValue: { Execute: readinessExecute } },
         { provide: StartReceivingSessionUseCase, useValue: { Execute: startReceivingExecute } },
         { provide: ConfirmReceiptLineUseCase, useValue: { Execute: confirmReceiptLineExecute } },
+        { provide: ConfirmInboundLpnUseCase, useValue: { Execute: confirmInboundLpnExecute } },
+        { provide: ReleaseInboundToPutawayUseCase, useValue: { Execute: releaseInboundToPutawayExecute } },
         { provide: CaptureInboundDiscrepancyUseCase, useValue: { Execute: captureDiscrepancyExecute } },
         { provide: EvaluateQcTaskUseCase, useValue: { Execute: evaluateQcTaskExecute } },
         { provide: RecordQcResultUseCase, useValue: { Execute: recordQcResultExecute } },
@@ -73,6 +79,8 @@ describe('E2E InboundPlanController (no DB)', () => {
     readinessExecute.mockReset();
     startReceivingExecute.mockReset();
     confirmReceiptLineExecute.mockReset();
+    confirmInboundLpnExecute.mockReset();
+    releaseInboundToPutawayExecute.mockReset();
     captureDiscrepancyExecute.mockReset();
     evaluateQcTaskExecute.mockReset();
     recordQcResultExecute.mockReset();
@@ -108,6 +116,16 @@ describe('E2E InboundPlanController (no DB)', () => {
       ObjectType: ObjectType.Receipt,
     });
     expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ReceiptController.prototype.ConfirmReceiptLine)).toMatchObject({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.Receipt,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ReceiptController.prototype.ConfirmInboundLpn)).toMatchObject({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.Receipt,
+    });
+    expect(
+      Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ReceiptController.prototype.ReleaseInboundToPutaway),
+    ).toMatchObject({
       Action: ActionCode.Update,
       ObjectType: ObjectType.Receipt,
     });
@@ -226,6 +244,18 @@ describe('E2E InboundPlanController (no DB)', () => {
     expect(recordQcResultExecute).not.toHaveBeenCalled();
   });
 
+  it('POST /receipts/:id/lines/:lineId/lpn validates LPN and idempotency fields', async () => {
+    await request(app.getHttpServer())
+      .post('/receipts/receipt-1/lines/receipt-line-1/lpn')
+      .send({
+        LpnCode: 'L'.repeat(81),
+        IdempotencyKey: 'I'.repeat(161),
+      })
+      .expect(400);
+
+    expect(confirmInboundLpnExecute).not.toHaveBeenCalled();
+  });
+
   it('GET detail, gate-in, readiness and receiving endpoints call use cases', async () => {
     getExecute.mockResolvedValue({ Id: 'inbound-plan-1' });
     gateInExecute.mockResolvedValue({ Id: 'inbound-plan-1', GateInStatus: 'Recorded' });
@@ -236,6 +266,18 @@ describe('E2E InboundPlanController (no DB)', () => {
       Id: 'discrepancy-1',
       ReceiptId: 'receipt-1',
       ExceptionCaseId: 'exception-1',
+    });
+    confirmInboundLpnExecute.mockResolvedValue({
+      Id: 'lpn-1',
+      ReceiptId: 'receipt-1',
+      ReceiptLineId: 'receipt-line-1',
+      LpnCode: 'LPN-0001',
+    });
+    releaseInboundToPutawayExecute.mockResolvedValue({
+      Id: 'release-1',
+      ReceiptId: 'receipt-1',
+      ReceiptLineId: 'receipt-line-1',
+      InventoryStatusCode: 'READY_FOR_PUTAWAY',
     });
     evaluateQcTaskExecute.mockResolvedValue({
       Id: 'qc-task-1',
@@ -290,6 +332,21 @@ describe('E2E InboundPlanController (no DB)', () => {
       })
       .expect(201);
     await request(app.getHttpServer())
+      .post('/receipts/receipt-1/lines/receipt-line-1/lpn')
+      .send({
+        LpnCode: 'LPN-0001',
+        SsccCode: '003456789012345678',
+        IdempotencyKey: 'lpn-1',
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/receipts/receipt-1/lines/receipt-line-1/release-to-putaway')
+      .send({
+        CurrentLocationCode: 'RCV-01',
+        IdempotencyKey: 'release-1',
+      })
+      .expect(201);
+    await request(app.getHttpServer())
       .post('/qc-tasks/qc-task-1/results')
       .send({
         IdempotencyKey: 'qc-result-1',
@@ -335,6 +392,22 @@ describe('E2E InboundPlanController (no DB)', () => {
         ReceiptId: 'receipt-1',
         ReceiptLineId: 'receipt-line-1',
         IdempotencyKey: 'qc-task-1',
+      }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(confirmInboundLpnExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ReceiptId: 'receipt-1',
+        ReceiptLineId: 'receipt-line-1',
+        LpnCode: 'LPN-0001',
+      }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(releaseInboundToPutawayExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ReceiptId: 'receipt-1',
+        ReceiptLineId: 'receipt-line-1',
+        CurrentLocationCode: 'RCV-01',
       }),
       expect.objectContaining({ ActorUserId: 'test-admin' }),
     );

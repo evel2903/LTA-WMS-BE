@@ -3,7 +3,7 @@ import { CreateRuleGroupUseCase } from '@modules/WarehouseProfile/Application/Us
 import { GetRuleGroupUseCase } from '@modules/WarehouseProfile/Application/UseCases/GetRuleGroupUseCase';
 import { ListRuleGroupsUseCase } from '@modules/WarehouseProfile/Application/UseCases/ListRuleGroupsUseCase';
 import { RuleGroupCatalogState } from '@modules/WarehouseProfile/Domain/Enums/RuleGroupCatalogState';
-import { InMemoryRuleGroupRepository } from '@modules/WarehouseProfile/Test/RuleTestDoubles';
+import { InMemoryRuleGroupRepository } from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
 
 describe('Rule group use cases', () => {
   it('creates a rule group with an ACTIVE catalog state', async () => {

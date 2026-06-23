@@ -10,7 +10,7 @@ import {
   InMemoryWarehouseProfileAssignmentRepository,
   InMemoryWarehouseProfileRepository,
   MasterDataReferenceStub,
-} from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
 
 const Build = () => {
   const profiles = new InMemoryWarehouseProfileRepository();

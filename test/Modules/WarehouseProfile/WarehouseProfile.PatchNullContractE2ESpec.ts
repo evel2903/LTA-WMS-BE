@@ -18,7 +18,7 @@ import { WarehouseProfileController } from '@modules/WarehouseProfile/Presentati
 import {
   InMemoryWarehouseProfileRepository,
   MasterDataReferenceStub,
-} from '@modules/WarehouseProfile/Test/WarehouseProfileTestDoubles';
+} from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
 
 /**
  * Proves the documented PATCH OMIT/null contract is reachable over the real HTTP boundary
