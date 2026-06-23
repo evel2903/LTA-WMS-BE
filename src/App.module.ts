@@ -27,6 +27,7 @@ import { IntegrationModule } from '@modules/Integration/IntegrationModule';
 import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule';
 import { BarcodeLabelModule } from '@modules/BarcodeLabel/BarcodeLabelModule';
 import { InboundModule } from '@modules/Inbound/InboundModule';
+import { InventoryExecutionModule } from '@modules/InventoryExecution/InventoryExecutionModule';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { InboundModule } from '@modules/Inbound/InboundModule';
     TaskExecutionModule,
     BarcodeLabelModule,
     InboundModule,
+    InventoryExecutionModule,
     WarehouseProfileModule,
     AccessControlModule,
     AuthenticationModule,

@@ -58,6 +58,7 @@ export interface IReceivingRepository {
     release: InboundPutawayReleaseEntity,
     manager?: EntityManager,
   ): Promise<InboundPutawayReleaseEntity>;
+  FindInboundPutawayReleaseById(id: string): Promise<InboundPutawayReleaseEntity | null>;
   FindInboundPutawayReleaseByIdempotencyKey(
     receiptLineId: string,
     idempotencyKey: string,

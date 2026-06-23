@@ -1,0 +1,52 @@
+import { PutawayTaskDto } from '@modules/InventoryExecution/Application/DTOs/PutawayTaskDto';
+import { PutawayTaskEntity } from '@modules/InventoryExecution/Domain/Entities/PutawayTaskEntity';
+
+export class PutawayTaskDtoMapper {
+  public static ToDto(task: PutawayTaskEntity, isDuplicate = false): PutawayTaskDto {
+    return {
+      Id: task.Id,
+      TaskCode: task.TaskCode,
+      TaskStatus: task.TaskStatus,
+      InboundPutawayReleaseId: task.InboundPutawayReleaseId,
+      ReceiptId: task.ReceiptId,
+      ReceiptLineId: task.ReceiptLineId,
+      InboundPlanId: task.InboundPlanId,
+      InboundPlanLineId: task.InboundPlanLineId,
+      InboundLpnId: task.InboundLpnId,
+      OwnerId: task.OwnerId,
+      OwnerCode: task.OwnerCode,
+      WarehouseId: task.WarehouseId,
+      WarehouseCode: task.WarehouseCode,
+      SkuId: task.SkuId,
+      SkuCode: task.SkuCode,
+      UomId: task.UomId,
+      UomCode: task.UomCode,
+      Quantity: task.Quantity,
+      LpnCode: task.LpnCode,
+      SsccCode: task.SsccCode,
+      InventoryStatusCode: task.InventoryStatusCode,
+      SourceLocationId: task.SourceLocationId,
+      SourceLocationCode: task.SourceLocationCode,
+      TargetLocationId: task.TargetLocationId,
+      TargetLocationCode: task.TargetLocationCode,
+      TargetLocationProfileId: task.TargetLocationProfileId,
+      Priority: task.Priority,
+      WorkPoolCode: task.WorkPoolCode,
+      AssignedUserId: task.AssignedUserId,
+      ConstraintJson: task.ConstraintJson,
+      EligibilityDecisionJson: task.EligibilityDecisionJson,
+      OutboxMessageId: task.OutboxMessageId,
+      MobileTaskId: task.MobileTaskId,
+      ReasonCode: task.ReasonCode,
+      ReasonCodeId: task.ReasonCodeId,
+      ReasonNote: task.ReasonNote,
+      EvidenceRefs: task.EvidenceRefs,
+      IdempotencyKey: task.IdempotencyKey,
+      ReleasedAt: task.ReleasedAt.toISOString(),
+      ReleasedBy: task.ReleasedBy,
+      IsDuplicate: isDuplicate,
+      CreatedAt: task.CreatedAt.toISOString(),
+      UpdatedAt: task.UpdatedAt.toISOString(),
+    };
+  }
+}
