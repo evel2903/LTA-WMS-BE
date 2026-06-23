@@ -10,8 +10,26 @@ import {
   REASON_CODE_CATALOG,
 } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import {
+  IApprovalRequestRepository,
+  APPROVAL_REQUEST_REPOSITORY,
+} from '@modules/AccessControl/Application/Interfaces/IApprovalRequestRepository';
+import {
+  CreateCycleCountWorkUseCase,
+  GetCycleCountWorkUseCase,
+  ListCycleCountWorksUseCase,
+  PostCycleCountAdjustmentUseCase,
+  RecountCycleCountWorkUseCase,
+  SubmitCycleCountWorkUseCase,
+  UnlockCycleCountWorkUseCase,
+} from '@modules/InventoryExecution/Application/UseCases/CycleCountWorkUseCases';
+import { CycleCountWorkLifecycleService } from '@modules/InventoryExecution/Application/Services/CycleCountWorkLifecycleService';
 import { ConfirmPutawayTaskUseCase } from '@modules/InventoryExecution/Application/UseCases/ConfirmPutawayTaskUseCase';
 import { InventoryControlUseCase } from '@modules/InventoryExecution/Application/UseCases/InventoryControlUseCase';
+import {
+  ICycleCountWorkRepository,
+  CYCLE_COUNT_WORK_REPOSITORY,
+} from '@modules/InventoryExecution/Application/Interfaces/ICycleCountWorkRepository';
 import {
   IInventoryTransactionRepository,
   INVENTORY_TRANSACTION_REPOSITORY,
@@ -34,10 +52,13 @@ import {
   PUTAWAY_TASK_REPOSITORY,
 } from '@modules/InventoryExecution/Application/Interfaces/IPutawayTaskRepository';
 import { PutawayTaskOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/PutawayTaskOrmEntity';
+import { CycleCountWorkOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/CycleCountWorkOrmEntity';
 import { InventoryMovementOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryMovementOrmEntity';
 import { InventoryTransactionOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryTransactionOrmEntity';
+import { CycleCountWorkRepository } from '@modules/InventoryExecution/Infrastructure/Persistence/Repositories/CycleCountWorkRepository';
 import { InventoryTransactionRepository } from '@modules/InventoryExecution/Infrastructure/Persistence/Repositories/InventoryTransactionRepository';
 import { PutawayTaskRepository } from '@modules/InventoryExecution/Infrastructure/Persistence/Repositories/PutawayTaskRepository';
+import { CycleCountWorkController } from '@modules/InventoryExecution/Presentation/Controllers/CycleCountWorkController';
 import { InventoryControlController } from '@modules/InventoryExecution/Presentation/Controllers/InventoryControlController';
 import { PutawayTaskController } from '@modules/InventoryExecution/Presentation/Controllers/PutawayTaskController';
 import {
@@ -70,17 +91,23 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PutawayTaskOrmEntity, InventoryTransactionOrmEntity, InventoryMovementOrmEntity]),
+    TypeOrmModule.forFeature([
+      PutawayTaskOrmEntity,
+      InventoryTransactionOrmEntity,
+      InventoryMovementOrmEntity,
+      CycleCountWorkOrmEntity,
+    ]),
     AccessControlModule,
     MasterDataModule,
     InboundModule,
     IntegrationModule,
     TaskExecutionModule,
   ],
-  controllers: [PutawayTaskController, InventoryControlController],
+  controllers: [PutawayTaskController, InventoryControlController, CycleCountWorkController],
   providers: [
     { provide: PUTAWAY_TASK_REPOSITORY, useClass: PutawayTaskRepository },
     { provide: INVENTORY_TRANSACTION_REPOSITORY, useClass: InventoryTransactionRepository },
+    { provide: CYCLE_COUNT_WORK_REPOSITORY, useClass: CycleCountWorkRepository },
     {
       provide: ListPutawayTasksUseCase,
       useFactory: (tasks: IPutawayTaskRepository, checker: IPermissionChecker) =>
@@ -210,7 +237,87 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
         PERMISSION_CHECKER,
       ],
     },
+    {
+      provide: CycleCountWorkLifecycleService,
+      useFactory: (
+        cycleCountWorks: ICycleCountWorkRepository,
+        inventoryControl: InventoryControlUseCase,
+        inventoryTransactions: IInventoryTransactionRepository,
+        approvalRequests: IApprovalRequestRepository,
+        inventoryBalances: IInventoryBalanceRepository,
+        inventoryDimensions: IInventoryDimensionRepository,
+        inventoryStatuses: IInventoryStatusRepository,
+        locations: ILocationRepository,
+        integrations: IIntegrationRepository,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+        checker: IPermissionChecker,
+      ) =>
+        new CycleCountWorkLifecycleService(
+          cycleCountWorks,
+          inventoryControl,
+          inventoryTransactions,
+          approvalRequests,
+          inventoryBalances,
+          inventoryDimensions,
+          inventoryStatuses,
+          locations,
+          integrations,
+          reasonCatalog,
+          audited,
+          checker,
+        ),
+      inject: [
+        CYCLE_COUNT_WORK_REPOSITORY,
+        InventoryControlUseCase,
+        INVENTORY_TRANSACTION_REPOSITORY,
+        APPROVAL_REQUEST_REPOSITORY,
+        INVENTORY_BALANCE_REPOSITORY,
+        INVENTORY_DIMENSION_REPOSITORY,
+        INVENTORY_STATUS_REPOSITORY,
+        LOCATION_REPOSITORY,
+        INTEGRATION_REPOSITORY,
+        REASON_CODE_CATALOG,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
+    {
+      provide: CreateCycleCountWorkUseCase,
+      useFactory: (lifecycle: CycleCountWorkLifecycleService) => new CreateCycleCountWorkUseCase(lifecycle),
+      inject: [CycleCountWorkLifecycleService],
+    },
+    {
+      provide: ListCycleCountWorksUseCase,
+      useFactory: (lifecycle: CycleCountWorkLifecycleService) => new ListCycleCountWorksUseCase(lifecycle),
+      inject: [CycleCountWorkLifecycleService],
+    },
+    {
+      provide: GetCycleCountWorkUseCase,
+      useFactory: (lifecycle: CycleCountWorkLifecycleService) => new GetCycleCountWorkUseCase(lifecycle),
+      inject: [CycleCountWorkLifecycleService],
+    },
+    {
+      provide: SubmitCycleCountWorkUseCase,
+      useFactory: (lifecycle: CycleCountWorkLifecycleService) => new SubmitCycleCountWorkUseCase(lifecycle),
+      inject: [CycleCountWorkLifecycleService],
+    },
+    {
+      provide: RecountCycleCountWorkUseCase,
+      useFactory: (lifecycle: CycleCountWorkLifecycleService) => new RecountCycleCountWorkUseCase(lifecycle),
+      inject: [CycleCountWorkLifecycleService],
+    },
+    {
+      provide: PostCycleCountAdjustmentUseCase,
+      useFactory: (lifecycle: CycleCountWorkLifecycleService) => new PostCycleCountAdjustmentUseCase(lifecycle),
+      inject: [CycleCountWorkLifecycleService],
+    },
+    {
+      provide: UnlockCycleCountWorkUseCase,
+      useFactory: (lifecycle: CycleCountWorkLifecycleService) => new UnlockCycleCountWorkUseCase(lifecycle),
+      inject: [CycleCountWorkLifecycleService],
+    },
   ],
-  exports: [PUTAWAY_TASK_REPOSITORY, INVENTORY_TRANSACTION_REPOSITORY],
+  exports: [PUTAWAY_TASK_REPOSITORY, INVENTORY_TRANSACTION_REPOSITORY, CYCLE_COUNT_WORK_REPOSITORY],
 })
 export class InventoryExecutionModule {}

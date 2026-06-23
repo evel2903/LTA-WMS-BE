@@ -16,10 +16,15 @@ export class AuditedTransaction {
     @Inject(AUDIT_WRITER) private readonly auditWriter: IAuditWriter,
   ) {}
 
-  public async Run<T>(work: (manager: EntityManager) => Promise<{ result: T; entry: AuditEntry }>): Promise<T> {
+  public async Run<T>(
+    work: (manager: EntityManager) => Promise<{ result: T; entry: AuditEntry | AuditEntry[] }>,
+  ): Promise<T> {
     return this.dataSource.transaction(async (manager) => {
       const { result, entry } = await work(manager);
-      await this.auditWriter.Append(entry, manager);
+      const entries = Array.isArray(entry) ? entry : [entry];
+      for (const auditEntry of entries) {
+        await this.auditWriter.Append(auditEntry, manager);
+      }
       return result;
     });
   }

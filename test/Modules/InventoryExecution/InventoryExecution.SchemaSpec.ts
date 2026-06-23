@@ -2,10 +2,13 @@ import { QueryRunner } from 'typeorm';
 import DataSource from '@shared/Database/TypeOrmDataSource';
 import { CreateInventoryTransactionsAndMovements1781644600000 } from '@shared/Database/Migrations/1781644600000-CreateInventoryTransactionsAndMovements';
 import { RelaxInventoryControlLedgerForNonPutaway1781644700000 } from '@shared/Database/Migrations/1781644700000-RelaxInventoryControlLedgerForNonPutaway';
+import { CreateCycleCountWorks1781644800000 } from '@shared/Database/Migrations/1781644800000-CreateCycleCountWorks';
 import { CreatePutawayTasks1781644500000 } from '@shared/Database/Migrations/1781644500000-CreatePutawayTasks';
+import { CycleCountWorkStatus } from '@modules/InventoryExecution/Domain/Enums/CycleCountWorkStatus';
 import { InventoryMovementStatus } from '@modules/InventoryExecution/Domain/Enums/InventoryMovementStatus';
 import { InventoryTransactionStatus } from '@modules/InventoryExecution/Domain/Enums/InventoryTransactionStatus';
 import { InventoryTransactionType } from '@modules/InventoryExecution/Domain/Enums/InventoryTransactionType';
+import { CycleCountWorkOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/CycleCountWorkOrmEntity';
 import { InventoryMovementOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryMovementOrmEntity';
 import { InventoryTransactionOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryTransactionOrmEntity';
 import { PutawayTaskStatus } from '@modules/InventoryExecution/Domain/Enums/PutawayTaskStatus';
@@ -26,6 +29,10 @@ describe('InventoryExecution schema registration', () => {
     expect(DataSource.options.entities).toEqual(
       expect.arrayContaining([InventoryTransactionOrmEntity, InventoryMovementOrmEntity]),
     );
+  });
+
+  it('registers cycle count work ORM entity for TypeORM migrations', () => {
+    expect(DataSource.options.entities).toEqual(expect.arrayContaining([CycleCountWorkOrmEntity]));
   });
 
   it('creates putaway task table and indexes without adding InventoryStatus terms', async () => {
@@ -120,7 +127,12 @@ describe('InventoryExecution schema registration', () => {
   });
 
   it('keeps V1-14 transaction and movement statuses separate from InventoryStatus terms', () => {
-    expect(Object.values(InventoryTransactionType)).toEqual(['PutawayConfirm', 'StatusChange', 'InternalMove']);
+    expect(Object.values(InventoryTransactionType)).toEqual([
+      'PutawayConfirm',
+      'StatusChange',
+      'InternalMove',
+      'CycleCountAdjustment',
+    ]);
     expect(Object.values(InventoryTransactionStatus)).toEqual(['Posted', 'Failed']);
     expect(Object.values(InventoryMovementStatus)).toEqual(['Posted']);
     expect([
@@ -129,6 +141,22 @@ describe('InventoryExecution schema registration', () => {
       ...Object.values(InventoryMovementStatus),
     ]).not.toEqual(
       expect.arrayContaining(['PUTAWAY_CONFIRMED', 'STORED', 'SHIPPED', 'GATE_OUT', 'GOODS_ISSUE_POSTED']),
+    );
+  });
+
+  it('keeps cycle count work statuses separate from InventoryStatus terms', () => {
+    expect(Object.values(CycleCountWorkStatus)).toEqual([
+      'CountingLocked',
+      'Submitted',
+      'PendingReview',
+      'RecountRequired',
+      'Accepted',
+      'AdjustmentPosted',
+      'Unlocked',
+      'Cancelled',
+    ]);
+    expect(Object.values(CycleCountWorkStatus)).not.toEqual(
+      expect.arrayContaining(['COUNTING_LOCKED', 'STORED', 'SHIPPED', 'GATE_OUT', 'GOODS_ISSUE_POSTED']),
     );
   });
 
@@ -156,5 +184,32 @@ describe('InventoryExecution schema registration', () => {
     expect(sql).toContain('DROP INDEX "public"."UQ_inventory_transactions_operation_idempotency_no_task"');
     expect(sql).toContain('ALTER TABLE "inventory_movements" ALTER COLUMN "putaway_task_id" SET NOT NULL');
     expect(sql).toContain('ALTER TABLE "inventory_transactions" ALTER COLUMN "putaway_task_id" SET NOT NULL');
+  });
+
+  it('creates cycle count work table without adding InventoryStatus milestones', async () => {
+    const { runner, queries } = fakeRunner();
+    await new CreateCycleCountWorks1781644800000().up(runner);
+    const sql = queries.join('\n');
+
+    expect(sql).toContain('CREATE TABLE "cycle_count_works"');
+    expect(sql).toContain('"work_status" varchar(40) NOT NULL');
+    expect(sql).toContain('"original_inventory_status_code" varchar(80) NOT NULL');
+    expect(sql).toContain('CREATE UNIQUE INDEX "UQ_cycle_count_works_adjustment_idempotency"');
+    expect(sql).toContain('ADD CONSTRAINT "FK_cycle_count_works_source_balance"');
+    expect(sql).toContain('ADD CONSTRAINT "FK_cycle_count_works_approval_request"');
+    expect(sql).not.toContain('SHIPPED');
+    expect(sql).not.toContain('GATE_OUT');
+    expect(sql).not.toContain('GOODS_ISSUE_POSTED');
+  });
+
+  it('drops cycle count work table and indexes in migration down()', async () => {
+    const { runner, queries } = fakeRunner();
+    await new CreateCycleCountWorks1781644800000().down(runner);
+    const sql = queries.join('\n');
+
+    expect(sql).toContain('DROP CONSTRAINT "FK_cycle_count_works_approval_request"');
+    expect(sql).toContain('DROP INDEX "public"."UQ_cycle_count_works_unlock_idempotency"');
+    expect(sql).toContain('DROP INDEX "public"."IDX_cycle_count_works_scope_status"');
+    expect(sql).toContain('DROP TABLE "cycle_count_works"');
   });
 });
