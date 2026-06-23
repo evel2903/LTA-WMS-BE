@@ -410,7 +410,7 @@ describe('InventoryExecution putaway release use case', () => {
 
   it('lists putaway tasks with permission filtering and PageSize max 100', async () => {
     const repo = new MemoryPutawayTaskRepository();
-    for (let index = 0; index < 150; index += 1) {
+    for (let index = 0; index < 1050; index += 1) {
       repo.tasks.push(
         new PutawayTaskEntity({
           TaskCode: `PUT-${index}`,
@@ -435,12 +435,20 @@ describe('InventoryExecution putaway release use case', () => {
       );
     }
 
-    const result = await new ListPutawayTasksUseCase(repo, new FakePermissionChecker()).Execute({
+    const useCase = new ListPutawayTasksUseCase(repo, new FakePermissionChecker());
+    const result = await useCase.Execute({
       ActorUserId: 'operator-1',
       PageSize: 500,
+    });
+    const tailPage = await useCase.Execute({
+      ActorUserId: 'operator-1',
+      Page: 11,
+      PageSize: 100,
     });
 
     expect(result.Items).toHaveLength(100);
     expect(result.Meta.PageSize).toBe(100);
+    expect(tailPage.Items).toHaveLength(50);
+    expect(tailPage.Meta.TotalItems).toBe(1050);
   });
 });

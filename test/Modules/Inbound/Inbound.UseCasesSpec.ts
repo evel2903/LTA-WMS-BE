@@ -965,19 +965,20 @@ describe('Inbound plan use cases', () => {
     const planLine = created.Lines[0];
 
     const useCase = confirmReceiptLineUseCase(bundle);
+    const scanEvidence = {
+      RawValue: '01012345678901281726010110LOT-A',
+      ScanEventId: 'scan-event-1',
+      ScanResult: 'Accepted' as const,
+      ResolvedSkuId: 'sku-1',
+      ResolvedUomId: 'uom-1',
+    };
     const line = await useCase.Execute(
       {
         ReceiptId: session.ReceiptId,
         InboundPlanLineId: planLine.Id,
         ActualQuantity: 12,
         IdempotencyKey: 'receipt-line-1',
-        ScanEvidence: {
-          RawValue: '01012345678901281726010110LOT-A',
-          ScanEventId: 'scan-event-1',
-          ScanResult: 'Accepted',
-          ResolvedSkuId: 'sku-1',
-          ResolvedUomId: 'uom-1',
-        },
+        ScanEvidence: scanEvidence,
       },
       { ...SystemAuditContext, ActorUserId: 'user-1' },
     );
@@ -987,10 +988,23 @@ describe('Inbound plan use cases', () => {
         InboundPlanLineId: planLine.Id,
         ActualQuantity: 12,
         IdempotencyKey: 'receipt-line-1',
-        ScanEvidence: { RawValue: 'retry-scan', ScanResult: 'Accepted' },
+        ScanEvidence: scanEvidence,
       },
       { ...SystemAuditContext, ActorUserId: 'user-1' },
     );
+
+    await expect(
+      useCase.Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          InboundPlanLineId: planLine.Id,
+          ActualQuantity: 11,
+          IdempotencyKey: 'receipt-line-1',
+          ScanEvidence: scanEvidence,
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(ConflictException);
 
     expect(line.Status).toBe(ReceiptLineStatus.Received);
     expect(line.ActualQuantity).toBe(12);

@@ -32,14 +32,14 @@ export class PrintJobController {
 
   @Get()
   @RequirePermission(ActionCode.Read, ObjectType.PrintJob)
-  public async List(@Query() query: ListPrintJobsQuery) {
-    return await this.listPrintJobsUseCase.Execute(query);
+  public async List(@Query() query: ListPrintJobsQuery, @CurrentAuditContext() context: AuditContext) {
+    return await this.listPrintJobsUseCase.Execute({ ...query, ActorUserId: context.ActorUserId });
   }
 
   @Get(':id')
   @RequirePermission(ActionCode.Read, ObjectType.PrintJob)
-  public async GetById(@Param('id') id: string) {
-    return await this.getPrintJobUseCase.Execute(id);
+  public async GetById(@Param('id') id: string, @CurrentAuditContext() context: AuditContext) {
+    return await this.getPrintJobUseCase.Execute(id, context);
   }
 
   @Post(':id/reprint')

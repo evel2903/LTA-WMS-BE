@@ -75,25 +75,34 @@ import { BarcodeLabelRepository } from '@modules/BarcodeLabel/Infrastructure/Per
     },
     {
       provide: PreviewPrintJobUseCase,
-      useFactory: (labels: IBarcodeLabelRepository, audited: AuditedTransaction) =>
-        new PreviewPrintJobUseCase(labels, audited),
-      inject: [BARCODE_LABEL_REPOSITORY, AuditedTransaction],
+      useFactory: (
+        labels: IBarcodeLabelRepository,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) => new PreviewPrintJobUseCase(labels, audited, permissionChecker),
+      inject: [BARCODE_LABEL_REPOSITORY, AuditedTransaction, PERMISSION_CHECKER],
     },
     {
       provide: ListPrintJobsUseCase,
-      useFactory: (labels: IBarcodeLabelRepository) => new ListPrintJobsUseCase(labels),
-      inject: [BARCODE_LABEL_REPOSITORY],
+      useFactory: (labels: IBarcodeLabelRepository, permissionChecker: IPermissionChecker) =>
+        new ListPrintJobsUseCase(labels, permissionChecker),
+      inject: [BARCODE_LABEL_REPOSITORY, PERMISSION_CHECKER],
     },
     {
       provide: GetPrintJobUseCase,
-      useFactory: (labels: IBarcodeLabelRepository) => new GetPrintJobUseCase(labels),
-      inject: [BARCODE_LABEL_REPOSITORY],
+      useFactory: (labels: IBarcodeLabelRepository, permissionChecker: IPermissionChecker) =>
+        new GetPrintJobUseCase(labels, permissionChecker),
+      inject: [BARCODE_LABEL_REPOSITORY, PERMISSION_CHECKER],
     },
     {
       provide: ReprintPrintJobUseCase,
-      useFactory: (labels: IBarcodeLabelRepository, reasonCatalog: IReasonCodeCatalog, audited: AuditedTransaction) =>
-        new ReprintPrintJobUseCase(labels, reasonCatalog, audited),
-      inject: [BARCODE_LABEL_REPOSITORY, REASON_CODE_CATALOG, AuditedTransaction],
+      useFactory: (
+        labels: IBarcodeLabelRepository,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) => new ReprintPrintJobUseCase(labels, reasonCatalog, audited, permissionChecker),
+      inject: [BARCODE_LABEL_REPOSITORY, REASON_CODE_CATALOG, AuditedTransaction, PERMISSION_CHECKER],
     },
     {
       provide: ValidateLabelBlockingUseCase,

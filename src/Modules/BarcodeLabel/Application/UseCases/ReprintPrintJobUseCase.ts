@@ -8,12 +8,14 @@ import {
   MergeAuditContext,
   SystemAuditContext,
 } from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
 import { IReasonCodeCatalog } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { ReprintPrintJobDto } from '@modules/BarcodeLabel/Application/DTOs/PreviewPrintJobDto';
 import { PrintJobDto } from '@modules/BarcodeLabel/Application/DTOs/PrintJobDto';
 import { IBarcodeLabelRepository } from '@modules/BarcodeLabel/Application/Interfaces/IBarcodeLabelRepository';
 import { BarcodeLabelDtoMapper } from '@modules/BarcodeLabel/Application/Mappers/BarcodeLabelDtoMapper';
+import { AssertPrintJobPermission } from '@modules/BarcodeLabel/Application/UseCases/PrintJobPermission';
 import { PrintJobEntity } from '@modules/BarcodeLabel/Domain/Entities/PrintJobEntity';
 import { ReprintRequestEntity } from '@modules/BarcodeLabel/Domain/Entities/ReprintRequestEntity';
 import { PrintJobStatus } from '@modules/BarcodeLabel/Domain/Enums/PrintJobStatus';
@@ -23,6 +25,7 @@ export class ReprintPrintJobUseCase {
     private readonly labels: IBarcodeLabelRepository,
     private readonly reasonCatalog: IReasonCodeCatalog,
     private readonly audited?: AuditedTransaction,
+    private readonly permissionChecker?: IPermissionChecker,
   ) {}
 
   public async Execute(request: ReprintPrintJobDto, context: AuditContext = SystemAuditContext): Promise<PrintJobDto> {
@@ -38,6 +41,10 @@ export class ReprintPrintJobUseCase {
 
     const printJob = await this.labels.FindPrintJobById(request.PrintJobId);
     if (!printJob) throw new NotFoundException('Print job not found');
+    await AssertPrintJobPermission(this.permissionChecker, context.ActorUserId, ActionCode.Reprint, {
+      WarehouseId: printJob.WarehouseId,
+      OwnerId: printJob.OwnerId,
+    });
 
     if (!this.audited) {
       return await this.ReprintWithoutTransaction(printJob, request, context, reasonCode, validated.ReasonCodeId);

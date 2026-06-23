@@ -1,4 +1,4 @@
-import { BusinessRuleException } from '@common/Exceptions/AppException';
+import { BusinessRuleException, ConflictException } from '@common/Exceptions/AppException';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ActorType } from '@modules/AccessControl/Domain/Enums/ActorType';
@@ -222,6 +222,9 @@ describe('Integration use cases', () => {
       IsDuplicate: true,
     });
     expect(repo.OutboxMessages).toHaveLength(1);
+    await expect(
+      useCase.Execute({ ...envelope, Payload: { inboundPlanNo: 'IB-CHANGED' } }, ctx),
+    ).rejects.toBeInstanceOf(ConflictException);
     expect(audit.Entries[0]).toMatchObject({
       Action: ActionCode.Create,
       ObjectType: ObjectType.IntegrationMessage,

@@ -7,11 +7,13 @@ import {
   MergeAuditContext,
   SystemAuditContext,
 } from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { PreviewPrintJobDto } from '@modules/BarcodeLabel/Application/DTOs/PreviewPrintJobDto';
 import { PrintJobDto } from '@modules/BarcodeLabel/Application/DTOs/PrintJobDto';
 import { IBarcodeLabelRepository } from '@modules/BarcodeLabel/Application/Interfaces/IBarcodeLabelRepository';
 import { BarcodeLabelDtoMapper } from '@modules/BarcodeLabel/Application/Mappers/BarcodeLabelDtoMapper';
+import { AssertPrintJobPermission } from '@modules/BarcodeLabel/Application/UseCases/PrintJobPermission';
 import { PrintJobEntity } from '@modules/BarcodeLabel/Domain/Entities/PrintJobEntity';
 import { PrintJobStatus } from '@modules/BarcodeLabel/Domain/Enums/PrintJobStatus';
 
@@ -19,9 +21,15 @@ export class PreviewPrintJobUseCase {
   constructor(
     private readonly labels: IBarcodeLabelRepository,
     private readonly audited?: AuditedTransaction,
+    private readonly permissionChecker?: IPermissionChecker,
   ) {}
 
   public async Execute(request: PreviewPrintJobDto, context: AuditContext = SystemAuditContext): Promise<PrintJobDto> {
+    await AssertPrintJobPermission(this.permissionChecker, context.ActorUserId, ActionCode.Create, {
+      WarehouseId: request.WarehouseId ?? null,
+      OwnerId: request.OwnerId ?? null,
+    });
+
     const template = await this.labels.FindTemplateById(request.TemplateId);
     if (!template) throw new NotFoundException('Label template not found');
     const version = request.TemplateVersionId

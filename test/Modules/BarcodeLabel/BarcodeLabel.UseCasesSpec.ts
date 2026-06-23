@@ -1,4 +1,14 @@
-import { BusinessRuleException, ConflictException, NotFoundException } from '@common/Exceptions/AppException';
+import {
+  BusinessRuleException,
+  ConflictException,
+  ForbiddenAppException,
+  NotFoundException,
+} from '@common/Exceptions/AppException';
+import {
+  PermissionCheckContext,
+  PermissionDecision,
+} from '@modules/AccessControl/Application/DTOs/PermissionCheckContext';
+import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { AuditResult } from '@modules/AccessControl/Domain/Enums/AuditResult';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
@@ -8,6 +18,7 @@ import { AuditedTransaction } from '@modules/AccessControl/Application/Services/
 import { IReasonCodeCatalog } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
 import { CreateLabelTemplateUseCase } from '@modules/BarcodeLabel/Application/UseCases/CreateLabelTemplateUseCase';
 import { CreateLabelTemplateVersionUseCase } from '@modules/BarcodeLabel/Application/UseCases/CreateLabelTemplateVersionUseCase';
+import { GetPrintJobUseCase } from '@modules/BarcodeLabel/Application/UseCases/GetPrintJobUseCase';
 import { ListLabelTemplatesUseCase } from '@modules/BarcodeLabel/Application/UseCases/ListLabelTemplatesUseCase';
 import { ListPrintJobsUseCase } from '@modules/BarcodeLabel/Application/UseCases/ListPrintJobsUseCase';
 import { PreviewPrintJobUseCase } from '@modules/BarcodeLabel/Application/UseCases/PreviewPrintJobUseCase';
@@ -212,6 +223,88 @@ describe('BarcodeLabel use cases', () => {
     expect(preview.TemplateVersionId).toBe(template.ActiveVersionId);
     expect(preview.PreviewContent).toContain('SSCC-1');
     expect(repo.printJobs).toHaveLength(1);
+  });
+
+  it('enforces print job warehouse/owner scope on preview, list, get and reprint', async () => {
+    const repo = new InMemoryBarcodeLabelRepository();
+    const template = await new CreateLabelTemplateUseCase(repo).Execute({
+      TemplateCode: 'LPN-STD',
+      TemplateName: 'LPN Standard',
+      LabelType: 'LPN',
+      RequiredFields: ['BarcodeValue'],
+      TemplateBody: 'LPN {{BarcodeValue}}',
+    });
+    const allowedJob = await new PreviewPrintJobUseCase(repo).Execute(
+      {
+        TemplateId: template.Id,
+        BusinessObjectType: 'LPN',
+        BusinessObjectId: 'lpn-allowed',
+        WarehouseId: 'wh-allowed',
+        OwnerId: 'owner-1',
+        PayloadJson: { BarcodeValue: 'SSCC-1' },
+      },
+      context,
+    );
+    const deniedJob = await new PreviewPrintJobUseCase(repo).Execute(
+      {
+        TemplateId: template.Id,
+        BusinessObjectType: 'LPN',
+        BusinessObjectId: 'lpn-denied',
+        WarehouseId: 'wh-denied',
+        OwnerId: 'owner-1',
+        PayloadJson: { BarcodeValue: 'SSCC-2' },
+      },
+      context,
+    );
+    const checker: IPermissionChecker = {
+      Check: jest.fn(
+        async (check: PermissionCheckContext): Promise<PermissionDecision> => ({
+          Allowed: check.Scope?.WarehouseId === 'wh-allowed',
+          Reason: check.Scope?.WarehouseId === 'wh-allowed' ? undefined : 'OUT_OF_SCOPE',
+        }),
+      ),
+    };
+    const reasonCatalog: IReasonCodeCatalog = {
+      ValidateReason: jest.fn(async () => ({
+        ReasonCodeId: 'reason-1',
+        EvidenceRequired: false,
+        ApprovalRequired: false,
+      })),
+    };
+
+    const listed = await new ListPrintJobsUseCase(repo, checker).Execute({ ActorUserId: 'user-1' });
+    await expect(new GetPrintJobUseCase(repo, checker).Execute(deniedJob.Id, context)).rejects.toBeInstanceOf(
+      ForbiddenAppException,
+    );
+    await expect(
+      new ReprintPrintJobUseCase(repo, reasonCatalog, undefined, checker).Execute(
+        { PrintJobId: deniedJob.Id, ReasonCode: 'RC-V1-REPRINT' },
+        context,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenAppException);
+    await expect(
+      new PreviewPrintJobUseCase(repo, undefined, checker).Execute(
+        {
+          TemplateId: template.Id,
+          BusinessObjectType: 'LPN',
+          BusinessObjectId: 'lpn-new-denied',
+          WarehouseId: 'wh-denied',
+          OwnerId: 'owner-1',
+          PayloadJson: { BarcodeValue: 'SSCC-3' },
+        },
+        context,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenAppException);
+
+    expect(listed.Items).toHaveLength(1);
+    expect(listed.Items[0]?.Id).toBe(allowedJob.Id);
+    expect(checker.Check).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Action: ActionCode.Read,
+        ObjectType: ObjectType.PrintJob,
+        Scope: { WarehouseId: 'wh-denied', OwnerId: 'owner-1' },
+      }),
+    );
   });
 
   it('uses the active template version after version updates', async () => {

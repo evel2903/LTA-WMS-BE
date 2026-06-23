@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { BusinessRuleException, NotFoundException } from '@common/Exceptions/AppException';
+import { BusinessRuleException, ConflictException, NotFoundException } from '@common/Exceptions/AppException';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import {
@@ -53,7 +53,10 @@ export class ConfirmReceiptLineUseCase {
     await AssertReceiptPermission(this.permissionChecker, context.ActorUserId, ActionCode.Update, receipt);
 
     const duplicate = await this.receiving.FindReceiptLineByIdempotencyKey(receipt.Id, request.IdempotencyKey);
-    if (duplicate) return ReceivingDtoMapper.ToLineDto(duplicate, true);
+    if (duplicate) {
+      this.AssertDuplicateReceiptLineMatches(duplicate, request);
+      return ReceivingDtoMapper.ToLineDto(duplicate, true);
+    }
 
     const readiness = await this.readiness.Execute({ Id: receipt.InboundPlanId }, context);
     if (!readiness.Allowed) throw new BusinessRuleException(readiness.Reason);
@@ -160,6 +163,49 @@ export class ConfirmReceiptLineUseCase {
     if (!request.IdempotencyKey?.trim()) throw new BusinessRuleException('Receipt line idempotency key is required');
     if (!request.InboundPlanLineId?.trim()) throw new BusinessRuleException('Inbound plan line is required');
     if (request.ActualQuantity <= 0) throw new BusinessRuleException('Actual quantity must be positive');
+  }
+
+  private AssertDuplicateReceiptLineMatches(existing: ReceiptLineEntity, request: ConfirmReceiptLineDto): void {
+    const mismatches: string[] = [];
+    const compare = (field: string, actual: unknown, expected: unknown) => {
+      if (actual !== expected) mismatches.push(field);
+    };
+
+    compare('InboundPlanLineId', request.InboundPlanLineId, existing.InboundPlanLineId);
+    compare('ActualQuantity', request.ActualQuantity, existing.ActualQuantity);
+    compare('ManualConfirm', request.ManualConfirm ?? false, existing.ManualConfirm);
+    compare('ReasonCode', request.ReasonCode ?? null, existing.ReasonCode);
+    compare('ReasonNote', request.ReasonNote ?? null, existing.ReasonNote);
+
+    if (request.SkuId?.trim()) compare('SkuId', request.SkuId.trim(), existing.SkuId);
+    if (request.UomId?.trim()) compare('UomId', request.UomId.trim(), existing.UomId);
+
+    const requestEvidence = request.ScanEvidence ? (request.ScanEvidence as unknown as Record<string, unknown>) : null;
+    if (this.CanonicalJson(requestEvidence) !== this.CanonicalJson(existing.ScanEvidenceJson)) {
+      mismatches.push('ScanEvidence');
+    }
+
+    if (mismatches.length > 0) {
+      throw new ConflictException('Receipt line idempotency key was reused with different payload', {
+        ReceiptId: existing.ReceiptId,
+        IdempotencyKey: existing.IdempotencyKey,
+        Mismatches: mismatches,
+      });
+    }
+  }
+
+  private CanonicalJson(value: unknown): string {
+    return JSON.stringify(this.SortJson(value));
+  }
+
+  private SortJson(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map((item) => this.SortJson(item));
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, this.SortJson(item)]),
+    );
   }
 
   private DiscrepancySignals(

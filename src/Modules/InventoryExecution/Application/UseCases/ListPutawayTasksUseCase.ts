@@ -8,6 +8,8 @@ import { CheckPutawayTaskPermission } from '@modules/InventoryExecution/Applicat
 import { PutawayTaskEntity } from '@modules/InventoryExecution/Domain/Entities/PutawayTaskEntity';
 
 export class ListPutawayTasksUseCase {
+  private readonly batchSize = 1000;
+
   constructor(
     private readonly tasks: IPutawayTaskRepository,
     private readonly permissionChecker?: IPermissionChecker,
@@ -21,14 +23,14 @@ export class ListPutawayTasksUseCase {
       { Page: query.Page, PageSize: query.PageSize },
       { DefaultPageSize: 50, MaxPageSize: 100 },
     );
-    const result = await this.tasks.List(0, 1000, {
+    const candidates = await this.LoadAllTasks({
       WarehouseId: query.WarehouseId,
       OwnerId: query.OwnerId,
       TaskStatus: query.TaskStatus,
       InboundPutawayReleaseId: query.InboundPutawayReleaseId,
     });
     const allowed: PutawayTaskEntity[] = [];
-    for (const task of result.Items) {
+    for (const task of candidates) {
       if (
         await CheckPutawayTaskPermission(this.permissionChecker, query.ActorUserId, ActionCode.Read, {
           WarehouseId: task.WarehouseId,
@@ -45,5 +47,20 @@ export class ListPutawayTasksUseCase {
       paging.Page,
       paging.PageSize,
     );
+  }
+
+  private async LoadAllTasks(filter: Parameters<IPutawayTaskRepository['List']>[2]): Promise<PutawayTaskEntity[]> {
+    const items: PutawayTaskEntity[] = [];
+    let skip = 0;
+    let totalItems = Number.POSITIVE_INFINITY;
+
+    while (skip < totalItems) {
+      const page = await this.tasks.List(skip, this.batchSize, filter);
+      items.push(...page.Items);
+      totalItems = page.TotalItems;
+      if (page.Items.length === 0 || page.Items.length < this.batchSize) break;
+      skip += this.batchSize;
+    }
+    return items;
   }
 }
