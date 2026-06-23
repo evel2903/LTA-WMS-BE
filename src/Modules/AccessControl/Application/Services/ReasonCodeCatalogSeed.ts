@@ -182,6 +182,13 @@ export const ReasonCodeCatalogEntries: ReadonlyArray<ReasonCodeCatalogEntry> = [
     EvidenceRequired: true,
   },
   {
+    ReasonCode: 'RC-V1-REPLENISHMENT',
+    ReasonGroup: ReasonGroup.ManualFix,
+    Description: 'Release, confirm or cancel a replenishment task for pick-face stock.',
+    AppliesToActions: [ActionCode.Create, ActionCode.Update, ActionCode.DeleteCancel],
+    AppliesToObjects: [ObjectType.ReplenishmentTask],
+  },
+  {
     ReasonCode: 'RC-V1-OVERRIDE',
     ReasonGroup: ReasonGroup.RuleOverride,
     Description: 'Override a V1 task, allocation, routing or posting control.',

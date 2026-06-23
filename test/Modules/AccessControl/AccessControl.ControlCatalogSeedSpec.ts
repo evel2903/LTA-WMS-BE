@@ -20,16 +20,18 @@ import {
 
 const REQUIRED_EX_CODES = ['CTRL-EX-01', 'CTRL-EX-02', 'CTRL-EX-03', 'CTRL-EX-04', 'CTRL-EX-05', 'CTRL-EX-08'];
 const DEFERRED_V1PLUS_EX_CODES = ['CTRL-EX-06', 'CTRL-EX-07', 'CTRL-EX-09'];
-const ALL_EX_CODES = [...REQUIRED_EX_CODES, ...DEFERRED_V1PLUS_EX_CODES];
+const V1_EX_CODES = ['CTRL-V1-INVENTORY-RECONCILIATION'];
+const DOC09_EX_CODES = [...REQUIRED_EX_CODES, ...DEFERRED_V1PLUS_EX_CODES];
+const ALL_EX_CODES = [...DOC09_EX_CODES, ...V1_EX_CODES];
 const ALL_VAL_CODES = Array.from({ length: 10 }, (_, i) => `RBAC-VAL-${String(i + 1).padStart(2, '0')}`);
 
 describe('SeedControlExceptionCatalog (C8 AC2 / AC4)', () => {
-  it('seeds exactly the 9 CTRL-EX rows with the doc-09 fields', async () => {
+  it('seeds the 9 doc-09 CTRL-EX rows plus V1 reconciliation extension', async () => {
     const repo = new InMemoryControlExceptionCatalogRepository();
     await SeedControlExceptionCatalog(repo);
 
     const items = await repo.List();
-    expect(items).toHaveLength(9);
+    expect(items).toHaveLength(ALL_EX_CODES.length);
     expect(items.map((i) => i.Code).sort()).toEqual([...ALL_EX_CODES].sort());
 
     // Spot-check enum-typed fields land verbatim from doc 09.
@@ -53,15 +55,23 @@ describe('SeedControlExceptionCatalog (C8 AC2 / AC4)', () => {
     expect(ex09!.ApprovalRequired).toBe(true);
     expect(ex09!.ActionAllowed).toBe(ControlExceptionAction.RequireSpecialApproval);
     expect(ex09!.ImplementationStatus).toBe(CatalogImplementationStatus.DeferredV1Plus);
+
+    // V1-17 adds a raisable reconciliation failure hook without making CTRL-EX-09 raisable.
+    const v1Recon = await repo.FindByCode('CTRL-V1-INVENTORY-RECONCILIATION');
+    expect(v1Recon!.Category).toBe(ControlExceptionCategory.ManualDataFix);
+    expect(v1Recon!.ReasonRequired).toBe(true);
+    expect(v1Recon!.EvidenceRequired).toBe(true);
+    expect(v1Recon!.ApprovalRequired).toBe(false);
+    expect(v1Recon!.ImplementationStatus).toBe(CatalogImplementationStatus.Implemented);
   });
 
-  it('is idempotent (re-run keeps exactly 9 rows, no duplicates)', async () => {
+  it('is idempotent (re-run keeps expected rows, no duplicates)', async () => {
     const repo = new InMemoryControlExceptionCatalogRepository();
     await SeedControlExceptionCatalog(repo);
     await SeedControlExceptionCatalog(repo);
     const items = await repo.List();
-    expect(items).toHaveLength(9);
-    expect(new Set(items.map((i) => i.Code)).size).toBe(9);
+    expect(items).toHaveLength(ALL_EX_CODES.length);
+    expect(new Set(items.map((i) => i.Code)).size).toBe(ALL_EX_CODES.length);
   });
 
   it('AC4: every required CTRL-EX item is present with all mandatory fields populated', async () => {
@@ -92,9 +102,9 @@ describe('SeedControlExceptionCatalog (C8 AC2 / AC4)', () => {
     }
   });
 
-  it('AC4: catalog entries constant exposes exactly 9 rows with unique codes', () => {
-    expect(ControlExceptionCatalogEntries).toHaveLength(9);
-    expect(new Set(ControlExceptionCatalogEntries.map((e) => e.Code)).size).toBe(9);
+  it('AC4: catalog entries constant exposes unique doc-09 and V1 extension codes', () => {
+    expect(ControlExceptionCatalogEntries).toHaveLength(ALL_EX_CODES.length);
+    expect(new Set(ControlExceptionCatalogEntries.map((e) => e.Code)).size).toBe(ALL_EX_CODES.length);
   });
 });
 
@@ -195,6 +205,13 @@ describe('ControlExceptionCatalog.ValidateExceptionType (C8 AC5 — C9 contract)
     expect(entry.EvidenceRequired).toBe(true);
   });
 
+  it('returns the entry for the V1 inventory reconciliation failure code', async () => {
+    const catalog = await buildCatalog();
+    const entry = await catalog.ValidateExceptionType('CTRL-V1-INVENTORY-RECONCILIATION');
+    expect(entry.Code).toBe('CTRL-V1-INVENTORY-RECONCILIATION');
+    expect(entry.Category).toBe(ControlExceptionCategory.ManualDataFix);
+  });
+
   it('throws BusinessRuleException for an unknown code', async () => {
     const catalog = await buildCatalog();
     await expect(catalog.ValidateExceptionType('CTRL-EX-NOPE')).rejects.toBeInstanceOf(BusinessRuleException);
@@ -210,6 +227,6 @@ describe('ControlExceptionCatalog.ValidateExceptionType (C8 AC5 — C9 contract)
     const catalog = await buildCatalog();
     expect(await catalog.FindByCode('CTRL-EX-NOPE')).toBeNull();
     expect((await catalog.FindByCode('CTRL-EX-06'))!.Code).toBe('CTRL-EX-06');
-    expect(await catalog.List()).toHaveLength(9);
+    expect(await catalog.List()).toHaveLength(ALL_EX_CODES.length);
   });
 });

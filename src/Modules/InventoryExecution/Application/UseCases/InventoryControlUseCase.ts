@@ -77,7 +77,7 @@ interface BalanceMutationResult {
   TargetDimension: InventoryDimensionEntity;
 }
 
-interface InventoryControlTransactionResult {
+export interface InventoryControlTransactionResult {
   result: InventoryControlResultDto;
   entry: AuditEntry;
 }
@@ -196,7 +196,7 @@ export class InventoryControlUseCase {
       plan.IdempotencyKey,
       manager,
     );
-    if (duplicate) throw new InventoryControlDuplicateResult(await this.BuildDuplicateResult(duplicate, plan, manager));
+    if (duplicate) return await this.BuildDuplicateTransactionResult(duplicate, plan, source, context, manager);
     return await this.PostInventoryControlInTransaction(source, plan, context, manager);
   }
 
@@ -253,6 +253,46 @@ export class InventoryControlUseCase {
       }
       throw error;
     }
+  }
+
+  public async MoveInternalInTransaction(
+    request: MoveInventoryInternalDto,
+    context: AuditContext,
+    manager: EntityManager,
+  ): Promise<InventoryControlTransactionResult> {
+    const normalized = this.NormalizeMoveRequest(request);
+    this.AssertBaseRequest(normalized);
+    const source = await this.LoadSourceInventory(normalized.SourceBalanceId);
+    await this.AssertStockControlPermission(source, context);
+    const reason = await this.ResolveReason(normalized.ReasonCode, ActionCode.Adjust, normalized.EvidenceRefs ?? []);
+    this.AssertMovableStatus(source.SourceStatus);
+    const targetLocation = await this.ResolveTargetLocation(normalized.TargetLocationId, source.SourceDimension);
+    if (targetLocation.Id === source.SourceDimension.LocationId) {
+      throw new BusinessRuleException('TargetLocationId must be different from source LocationId', {
+        TargetLocationId: targetLocation.Id,
+      });
+    }
+    const plan = this.BuildPlan('InternalMove', source, {
+      TargetStatus: source.SourceStatus,
+      TargetLocation: targetLocation,
+      Quantity: normalized.Quantity,
+      ReasonCode: reason.ReasonCode,
+      ReasonCodeId: reason.ReasonCodeId,
+      ReasonNote: normalized.ReasonNote ?? null,
+      EvidenceRefs: normalized.EvidenceRefs ?? [],
+      IdempotencyKey: normalized.IdempotencyKey,
+      PayloadFingerprint: this.BuildPayloadFingerprint('InternalMove', normalized, source, {
+        TargetInventoryStatusCode: source.SourceStatus.StatusCode,
+        TargetLocationId: targetLocation.Id,
+      }),
+    });
+    const duplicate = await this.inventoryTransactions.FindTransactionByTypeAndIdempotencyKey(
+      plan.TransactionType,
+      plan.IdempotencyKey,
+      manager,
+    );
+    if (duplicate) return await this.BuildDuplicateTransactionResult(duplicate, plan, source, context, manager);
+    return await this.PostInventoryControlInTransaction(source, plan, context, manager);
   }
 
   private NormalizeStatusRequest(request: ChangeInventoryStatusDto): ChangeInventoryStatusDto {
@@ -466,7 +506,7 @@ export class InventoryControlUseCase {
       manager,
     );
     if (duplicateAfterLock)
-      throw new InventoryControlDuplicateResult(await this.BuildDuplicateResult(duplicateAfterLock, plan, manager));
+      return await this.BuildDuplicateTransactionResult(duplicateAfterLock, plan, source, context, manager);
 
     const balances = await this.ApplyBalanceMovement(source, plan, context.ActorUserId, manager, lockedSourceBalance);
     const transaction = this.BuildTransaction(
@@ -804,6 +844,35 @@ export class InventoryControlUseCase {
       OutboxMessageId: transaction.OutboxMessageId,
       EventType: plan.EventType,
       IsDuplicate: true,
+    };
+  }
+
+  private async BuildDuplicateTransactionResult(
+    transaction: InventoryTransactionEntity,
+    plan: MutationPlan,
+    source: SourceInventoryContext,
+    context: AuditContext,
+    manager: EntityManager,
+  ): Promise<InventoryControlTransactionResult> {
+    const result = await this.BuildDuplicateResult(transaction, plan, manager);
+    return {
+      result,
+      entry: MergeAuditContext(context, {
+        Action: ActionCode.Adjust,
+        ObjectType: ObjectType.InventoryMovement,
+        ObjectId: result.InventoryMovement.Id,
+        ObjectCode: result.InventoryMovement.MovementCode,
+        AfterJson: result as unknown as Record<string, unknown>,
+        ReasonCodeId: plan.ReasonCodeId,
+        ReasonNote: plan.ReasonNote ?? plan.ReasonCode,
+        EvidenceRefs: plan.EvidenceRefs.length ? plan.EvidenceRefs : null,
+        ReferenceType: `${plan.Operation}Duplicate`,
+        ReferenceId: transaction.Id,
+        WarehouseId: source.SourceDimension.WarehouseId,
+        OwnerId: source.SourceDimension.OwnerId,
+        ScopeJson: { WarehouseId: source.SourceDimension.WarehouseId, OwnerId: source.SourceDimension.OwnerId },
+        Result: AuditResult.Success,
+      }),
     };
   }
 

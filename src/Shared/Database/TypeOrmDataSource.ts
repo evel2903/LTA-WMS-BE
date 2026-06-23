@@ -66,6 +66,7 @@ import { InventoryMovementOrmEntity } from '@modules/InventoryExecution/Infrastr
 import { InventoryTransactionOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryTransactionOrmEntity';
 import { PutawayTaskOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/PutawayTaskOrmEntity';
 import { CycleCountWorkOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/CycleCountWorkOrmEntity';
+import { ReplenishmentTaskOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/ReplenishmentTaskOrmEntity';
 
 const env = GetEnv();
 
@@ -142,6 +143,7 @@ export default new DataSource({
     InventoryTransactionOrmEntity,
     InventoryMovementOrmEntity,
     CycleCountWorkOrmEntity,
+    ReplenishmentTaskOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

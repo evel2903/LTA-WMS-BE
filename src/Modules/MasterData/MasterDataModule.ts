@@ -820,6 +820,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     INVENTORY_DIMENSION_REPOSITORY,
     INVENTORY_BALANCE_REPOSITORY,
     MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY,
+    InventoryDimensionKeyService,
   ],
 })
 export class MasterDataModule {}

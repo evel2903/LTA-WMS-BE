@@ -1,0 +1,50 @@
+import { ReplenishmentTaskDto } from '@modules/InventoryExecution/Application/DTOs/ReplenishmentTaskDto';
+import { ReplenishmentTaskEntity } from '@modules/InventoryExecution/Domain/Entities/ReplenishmentTaskEntity';
+
+export class ReplenishmentTaskDtoMapper {
+  public static ToDto(task: ReplenishmentTaskEntity): ReplenishmentTaskDto {
+    return {
+      Id: task.Id,
+      TaskCode: task.TaskCode,
+      TaskStatus: task.TaskStatus,
+      TriggerType: task.TriggerType,
+      SourceBalanceId: task.SourceBalanceId,
+      SourceDimensionId: task.SourceDimensionId,
+      SourceLocationId: task.SourceLocationId,
+      SourceLocationCode: task.SourceLocationCode,
+      SourceInventoryStatusCode: task.SourceInventoryStatusCode,
+      TargetLocationId: task.TargetLocationId,
+      TargetLocationCode: task.TargetLocationCode,
+      TargetLocationProfileId: task.TargetLocationProfileId,
+      WarehouseId: task.WarehouseId,
+      WarehouseCode: task.WarehouseCode,
+      OwnerId: task.OwnerId,
+      OwnerCode: task.OwnerCode,
+      SkuId: task.SkuId,
+      SkuCode: task.SkuCode,
+      UomId: task.UomId,
+      UomCode: task.UomCode,
+      Quantity: task.Quantity,
+      ShortPickReference: task.ShortPickReference,
+      Priority: task.Priority,
+      WorkPoolCode: task.WorkPoolCode,
+      AssignedUserId: task.AssignedUserId,
+      EligibilityDecisionJson: task.EligibilityDecisionJson,
+      OutboxMessageId: task.OutboxMessageId,
+      ConfirmTransactionId: task.ConfirmTransactionId,
+      ConfirmMovementId: task.ConfirmMovementId,
+      ConfirmOutboxMessageId: task.ConfirmOutboxMessageId,
+      ReasonCode: task.ReasonCode,
+      ReasonCodeId: task.ReasonCodeId,
+      ReasonNote: task.ReasonNote,
+      EvidenceRefs: task.EvidenceRefs,
+      ReleasedAt: task.ReleasedAt?.toISOString() ?? null,
+      ConfirmedAt: task.ConfirmedAt?.toISOString() ?? null,
+      CancelledAt: task.CancelledAt?.toISOString() ?? null,
+      CreatedAt: task.CreatedAt.toISOString(),
+      UpdatedAt: task.UpdatedAt.toISOString(),
+      CreatedBy: task.CreatedBy,
+      UpdatedBy: task.UpdatedBy,
+    };
+  }
+}

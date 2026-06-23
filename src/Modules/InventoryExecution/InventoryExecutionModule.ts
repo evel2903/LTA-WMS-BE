@@ -9,6 +9,10 @@ import {
   IReasonCodeCatalog,
   REASON_CODE_CATALOG,
 } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
+import {
+  IExceptionCaseRepository,
+  EXCEPTION_CASE_REPOSITORY,
+} from '@modules/AccessControl/Application/Interfaces/IExceptionCaseRepository';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import {
   IApprovalRequestRepository,
@@ -24,12 +28,25 @@ import {
   UnlockCycleCountWorkUseCase,
 } from '@modules/InventoryExecution/Application/UseCases/CycleCountWorkUseCases';
 import { CycleCountWorkLifecycleService } from '@modules/InventoryExecution/Application/Services/CycleCountWorkLifecycleService';
+import { ReplenishmentTaskLifecycleService } from '@modules/InventoryExecution/Application/Services/ReplenishmentTaskLifecycleService';
+import {
+  CancelReplenishmentTaskUseCase,
+  ConfirmReplenishmentTaskUseCase,
+  GetReplenishmentTaskUseCase,
+  ListReplenishmentTasksUseCase,
+  RecordInventoryReconciliationFailureUseCase,
+  ReleaseReplenishmentTaskUseCase,
+} from '@modules/InventoryExecution/Application/UseCases/ReplenishmentTaskUseCases';
 import { ConfirmPutawayTaskUseCase } from '@modules/InventoryExecution/Application/UseCases/ConfirmPutawayTaskUseCase';
 import { InventoryControlUseCase } from '@modules/InventoryExecution/Application/UseCases/InventoryControlUseCase';
 import {
   ICycleCountWorkRepository,
   CYCLE_COUNT_WORK_REPOSITORY,
 } from '@modules/InventoryExecution/Application/Interfaces/ICycleCountWorkRepository';
+import {
+  IReplenishmentTaskRepository,
+  REPLENISHMENT_TASK_REPOSITORY,
+} from '@modules/InventoryExecution/Application/Interfaces/IReplenishmentTaskRepository';
 import {
   IInventoryTransactionRepository,
   INVENTORY_TRANSACTION_REPOSITORY,
@@ -53,14 +70,17 @@ import {
 } from '@modules/InventoryExecution/Application/Interfaces/IPutawayTaskRepository';
 import { PutawayTaskOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/PutawayTaskOrmEntity';
 import { CycleCountWorkOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/CycleCountWorkOrmEntity';
+import { ReplenishmentTaskOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/ReplenishmentTaskOrmEntity';
 import { InventoryMovementOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryMovementOrmEntity';
 import { InventoryTransactionOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryTransactionOrmEntity';
 import { CycleCountWorkRepository } from '@modules/InventoryExecution/Infrastructure/Persistence/Repositories/CycleCountWorkRepository';
 import { InventoryTransactionRepository } from '@modules/InventoryExecution/Infrastructure/Persistence/Repositories/InventoryTransactionRepository';
 import { PutawayTaskRepository } from '@modules/InventoryExecution/Infrastructure/Persistence/Repositories/PutawayTaskRepository';
+import { ReplenishmentTaskRepository } from '@modules/InventoryExecution/Infrastructure/Persistence/Repositories/ReplenishmentTaskRepository';
 import { CycleCountWorkController } from '@modules/InventoryExecution/Presentation/Controllers/CycleCountWorkController';
 import { InventoryControlController } from '@modules/InventoryExecution/Presentation/Controllers/InventoryControlController';
 import { PutawayTaskController } from '@modules/InventoryExecution/Presentation/Controllers/PutawayTaskController';
+import { ReplenishmentTaskController } from '@modules/InventoryExecution/Presentation/Controllers/ReplenishmentTaskController';
 import {
   IInventoryBalanceRepository,
   INVENTORY_BALANCE_REPOSITORY,
@@ -81,6 +101,10 @@ import {
   ILocationRepository,
   LOCATION_REPOSITORY,
 } from '@modules/MasterData/Application/Interfaces/ILocationRepository';
+import {
+  IItemCoverageRepository,
+  ITEM_COVERAGE_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IItemCoverageRepository';
 import { InventoryDimensionKeyService } from '@modules/MasterData/Application/Services/InventoryDimensionKeyService';
 import { MasterDataModule } from '@modules/MasterData/MasterDataModule';
 import {
@@ -96,6 +120,7 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
       InventoryTransactionOrmEntity,
       InventoryMovementOrmEntity,
       CycleCountWorkOrmEntity,
+      ReplenishmentTaskOrmEntity,
     ]),
     AccessControlModule,
     MasterDataModule,
@@ -103,11 +128,17 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
     IntegrationModule,
     TaskExecutionModule,
   ],
-  controllers: [PutawayTaskController, InventoryControlController, CycleCountWorkController],
+  controllers: [
+    PutawayTaskController,
+    InventoryControlController,
+    CycleCountWorkController,
+    ReplenishmentTaskController,
+  ],
   providers: [
     { provide: PUTAWAY_TASK_REPOSITORY, useClass: PutawayTaskRepository },
     { provide: INVENTORY_TRANSACTION_REPOSITORY, useClass: InventoryTransactionRepository },
     { provide: CYCLE_COUNT_WORK_REPOSITORY, useClass: CycleCountWorkRepository },
+    { provide: REPLENISHMENT_TASK_REPOSITORY, useClass: ReplenishmentTaskRepository },
     {
       provide: ListPutawayTasksUseCase,
       useFactory: (tasks: IPutawayTaskRepository, checker: IPermissionChecker) =>
@@ -317,7 +348,91 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
       useFactory: (lifecycle: CycleCountWorkLifecycleService) => new UnlockCycleCountWorkUseCase(lifecycle),
       inject: [CycleCountWorkLifecycleService],
     },
+    {
+      provide: ReplenishmentTaskLifecycleService,
+      useFactory: (
+        replenishmentTasks: IReplenishmentTaskRepository,
+        inventoryControl: InventoryControlUseCase,
+        inventoryBalances: IInventoryBalanceRepository,
+        inventoryDimensions: IInventoryDimensionRepository,
+        inventoryStatuses: IInventoryStatusRepository,
+        locations: ILocationRepository,
+        locationProfiles: ILocationProfileRepository,
+        itemCoverages: IItemCoverageRepository,
+        integrations: IIntegrationRepository,
+        exceptionCases: IExceptionCaseRepository,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+        checker: IPermissionChecker,
+      ) =>
+        new ReplenishmentTaskLifecycleService(
+          replenishmentTasks,
+          inventoryControl,
+          inventoryBalances,
+          inventoryDimensions,
+          inventoryStatuses,
+          locations,
+          locationProfiles,
+          itemCoverages,
+          integrations,
+          exceptionCases,
+          reasonCatalog,
+          audited,
+          checker,
+        ),
+      inject: [
+        REPLENISHMENT_TASK_REPOSITORY,
+        InventoryControlUseCase,
+        INVENTORY_BALANCE_REPOSITORY,
+        INVENTORY_DIMENSION_REPOSITORY,
+        INVENTORY_STATUS_REPOSITORY,
+        LOCATION_REPOSITORY,
+        LOCATION_PROFILE_REPOSITORY,
+        ITEM_COVERAGE_REPOSITORY,
+        INTEGRATION_REPOSITORY,
+        EXCEPTION_CASE_REPOSITORY,
+        REASON_CODE_CATALOG,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
+    {
+      provide: ReleaseReplenishmentTaskUseCase,
+      useFactory: (lifecycle: ReplenishmentTaskLifecycleService) => new ReleaseReplenishmentTaskUseCase(lifecycle),
+      inject: [ReplenishmentTaskLifecycleService],
+    },
+    {
+      provide: ListReplenishmentTasksUseCase,
+      useFactory: (lifecycle: ReplenishmentTaskLifecycleService) => new ListReplenishmentTasksUseCase(lifecycle),
+      inject: [ReplenishmentTaskLifecycleService],
+    },
+    {
+      provide: GetReplenishmentTaskUseCase,
+      useFactory: (lifecycle: ReplenishmentTaskLifecycleService) => new GetReplenishmentTaskUseCase(lifecycle),
+      inject: [ReplenishmentTaskLifecycleService],
+    },
+    {
+      provide: ConfirmReplenishmentTaskUseCase,
+      useFactory: (lifecycle: ReplenishmentTaskLifecycleService) => new ConfirmReplenishmentTaskUseCase(lifecycle),
+      inject: [ReplenishmentTaskLifecycleService],
+    },
+    {
+      provide: CancelReplenishmentTaskUseCase,
+      useFactory: (lifecycle: ReplenishmentTaskLifecycleService) => new CancelReplenishmentTaskUseCase(lifecycle),
+      inject: [ReplenishmentTaskLifecycleService],
+    },
+    {
+      provide: RecordInventoryReconciliationFailureUseCase,
+      useFactory: (lifecycle: ReplenishmentTaskLifecycleService) =>
+        new RecordInventoryReconciliationFailureUseCase(lifecycle),
+      inject: [ReplenishmentTaskLifecycleService],
+    },
   ],
-  exports: [PUTAWAY_TASK_REPOSITORY, INVENTORY_TRANSACTION_REPOSITORY, CYCLE_COUNT_WORK_REPOSITORY],
+  exports: [
+    PUTAWAY_TASK_REPOSITORY,
+    INVENTORY_TRANSACTION_REPOSITORY,
+    CYCLE_COUNT_WORK_REPOSITORY,
+    REPLENISHMENT_TASK_REPOSITORY,
+  ],
 })
 export class InventoryExecutionModule {}

@@ -147,6 +147,19 @@ export const ControlExceptionCatalogEntries: ReadonlyArray<ControlExceptionCatal
     OwnerRoles: ['IT_WMS_ADMIN', 'INVENTORY_ACCOUNTANT'],
     ImplementationStatus: CatalogImplementationStatus.DeferredV1Plus,
   },
+  {
+    Code: 'CTRL-V1-INVENTORY-RECONCILIATION',
+    Scenario: 'Inventory reconciliation failure cần exception evidence, không tự sửa tồn kho',
+    Category: ControlExceptionCategory.ManualDataFix,
+    Severity: ControlExceptionSeverity.High,
+    DefaultState: ControlExceptionDefaultState.Detected,
+    ActionAllowed: ControlExceptionAction.RequireSpecialApproval,
+    ReasonRequired: true,
+    EvidenceRequired: true,
+    ApprovalRequired: false,
+    OwnerRoles: ['IT_WMS_ADMIN', 'INVENTORY_ACCOUNTANT'],
+    ImplementationStatus: CatalogImplementationStatus.Implemented,
+  },
 ];
 
 /** Idempotent: upsert by Code, so re-running never duplicates and keeps fields in sync. */
