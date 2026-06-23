@@ -322,6 +322,10 @@ class FakeReceivingRepository implements IReceivingRepository {
     return release;
   }
 
+  public async FindInboundPutawayReleaseById(id: string): Promise<InboundPutawayReleaseEntity | null> {
+    return this.PutawayReleases.find((item) => item.Id === id) ?? null;
+  }
+
   public async FindInboundPutawayReleaseByIdempotencyKey(
     receiptLineId: string,
     idempotencyKey: string,

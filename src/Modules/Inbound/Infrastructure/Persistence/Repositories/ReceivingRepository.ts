@@ -225,6 +225,11 @@ export class ReceivingRepository implements IReceivingRepository {
     }
   }
 
+  public async FindInboundPutawayReleaseById(id: string): Promise<InboundPutawayReleaseEntity | null> {
+    const entity = await this.putawayReleases.findOne({ where: { Id: id } });
+    return entity ? ReceivingOrmMapper.ToInboundPutawayReleaseDomain(entity) : null;
+  }
+
   public async FindInboundPutawayReleaseByIdempotencyKey(
     receiptLineId: string,
     idempotencyKey: string,
