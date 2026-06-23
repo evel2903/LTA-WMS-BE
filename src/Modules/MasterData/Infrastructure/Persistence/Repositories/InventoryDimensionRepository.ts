@@ -22,9 +22,56 @@ export class InventoryDimensionRepository implements IInventoryDimensionReposito
     return entity ? InventoryDimensionOrmMapper.ToDomain(entity) : null;
   }
 
-  public async FindByHash(dimensionKeyHash: string): Promise<InventoryDimensionEntity | null> {
-    const entity = await this.inventoryDimensions.findOne({ where: { DimensionKeyHash: dimensionKeyHash } });
+  public async FindByHash(dimensionKeyHash: string, manager?: EntityManager): Promise<InventoryDimensionEntity | null> {
+    const repository = manager ? manager.getRepository(InventoryDimensionOrmEntity) : this.inventoryDimensions;
+    const entity = await repository.findOne({ where: { DimensionKeyHash: dimensionKeyHash } });
     return entity ? InventoryDimensionOrmMapper.ToDomain(entity) : null;
+  }
+
+  public async FindOrCreateByHashForUpdate(
+    dimension: InventoryDimensionEntity,
+    manager: EntityManager,
+  ): Promise<InventoryDimensionEntity> {
+    const repo = manager.getRepository(InventoryDimensionOrmEntity);
+    await repo
+      .createQueryBuilder()
+      .insert()
+      .values({
+        Id: dimension.Id,
+        OwnerId: dimension.OwnerId,
+        SkuId: dimension.SkuId,
+        WarehouseId: dimension.WarehouseId,
+        LocationId: dimension.LocationId,
+        InventoryStatusId: dimension.InventoryStatusId,
+        DimensionKeyHash: dimension.DimensionKeyHash,
+        UomId: dimension.UomId,
+        LpnCode: dimension.LpnCode,
+        LotNumber: dimension.LotNumber,
+        ExpiryDate: dimension.ExpiryDate,
+        SerialNumber: dimension.SerialNumber,
+        ProductionDate: dimension.ProductionDate,
+        CountryOfOrigin: dimension.CountryOfOrigin,
+        CustomsStatus: dimension.CustomsStatus,
+        SourceSystem: dimension.SourceSystem,
+        ReferenceId: dimension.ReferenceId,
+        CreatedAt: dimension.CreatedAt,
+        UpdatedAt: dimension.UpdatedAt,
+        CreatedBy: dimension.CreatedBy,
+        UpdatedBy: dimension.UpdatedBy,
+      })
+      .orIgnore()
+      .execute();
+    const entity = await repo
+      .createQueryBuilder('dimension')
+      .setLock('pessimistic_write')
+      .where('dimension.dimension_key_hash = :dimensionKeyHash', {
+        dimensionKeyHash: dimension.DimensionKeyHash,
+      })
+      .getOne();
+    if (!entity) {
+      throw new ConflictException('Inventory dimension could not be locked after upsert');
+    }
+    return InventoryDimensionOrmMapper.ToDomain(entity);
   }
 
   public async Create(dimension: InventoryDimensionEntity, manager?: EntityManager): Promise<InventoryDimensionEntity> {

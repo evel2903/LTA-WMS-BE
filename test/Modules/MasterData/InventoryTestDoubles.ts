@@ -398,6 +398,13 @@ export class MemoryInventoryDimensionRepository implements IInventoryDimensionRe
     return [...this.dimensions.values()].find((dimension) => dimension.DimensionKeyHash === dimensionKeyHash) ?? null;
   }
 
+  public async FindOrCreateByHashForUpdate(dimension: InventoryDimensionEntity): Promise<InventoryDimensionEntity> {
+    const existing = await this.FindByHash(dimension.DimensionKeyHash);
+    if (existing) return existing;
+    this.dimensions.set(dimension.Id, dimension);
+    return dimension;
+  }
+
   public async Create(dimension: InventoryDimensionEntity): Promise<InventoryDimensionEntity> {
     this.dimensions.set(dimension.Id, dimension);
     return dimension;
@@ -428,7 +435,23 @@ export class MemoryInventoryBalanceRepository implements IInventoryBalanceReposi
     return [...this.balances.values()].find((balance) => balance.DimensionId === dimensionId) ?? null;
   }
 
+  public async FindByDimensionIdForUpdate(dimensionId: string): Promise<InventoryBalanceEntity | null> {
+    return this.FindByDimensionId(dimensionId);
+  }
+
+  public async FindOrCreateByDimensionIdForUpdate(balance: InventoryBalanceEntity): Promise<InventoryBalanceEntity> {
+    const existing = await this.FindByDimensionId(balance.DimensionId);
+    if (existing) return existing;
+    this.balances.set(balance.Id, balance);
+    return balance;
+  }
+
   public async Create(balance: InventoryBalanceEntity): Promise<InventoryBalanceEntity> {
+    this.balances.set(balance.Id, balance);
+    return balance;
+  }
+
+  public async Update(balance: InventoryBalanceEntity): Promise<InventoryBalanceEntity> {
     this.balances.set(balance.Id, balance);
     return balance;
   }

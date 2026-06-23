@@ -7,8 +7,10 @@ export const PUTAWAY_TASK_REPOSITORY = Symbol('IPutawayTaskRepository');
 export interface IPutawayTaskRepository {
   Create(task: PutawayTaskEntity, manager?: EntityManager): Promise<PutawayTaskEntity>;
   FindById(id: string): Promise<PutawayTaskEntity | null>;
+  FindByIdForUpdate(id: string, manager: EntityManager): Promise<PutawayTaskEntity | null>;
   FindByInboundPutawayReleaseId(inboundPutawayReleaseId: string): Promise<PutawayTaskEntity | null>;
   FindByIdempotencyKey(inboundPutawayReleaseId: string, idempotencyKey: string): Promise<PutawayTaskEntity | null>;
+  Save(task: PutawayTaskEntity, manager?: EntityManager): Promise<PutawayTaskEntity>;
   List(
     skip: number,
     take: number,

@@ -14,7 +14,11 @@ export interface InventoryDimensionListFilter {
 
 export interface IInventoryDimensionRepository {
   FindById(id: string): Promise<InventoryDimensionEntity | null>;
-  FindByHash(dimensionKeyHash: string): Promise<InventoryDimensionEntity | null>;
+  FindByHash(dimensionKeyHash: string, manager?: EntityManager): Promise<InventoryDimensionEntity | null>;
+  FindOrCreateByHashForUpdate(
+    dimension: InventoryDimensionEntity,
+    manager: EntityManager,
+  ): Promise<InventoryDimensionEntity>;
   Create(dimension: InventoryDimensionEntity, manager?: EntityManager): Promise<InventoryDimensionEntity>;
   List(
     skip: number,

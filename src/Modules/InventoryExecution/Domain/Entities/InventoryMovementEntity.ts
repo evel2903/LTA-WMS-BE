@@ -1,0 +1,101 @@
+import { randomUUID } from 'crypto';
+import { InventoryMovementStatus } from '@modules/InventoryExecution/Domain/Enums/InventoryMovementStatus';
+
+export interface InventoryMovementEntityProps {
+  Id?: string;
+  MovementCode: string;
+  MovementStatus: InventoryMovementStatus;
+  InventoryTransactionId: string;
+  PutawayTaskId: string;
+  PutawayTaskCode: string;
+  OwnerId: string;
+  OwnerCode?: string | null;
+  WarehouseId: string;
+  WarehouseCode?: string | null;
+  SkuId: string;
+  SkuCode?: string | null;
+  UomId: string;
+  UomCode?: string | null;
+  Quantity: number;
+  FromDimensionId: string;
+  FromBalanceId: string;
+  FromLocationId?: string | null;
+  FromLocationCode?: string | null;
+  FromInventoryStatusCode: string;
+  ToDimensionId: string;
+  ToBalanceId: string;
+  ToLocationId: string;
+  ToLocationCode: string;
+  ToInventoryStatusCode: string;
+  LpnCode?: string | null;
+  SsccCode?: string | null;
+  ScanEvidenceJson?: Record<string, unknown>;
+  CreatedAt?: Date;
+  CreatedBy?: string | null;
+}
+
+export class InventoryMovementEntity {
+  public readonly Id: string;
+  public MovementCode: string;
+  public MovementStatus: InventoryMovementStatus;
+  public InventoryTransactionId: string;
+  public PutawayTaskId: string;
+  public PutawayTaskCode: string;
+  public OwnerId: string;
+  public OwnerCode: string | null;
+  public WarehouseId: string;
+  public WarehouseCode: string | null;
+  public SkuId: string;
+  public SkuCode: string | null;
+  public UomId: string;
+  public UomCode: string | null;
+  public Quantity: number;
+  public FromDimensionId: string;
+  public FromBalanceId: string;
+  public FromLocationId: string | null;
+  public FromLocationCode: string | null;
+  public FromInventoryStatusCode: string;
+  public ToDimensionId: string;
+  public ToBalanceId: string;
+  public ToLocationId: string;
+  public ToLocationCode: string;
+  public ToInventoryStatusCode: string;
+  public LpnCode: string | null;
+  public SsccCode: string | null;
+  public ScanEvidenceJson: Record<string, unknown>;
+  public readonly CreatedAt: Date;
+  public CreatedBy: string | null;
+
+  constructor(props: InventoryMovementEntityProps) {
+    this.Id = props.Id ?? randomUUID();
+    this.MovementCode = props.MovementCode;
+    this.MovementStatus = props.MovementStatus;
+    this.InventoryTransactionId = props.InventoryTransactionId;
+    this.PutawayTaskId = props.PutawayTaskId;
+    this.PutawayTaskCode = props.PutawayTaskCode;
+    this.OwnerId = props.OwnerId;
+    this.OwnerCode = props.OwnerCode ?? null;
+    this.WarehouseId = props.WarehouseId;
+    this.WarehouseCode = props.WarehouseCode ?? null;
+    this.SkuId = props.SkuId;
+    this.SkuCode = props.SkuCode ?? null;
+    this.UomId = props.UomId;
+    this.UomCode = props.UomCode ?? null;
+    this.Quantity = props.Quantity;
+    this.FromDimensionId = props.FromDimensionId;
+    this.FromBalanceId = props.FromBalanceId;
+    this.FromLocationId = props.FromLocationId ?? null;
+    this.FromLocationCode = props.FromLocationCode ?? null;
+    this.FromInventoryStatusCode = props.FromInventoryStatusCode;
+    this.ToDimensionId = props.ToDimensionId;
+    this.ToBalanceId = props.ToBalanceId;
+    this.ToLocationId = props.ToLocationId;
+    this.ToLocationCode = props.ToLocationCode;
+    this.ToInventoryStatusCode = props.ToInventoryStatusCode;
+    this.LpnCode = props.LpnCode ?? null;
+    this.SsccCode = props.SsccCode ?? null;
+    this.ScanEvidenceJson = props.ScanEvidenceJson ?? {};
+    this.CreatedAt = props.CreatedAt ?? new Date();
+    this.CreatedBy = props.CreatedBy ?? null;
+  }
+}

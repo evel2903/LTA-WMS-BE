@@ -35,3 +35,26 @@ export const AssertPutawayTaskPermission = async (
     throw new ForbiddenAppException('Access denied (OUT_OF_SCOPE)', { Reason: 'OUT_OF_SCOPE' });
   }
 };
+
+export const AssertInventoryMovementPermission = async (
+  permissionChecker: IPermissionChecker | undefined,
+  actorUserId: string | null | undefined,
+  action: ActionCode,
+  scope: { WarehouseId?: string | null; OwnerId?: string | null },
+): Promise<void> => {
+  if (!actorUserId) {
+    throw new ForbiddenAppException('Access denied (OUT_OF_SCOPE)', { Reason: 'OUT_OF_SCOPE' });
+  }
+  if (!permissionChecker) {
+    return;
+  }
+  const decision = await permissionChecker.Check({
+    UserId: actorUserId,
+    Action: action,
+    ObjectType: ObjectType.InventoryMovement,
+    Scope: { WarehouseId: scope.WarehouseId, OwnerId: scope.OwnerId },
+  });
+  if (!decision.Allowed) {
+    throw new ForbiddenAppException('Access denied (OUT_OF_SCOPE)', { Reason: 'OUT_OF_SCOPE' });
+  }
+};
