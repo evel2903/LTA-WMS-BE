@@ -6,6 +6,7 @@ import {
   MergeAuditContext,
   SystemAuditContext,
 } from '@modules/AccessControl/Application/DTOs/AuditContext';
+import { AuditEntry } from '@modules/AccessControl/Application/DTOs/AuditEntry';
 import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
 import { IReasonCodeCatalog } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
@@ -74,6 +75,11 @@ interface BalanceMutationResult {
   TargetBalance: InventoryBalanceEntity;
   SourceDimension: InventoryDimensionEntity;
   TargetDimension: InventoryDimensionEntity;
+}
+
+interface InventoryControlTransactionResult {
+  result: InventoryControlResultDto;
+  entry: AuditEntry;
 }
 
 class InventoryControlDuplicateResult extends Error {
@@ -152,6 +158,46 @@ export class InventoryControlUseCase {
       }
       throw error;
     }
+  }
+
+  public async ChangeStatusInTransaction(
+    request: ChangeInventoryStatusDto,
+    context: AuditContext,
+    manager: EntityManager,
+  ): Promise<InventoryControlTransactionResult> {
+    const normalized = this.NormalizeStatusRequest(request);
+    this.AssertBaseRequest(normalized);
+    const source = await this.LoadSourceInventory(normalized.SourceBalanceId);
+    await this.AssertStockControlPermission(source, context);
+    const reason = await this.ResolveReason(normalized.ReasonCode, ActionCode.Update, normalized.EvidenceRefs ?? []);
+    const targetStatus = await this.ResolveTargetStatus(normalized.TargetInventoryStatusCode);
+    if (targetStatus.StatusCode === source.SourceStatus.StatusCode) {
+      throw new BusinessRuleException('Target InventoryStatus must be different from source InventoryStatus', {
+        InventoryStatusCode: targetStatus.StatusCode,
+      });
+    }
+    const sourceLocation = await this.ResolveSourceLocation(source);
+    const plan = this.BuildPlan('StatusChange', source, {
+      TargetStatus: targetStatus,
+      TargetLocation: sourceLocation,
+      Quantity: normalized.Quantity,
+      ReasonCode: reason.ReasonCode,
+      ReasonCodeId: reason.ReasonCodeId,
+      ReasonNote: normalized.ReasonNote ?? null,
+      EvidenceRefs: normalized.EvidenceRefs ?? [],
+      IdempotencyKey: normalized.IdempotencyKey,
+      PayloadFingerprint: this.BuildPayloadFingerprint('StatusChange', normalized, source, {
+        TargetInventoryStatusCode: targetStatus.StatusCode,
+        TargetLocationId: sourceLocation.Id,
+      }),
+    });
+    const duplicate = await this.inventoryTransactions.FindTransactionByTypeAndIdempotencyKey(
+      plan.TransactionType,
+      plan.IdempotencyKey,
+      manager,
+    );
+    if (duplicate) throw new InventoryControlDuplicateResult(await this.BuildDuplicateResult(duplicate, plan, manager));
+    return await this.PostInventoryControlInTransaction(source, plan, context, manager);
   }
 
   public async MoveInternal(
@@ -397,59 +443,68 @@ export class InventoryControlUseCase {
     plan: MutationPlan,
     context: AuditContext,
   ): Promise<InventoryControlResultDto> {
+    return await this.audited.Run(
+      async (manager) => await this.PostInventoryControlInTransaction(source, plan, context, manager),
+    );
+  }
+
+  private async PostInventoryControlInTransaction(
+    source: SourceInventoryContext,
+    plan: MutationPlan,
+    context: AuditContext,
+    manager: EntityManager,
+  ): Promise<InventoryControlTransactionResult> {
     const now = new Date();
     const transactionId = randomUUID();
     const movementId = randomUUID();
     const outboxId = randomUUID();
 
-    return await this.audited.Run(async (manager) => {
-      const lockedSourceBalance = await this.LockSourceBalance(source, manager);
-      const duplicateAfterLock = await this.inventoryTransactions.FindTransactionByTypeAndIdempotencyKey(
-        plan.TransactionType,
-        plan.IdempotencyKey,
-        manager,
-      );
-      if (duplicateAfterLock)
-        throw new InventoryControlDuplicateResult(await this.BuildDuplicateResult(duplicateAfterLock, plan, manager));
+    const lockedSourceBalance = await this.LockSourceBalance(source, manager);
+    const duplicateAfterLock = await this.inventoryTransactions.FindTransactionByTypeAndIdempotencyKey(
+      plan.TransactionType,
+      plan.IdempotencyKey,
+      manager,
+    );
+    if (duplicateAfterLock)
+      throw new InventoryControlDuplicateResult(await this.BuildDuplicateResult(duplicateAfterLock, plan, manager));
 
-      const balances = await this.ApplyBalanceMovement(source, plan, context.ActorUserId, manager, lockedSourceBalance);
-      const transaction = this.BuildTransaction(
-        transactionId,
-        movementId,
-        outboxId,
-        source,
-        balances,
-        plan,
-        now,
-        context.ActorUserId,
-      );
-      const movement = this.BuildMovement(movementId, transactionId, source, balances, plan, now, context.ActorUserId);
-      const postedTransaction = await this.inventoryTransactions.CreateTransaction(transaction, manager);
-      const postedMovement = await this.inventoryTransactions.CreateMovement(movement, manager);
-      postedTransaction.InventoryMovementId = postedMovement.Id;
-      const savedTransaction = await this.inventoryTransactions.SaveTransaction(postedTransaction, manager);
-      const outbox = this.BuildOutbox(outboxId, savedTransaction, postedMovement, balances, plan);
-      await this.integrations.CreateOutboxMessage(outbox, manager);
+    const balances = await this.ApplyBalanceMovement(source, plan, context.ActorUserId, manager, lockedSourceBalance);
+    const transaction = this.BuildTransaction(
+      transactionId,
+      movementId,
+      outboxId,
+      source,
+      balances,
+      plan,
+      now,
+      context.ActorUserId,
+    );
+    const movement = this.BuildMovement(movementId, transactionId, source, balances, plan, now, context.ActorUserId);
+    const postedTransaction = await this.inventoryTransactions.CreateTransaction(transaction, manager);
+    const postedMovement = await this.inventoryTransactions.CreateMovement(movement, manager);
+    postedTransaction.InventoryMovementId = postedMovement.Id;
+    const savedTransaction = await this.inventoryTransactions.SaveTransaction(postedTransaction, manager);
+    const outbox = this.BuildOutbox(outboxId, savedTransaction, postedMovement, balances, plan);
+    await this.integrations.CreateOutboxMessage(outbox, manager);
 
-      const result: InventoryControlResultDto = {
-        InventoryTransaction: InventoryTransactionDtoMapper.TransactionToDto(savedTransaction),
-        InventoryMovement: InventoryTransactionDtoMapper.MovementToDto(postedMovement),
-        SourceBalance: InventoryTransactionDtoMapper.BalanceToSnapshot(balances.SourceBalance),
-        TargetBalance: InventoryTransactionDtoMapper.BalanceToSnapshot(balances.TargetBalance),
-        OutboxMessageId: outboxId,
-        EventType: plan.EventType,
-        IsDuplicate: false,
-      };
+    const result: InventoryControlResultDto = {
+      InventoryTransaction: InventoryTransactionDtoMapper.TransactionToDto(savedTransaction),
+      InventoryMovement: InventoryTransactionDtoMapper.MovementToDto(postedMovement),
+      SourceBalance: InventoryTransactionDtoMapper.BalanceToSnapshot(balances.SourceBalance),
+      TargetBalance: InventoryTransactionDtoMapper.BalanceToSnapshot(balances.TargetBalance),
+      OutboxMessageId: outboxId,
+      EventType: plan.EventType,
+      IsDuplicate: false,
+    };
 
-      return {
-        result,
-        entry: this.BuildAudit(context, source, postedMovement, plan, {
-          BeforeJson: this.SourceToAuditJson(source),
-          AfterJson: { ...result, TargetDimension: this.DimensionToAuditJson(balances.TargetDimension) },
-          Result: AuditResult.Success,
-        }),
-      };
-    });
+    return {
+      result,
+      entry: this.BuildAudit(context, source, postedMovement, plan, {
+        BeforeJson: this.SourceToAuditJson(source),
+        AfterJson: { ...result, TargetDimension: this.DimensionToAuditJson(balances.TargetDimension) },
+        Result: AuditResult.Success,
+      }),
+    };
   }
 
   private async ExecutePostWithIdempotency(

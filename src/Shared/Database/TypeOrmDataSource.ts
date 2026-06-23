@@ -65,6 +65,7 @@ import { ReceivingSessionOrmEntity } from '@modules/Inbound/Infrastructure/Persi
 import { InventoryMovementOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryMovementOrmEntity';
 import { InventoryTransactionOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/InventoryTransactionOrmEntity';
 import { PutawayTaskOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/PutawayTaskOrmEntity';
+import { CycleCountWorkOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/CycleCountWorkOrmEntity';
 
 const env = GetEnv();
 
@@ -140,6 +141,7 @@ export default new DataSource({
     PutawayTaskOrmEntity,
     InventoryTransactionOrmEntity,
     InventoryMovementOrmEntity,
+    CycleCountWorkOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',
