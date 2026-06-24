@@ -23,6 +23,8 @@ import {
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { CreateApprovalRequestUseCase } from '@modules/AccessControl/Application/UseCases/CreateApprovalRequestUseCase';
 import { AccessControlModule } from '@modules/AccessControl/AccessControlModule';
+import { ValidateLabelBlockingUseCase } from '@modules/BarcodeLabel/Application/UseCases/ValidateLabelBlockingUseCase';
+import { BarcodeLabelModule } from '@modules/BarcodeLabel/BarcodeLabelModule';
 import {
   CORE_FLOW_REPOSITORY,
   ICoreFlowRepository,
@@ -65,6 +67,7 @@ import {
   IPickReleaseRepository,
   PICK_RELEASE_REPOSITORY,
 } from '@modules/Outbound/Application/Interfaces/IPickReleaseRepository';
+import { IPackingRepository, PACKING_REPOSITORY } from '@modules/Outbound/Application/Interfaces/IPackingRepository';
 import {
   IOutboundOrderRepository,
   OUTBOUND_ORDER_REPOSITORY,
@@ -74,6 +77,7 @@ import { OutboundOrderLifecycleService } from '@modules/Outbound/Application/Ser
 import { PickReleaseLifecycleService } from '@modules/Outbound/Application/Services/PickReleaseLifecycleService';
 import { PickTaskConfirmationService } from '@modules/Outbound/Application/Services/PickTaskConfirmationService';
 import { PickTaskExceptionService } from '@modules/Outbound/Application/Services/PickTaskExceptionService';
+import { PackingLifecycleService } from '@modules/Outbound/Application/Services/PackingLifecycleService';
 import {
   AllocateOutboundOrderUseCase,
   GetAllocationUseCase,
@@ -98,17 +102,31 @@ import {
   ReportPickExceptionUseCase,
   RequestPickSubstitutionUseCase,
 } from '@modules/Outbound/Application/UseCases/PickTaskExceptionUseCases';
+import {
+  ClosePackageUseCase,
+  CreatePackageUseCase,
+  GetPackageUseCase,
+  ListPackagesUseCase,
+  MarkPackageReadyForStagingUseCase,
+  RecordPackCheckUseCase,
+  StartPackSessionUseCase,
+} from '@modules/Outbound/Application/UseCases/PackingUseCases';
 import { AllocationLineOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/AllocationLineOrmEntity';
 import { AllocationOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/AllocationOrmEntity';
 import { OutboundOrderLineOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/OutboundOrderLineOrmEntity';
 import { OutboundOrderOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/OutboundOrderOrmEntity';
+import { PackageContentOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PackageContentOrmEntity';
+import { PackageOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PackageOrmEntity';
+import { PackSessionOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PackSessionOrmEntity';
 import { PickReleaseOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PickReleaseOrmEntity';
 import { PickTaskOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PickTaskOrmEntity';
 import { AllocationInventoryRepository } from '@modules/Outbound/Infrastructure/Persistence/Repositories/AllocationInventoryRepository';
 import { AllocationRepository } from '@modules/Outbound/Infrastructure/Persistence/Repositories/AllocationRepository';
 import { OutboundOrderRepository } from '@modules/Outbound/Infrastructure/Persistence/Repositories/OutboundOrderRepository';
+import { PackingRepository } from '@modules/Outbound/Infrastructure/Persistence/Repositories/PackingRepository';
 import { PickReleaseRepository } from '@modules/Outbound/Infrastructure/Persistence/Repositories/PickReleaseRepository';
 import { OutboundOrderController } from '@modules/Outbound/Presentation/Controllers/OutboundOrderController';
+import { PackingController } from '@modules/Outbound/Presentation/Controllers/PackingController';
 import {
   MobilePickTaskController,
   PickTaskController,
@@ -123,6 +141,11 @@ import {
   TASK_EXECUTION_REPOSITORY,
 } from '@modules/TaskExecution/Application/Interfaces/ITaskExecutionRepository';
 import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule';
+import {
+  IWarehouseProfileRepository,
+  WAREHOUSE_PROFILE_REPOSITORY,
+} from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
+import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfileModule';
 
 @Module({
   imports: [
@@ -133,6 +156,9 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
       AllocationLineOrmEntity,
       PickReleaseOrmEntity,
       PickTaskOrmEntity,
+      PackSessionOrmEntity,
+      PackageOrmEntity,
+      PackageContentOrmEntity,
       InventoryBalanceOrmEntity,
     ]),
     AccessControlModule,
@@ -142,12 +168,15 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
     IntegrationModule,
     TaskExecutionModule,
     InventoryExecutionModule,
+    WarehouseProfileModule,
+    BarcodeLabelModule,
   ],
-  controllers: [OutboundOrderController, PickTaskController, MobilePickTaskController],
+  controllers: [OutboundOrderController, PickTaskController, MobilePickTaskController, PackingController],
   providers: [
     { provide: OUTBOUND_ORDER_REPOSITORY, useClass: OutboundOrderRepository },
     { provide: ALLOCATION_REPOSITORY, useClass: AllocationRepository },
     { provide: PICK_RELEASE_REPOSITORY, useClass: PickReleaseRepository },
+    { provide: PACKING_REPOSITORY, useClass: PackingRepository },
     { provide: ALLOCATION_INVENTORY_REPOSITORY, useClass: AllocationInventoryRepository },
     {
       provide: OutboundOrderLifecycleService,
@@ -407,6 +436,80 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
       inject: [PickTaskExceptionService],
     },
     {
+      provide: PackingLifecycleService,
+      useFactory: (
+        packing: IPackingRepository,
+        pickReleases: IPickReleaseRepository,
+        taskExecution: ITaskExecutionRepository,
+        profiles: IWarehouseProfileRepository,
+        exceptionCases: IExceptionCaseRepository,
+        controlExceptionCatalog: IControlExceptionCatalog,
+        reasonCatalog: IReasonCodeCatalog,
+        labelBlocking: ValidateLabelBlockingUseCase,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) =>
+        new PackingLifecycleService(
+          packing,
+          pickReleases,
+          taskExecution,
+          profiles,
+          exceptionCases,
+          controlExceptionCatalog,
+          reasonCatalog,
+          labelBlocking,
+          audited,
+          permissionChecker,
+        ),
+      inject: [
+        PACKING_REPOSITORY,
+        PICK_RELEASE_REPOSITORY,
+        TASK_EXECUTION_REPOSITORY,
+        WAREHOUSE_PROFILE_REPOSITORY,
+        EXCEPTION_CASE_REPOSITORY,
+        CONTROL_EXCEPTION_CATALOG,
+        REASON_CODE_CATALOG,
+        ValidateLabelBlockingUseCase,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
+    {
+      provide: ListPackagesUseCase,
+      useFactory: (service: PackingLifecycleService) => new ListPackagesUseCase(service),
+      inject: [PackingLifecycleService],
+    },
+    {
+      provide: GetPackageUseCase,
+      useFactory: (service: PackingLifecycleService) => new GetPackageUseCase(service),
+      inject: [PackingLifecycleService],
+    },
+    {
+      provide: StartPackSessionUseCase,
+      useFactory: (service: PackingLifecycleService) => new StartPackSessionUseCase(service),
+      inject: [PackingLifecycleService],
+    },
+    {
+      provide: RecordPackCheckUseCase,
+      useFactory: (service: PackingLifecycleService) => new RecordPackCheckUseCase(service),
+      inject: [PackingLifecycleService],
+    },
+    {
+      provide: CreatePackageUseCase,
+      useFactory: (service: PackingLifecycleService) => new CreatePackageUseCase(service),
+      inject: [PackingLifecycleService],
+    },
+    {
+      provide: ClosePackageUseCase,
+      useFactory: (service: PackingLifecycleService) => new ClosePackageUseCase(service),
+      inject: [PackingLifecycleService],
+    },
+    {
+      provide: MarkPackageReadyForStagingUseCase,
+      useFactory: (service: PackingLifecycleService) => new MarkPackageReadyForStagingUseCase(service),
+      inject: [PackingLifecycleService],
+    },
+    {
       provide: ReleaseOutboundOrderUseCase,
       useFactory: (lifecycle: PickReleaseLifecycleService) => new ReleaseOutboundOrderUseCase(lifecycle),
       inject: [PickReleaseLifecycleService],
@@ -422,6 +525,6 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
       inject: [PickReleaseLifecycleService],
     },
   ],
-  exports: [OUTBOUND_ORDER_REPOSITORY, ALLOCATION_REPOSITORY, PICK_RELEASE_REPOSITORY],
+  exports: [OUTBOUND_ORDER_REPOSITORY, ALLOCATION_REPOSITORY, PICK_RELEASE_REPOSITORY, PACKING_REPOSITORY],
 })
 export class OutboundModule {}

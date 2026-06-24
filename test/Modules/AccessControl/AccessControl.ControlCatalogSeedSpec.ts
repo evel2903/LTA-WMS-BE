@@ -20,7 +20,12 @@ import {
 
 const REQUIRED_EX_CODES = ['CTRL-EX-01', 'CTRL-EX-02', 'CTRL-EX-03', 'CTRL-EX-04', 'CTRL-EX-05', 'CTRL-EX-08'];
 const DEFERRED_V1PLUS_EX_CODES = ['CTRL-EX-06', 'CTRL-EX-07', 'CTRL-EX-09'];
-const V1_EX_CODES = ['CTRL-V1-INVENTORY-RECONCILIATION', 'CTRL-V1-PICK-EXCEPTION', 'CTRL-V1-PICK-SUBSTITUTION'];
+const V1_EX_CODES = [
+  'CTRL-V1-INVENTORY-RECONCILIATION',
+  'CTRL-V1-PICK-EXCEPTION',
+  'CTRL-V1-PICK-SUBSTITUTION',
+  'CTRL-V1-PACK-CHECK-MISMATCH',
+];
 const DOC09_EX_CODES = [...REQUIRED_EX_CODES, ...DEFERRED_V1PLUS_EX_CODES];
 const ALL_EX_CODES = [...DOC09_EX_CODES, ...V1_EX_CODES];
 const ALL_VAL_CODES = Array.from({ length: 10 }, (_, i) => `RBAC-VAL-${String(i + 1).padStart(2, '0')}`);
@@ -75,6 +80,12 @@ describe('SeedControlExceptionCatalog (C8 AC2 / AC4)', () => {
     expect(v1PickSubstitution!.EvidenceRequired).toBe(true);
     expect(v1PickSubstitution!.ApprovalRequired).toBe(true);
     expect(v1PickSubstitution!.ImplementationStatus).toBe(CatalogImplementationStatus.Implemented);
+
+    const v1PackCheckMismatch = await repo.FindByCode('CTRL-V1-PACK-CHECK-MISMATCH');
+    expect(v1PackCheckMismatch!.ReasonRequired).toBe(true);
+    expect(v1PackCheckMismatch!.EvidenceRequired).toBe(true);
+    expect(v1PackCheckMismatch!.ApprovalRequired).toBe(false);
+    expect(v1PackCheckMismatch!.ImplementationStatus).toBe(CatalogImplementationStatus.Implemented);
   });
 
   it('is idempotent (re-run keeps expected rows, no duplicates)', async () => {
@@ -224,12 +235,14 @@ describe('ControlExceptionCatalog.ValidateExceptionType (C8 AC5 — C9 contract)
     expect(entry.Category).toBe(ControlExceptionCategory.ManualDataFix);
   });
 
-  it('returns the entries for the V1 pick exception and substitution codes', async () => {
+  it('returns the entries for the V1 pick exception, substitution and pack mismatch codes', async () => {
     const catalog = await buildCatalog();
     const pickException = await catalog.ValidateExceptionType('CTRL-V1-PICK-EXCEPTION');
     const pickSubstitution = await catalog.ValidateExceptionType('CTRL-V1-PICK-SUBSTITUTION');
+    const packMismatch = await catalog.ValidateExceptionType('CTRL-V1-PACK-CHECK-MISMATCH');
     expect(pickException.Code).toBe('CTRL-V1-PICK-EXCEPTION');
     expect(pickSubstitution.Code).toBe('CTRL-V1-PICK-SUBSTITUTION');
+    expect(packMismatch.Code).toBe('CTRL-V1-PACK-CHECK-MISMATCH');
   });
 
   it('throws BusinessRuleException for an unknown code', async () => {
