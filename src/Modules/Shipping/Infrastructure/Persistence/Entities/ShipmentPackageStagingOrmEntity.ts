@@ -2,7 +2,10 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, UpdateDateColum
 
 @Index('UQ_shipping_package_staging_package', ['PackageId'], { unique: true })
 @Index('UQ_shipping_package_staging_stage_idempotency', ['StageIdempotencyKey'], { unique: true })
+@Index('UQ_shipping_package_staging_loading_idempotency', ['LoadingIdempotencyKey'], { unique: true })
+@Index('UQ_shipping_package_staging_confirm_idempotency', ['ShipmentConfirmIdempotencyKey'], { unique: true })
 @Index('IDX_shipping_package_staging_order_status', ['OutboundOrderId', 'Status'])
+@Index('IDX_shipping_package_staging_shipment_status', ['ShipmentReference', 'Status'])
 @Index('IDX_shipping_package_staging_owner_warehouse', ['OwnerId', 'WarehouseId'])
 @Entity({ name: 'shipping_package_staging' })
 export class ShipmentPackageStagingOrmEntity {
@@ -96,6 +99,18 @@ export class ShipmentPackageStagingOrmEntity {
   @Column({ name: 'truck_payload_fingerprint', type: 'varchar', length: 64, nullable: true })
   public TruckPayloadFingerprint!: string | null;
 
+  @Column({ name: 'loading_idempotency_key', type: 'varchar', length: 180, nullable: true })
+  public LoadingIdempotencyKey!: string | null;
+
+  @Column({ name: 'loading_payload_fingerprint', type: 'varchar', length: 64, nullable: true })
+  public LoadingPayloadFingerprint!: string | null;
+
+  @Column({ name: 'shipment_confirm_idempotency_key', type: 'varchar', length: 180, nullable: true })
+  public ShipmentConfirmIdempotencyKey!: string | null;
+
+  @Column({ name: 'shipment_confirm_payload_fingerprint', type: 'varchar', length: 64, nullable: true })
+  public ShipmentConfirmPayloadFingerprint!: string | null;
+
   @Column({ name: 'reason_code', type: 'varchar', length: 80, nullable: true })
   public ReasonCode!: string | null;
 
@@ -125,6 +140,27 @@ export class ShipmentPackageStagingOrmEntity {
 
   @Column({ name: 'truck_assigned_by', type: 'char', length: 36, nullable: true })
   public TruckAssignedBy!: string | null;
+
+  @Column({ name: 'load_reference', type: 'varchar', length: 120, nullable: true })
+  public LoadReference!: string | null;
+
+  @Column({ name: 'loaded_at', type: 'timestamptz', nullable: true })
+  public LoadedAt!: Date | null;
+
+  @Column({ name: 'loaded_by', type: 'char', length: 36, nullable: true })
+  public LoadedBy!: string | null;
+
+  @Column({ name: 'shipment_confirmed_at', type: 'timestamptz', nullable: true })
+  public ShipmentConfirmedAt!: Date | null;
+
+  @Column({ name: 'shipment_confirmed_by', type: 'char', length: 36, nullable: true })
+  public ShipmentConfirmedBy!: string | null;
+
+  @Column({ name: 'loading_outbox_message_id', type: 'char', length: 36, nullable: true })
+  public LoadingOutboxMessageId!: string | null;
+
+  @Column({ name: 'shipment_confirm_outbox_message_id', type: 'char', length: 36, nullable: true })
+  public ShipmentConfirmOutboxMessageId!: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   public CreatedAt!: Date;

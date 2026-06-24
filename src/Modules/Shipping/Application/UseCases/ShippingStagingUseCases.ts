@@ -2,7 +2,9 @@ import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditConte
 import {
   AssignDockDto,
   AssignTruckDto,
+  ConfirmShipmentDto,
   ListShipmentPackageStagingDto,
+  ScanLoadingDto,
   StagePackageDto,
 } from '@modules/Shipping/Application/DTOs/ShippingStagingDto';
 import { ShippingStagingLifecycleService } from '@modules/Shipping/Application/Services/ShippingStagingLifecycleService';
@@ -44,5 +46,21 @@ export class AssignTruckUseCase {
 
   public async Execute(id: string, request: AssignTruckDto, context: AuditContext) {
     return this.lifecycle.AssignTruck(id, request, context);
+  }
+}
+
+export class ScanLoadingUseCase {
+  constructor(private readonly lifecycle: ShippingStagingLifecycleService) {}
+
+  public async Execute(id: string, request: ScanLoadingDto, context: AuditContext) {
+    return this.lifecycle.ScanLoading(id, request, context);
+  }
+}
+
+export class ConfirmShipmentUseCase {
+  constructor(private readonly lifecycle: ShippingStagingLifecycleService) {}
+
+  public async Execute(id: string, request: ConfirmShipmentDto, context: AuditContext) {
+    return this.lifecycle.ConfirmShipment(id, request, context);
   }
 }

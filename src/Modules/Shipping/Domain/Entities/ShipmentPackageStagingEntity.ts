@@ -31,6 +31,10 @@ export class ShipmentPackageStagingEntity {
   public DockPayloadFingerprint: string | null;
   public TruckIdempotencyKey: string | null;
   public TruckPayloadFingerprint: string | null;
+  public LoadingIdempotencyKey: string | null;
+  public LoadingPayloadFingerprint: string | null;
+  public ShipmentConfirmIdempotencyKey: string | null;
+  public ShipmentConfirmPayloadFingerprint: string | null;
   public ReasonCode: string | null;
   public ReasonCodeId: string | null;
   public ReasonNote: string | null;
@@ -41,6 +45,13 @@ export class ShipmentPackageStagingEntity {
   public DockAssignedBy: string | null;
   public TruckAssignedAt: Date | null;
   public TruckAssignedBy: string | null;
+  public LoadReference: string | null;
+  public LoadedAt: Date | null;
+  public LoadedBy: string | null;
+  public ShipmentConfirmedAt: Date | null;
+  public ShipmentConfirmedBy: string | null;
+  public LoadingOutboxMessageId: string | null;
+  public ShipmentConfirmOutboxMessageId: string | null;
   public CreatedAt: Date;
   public UpdatedAt: Date;
   public CreatedBy: string | null;
@@ -77,6 +88,10 @@ export class ShipmentPackageStagingEntity {
     DockPayloadFingerprint?: string | null;
     TruckIdempotencyKey?: string | null;
     TruckPayloadFingerprint?: string | null;
+    LoadingIdempotencyKey?: string | null;
+    LoadingPayloadFingerprint?: string | null;
+    ShipmentConfirmIdempotencyKey?: string | null;
+    ShipmentConfirmPayloadFingerprint?: string | null;
     ReasonCode?: string | null;
     ReasonCodeId?: string | null;
     ReasonNote?: string | null;
@@ -87,6 +102,13 @@ export class ShipmentPackageStagingEntity {
     DockAssignedBy?: string | null;
     TruckAssignedAt?: Date | null;
     TruckAssignedBy?: string | null;
+    LoadReference?: string | null;
+    LoadedAt?: Date | null;
+    LoadedBy?: string | null;
+    ShipmentConfirmedAt?: Date | null;
+    ShipmentConfirmedBy?: string | null;
+    LoadingOutboxMessageId?: string | null;
+    ShipmentConfirmOutboxMessageId?: string | null;
     CreatedAt: Date;
     UpdatedAt: Date;
     CreatedBy?: string | null;
@@ -122,6 +144,10 @@ export class ShipmentPackageStagingEntity {
     this.DockPayloadFingerprint = params.DockPayloadFingerprint ?? null;
     this.TruckIdempotencyKey = params.TruckIdempotencyKey ?? null;
     this.TruckPayloadFingerprint = params.TruckPayloadFingerprint ?? null;
+    this.LoadingIdempotencyKey = params.LoadingIdempotencyKey ?? null;
+    this.LoadingPayloadFingerprint = params.LoadingPayloadFingerprint ?? null;
+    this.ShipmentConfirmIdempotencyKey = params.ShipmentConfirmIdempotencyKey ?? null;
+    this.ShipmentConfirmPayloadFingerprint = params.ShipmentConfirmPayloadFingerprint ?? null;
     this.ReasonCode = params.ReasonCode ?? null;
     this.ReasonCodeId = params.ReasonCodeId ?? null;
     this.ReasonNote = params.ReasonNote ?? null;
@@ -132,6 +158,13 @@ export class ShipmentPackageStagingEntity {
     this.DockAssignedBy = params.DockAssignedBy ?? null;
     this.TruckAssignedAt = params.TruckAssignedAt ?? null;
     this.TruckAssignedBy = params.TruckAssignedBy ?? null;
+    this.LoadReference = params.LoadReference ?? null;
+    this.LoadedAt = params.LoadedAt ?? null;
+    this.LoadedBy = params.LoadedBy ?? null;
+    this.ShipmentConfirmedAt = params.ShipmentConfirmedAt ?? null;
+    this.ShipmentConfirmedBy = params.ShipmentConfirmedBy ?? null;
+    this.LoadingOutboxMessageId = params.LoadingOutboxMessageId ?? null;
+    this.ShipmentConfirmOutboxMessageId = params.ShipmentConfirmOutboxMessageId ?? null;
     this.CreatedAt = params.CreatedAt;
     this.UpdatedAt = params.UpdatedAt;
     this.CreatedBy = params.CreatedBy ?? null;
@@ -139,6 +172,12 @@ export class ShipmentPackageStagingEntity {
   }
 
   public RefreshStatus(): void {
+    if (
+      this.Status === ShipmentPackageStagingStatus.Loaded ||
+      this.Status === ShipmentPackageStagingStatus.ShipmentConfirmed
+    ) {
+      return;
+    }
     if (this.DockDoorId || this.DockDoorCode) {
       this.Status = ShipmentPackageStagingStatus.DockAssigned;
     }

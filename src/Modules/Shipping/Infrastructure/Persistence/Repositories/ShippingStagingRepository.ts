@@ -56,6 +56,43 @@ export class ShippingStagingRepository implements IShippingStagingRepository {
     return entity ? ShippingStagingOrmMapper.ToDomain(entity) : null;
   }
 
+  public async FindByLoadingIdempotencyKey(
+    key: string,
+    manager?: EntityManager,
+  ): Promise<ShipmentPackageStagingEntity | null> {
+    const entity = await this.Repo(manager).findOne({ where: { LoadingIdempotencyKey: key } });
+    return entity ? ShippingStagingOrmMapper.ToDomain(entity) : null;
+  }
+
+  public async FindByShipmentConfirmIdempotencyKey(
+    key: string,
+    manager?: EntityManager,
+  ): Promise<ShipmentPackageStagingEntity | null> {
+    const entity = await this.Repo(manager).findOne({ where: { ShipmentConfirmIdempotencyKey: key } });
+    return entity ? ShippingStagingOrmMapper.ToDomain(entity) : null;
+  }
+
+  public async ListByShipmentReference(
+    shipmentReference: string,
+    scope: {
+      WarehouseId?: string | null;
+      OwnerId?: string | null;
+      OutboundOrderId?: string | null;
+    } = {},
+    manager?: EntityManager,
+  ): Promise<ShipmentPackageStagingEntity[]> {
+    const where: FindOptionsWhere<ShipmentPackageStagingOrmEntity> = { ShipmentReference: shipmentReference };
+    if (scope.WarehouseId) where.WarehouseId = scope.WarehouseId;
+    if (scope.OwnerId) where.OwnerId = scope.OwnerId;
+    if (scope.OutboundOrderId) where.OutboundOrderId = scope.OutboundOrderId;
+    const items = await this.Repo(manager).find({
+      where,
+      lock: manager ? { mode: 'pessimistic_write' } : undefined,
+      order: { CreatedAt: 'ASC' },
+    });
+    return items.map(ShippingStagingOrmMapper.ToDomain);
+  }
+
   public async List(
     skip: number,
     take: number,

@@ -18,13 +18,18 @@ import { WorkflowMilestoneEntity } from '@modules/CoreFlow/Domain/Entities/Workf
 import { CoreFlowStageCode } from '@modules/CoreFlow/Domain/Enums/CoreFlowStageCode';
 import { CoreFlowStepCode } from '@modules/CoreFlow/Domain/Enums/CoreFlowStepCode';
 import { WorkflowMilestoneStatus } from '@modules/CoreFlow/Domain/Enums/WorkflowMilestoneStatus';
+import { IIntegrationRepository } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
+import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/OutboxMessageEntity';
+import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
 import { IPackingRepository } from '@modules/Outbound/Application/Interfaces/IPackingRepository';
 import { PackageEntity } from '@modules/Outbound/Domain/Entities/PackageEntity';
 import { PackageStatus } from '@modules/Outbound/Domain/Enums/PackageStatus';
 import {
   AssignDockDto,
   AssignTruckDto,
+  ConfirmShipmentDto,
   ListShipmentPackageStagingDto,
+  ScanLoadingDto,
   StagePackageDto,
 } from '@modules/Shipping/Application/DTOs/ShippingStagingDto';
 import { IShippingStagingRepository } from '@modules/Shipping/Application/Interfaces/IShippingStagingRepository';
@@ -36,6 +41,7 @@ const DEFAULT_REASON_CODE = 'RC-V1-DISCREPANCY';
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
 const STAGED_INVENTORY_STATUS = 'STAGED';
+const LOADED_INVENTORY_STATUS = 'LOADED';
 
 interface NormalizedStagePackage extends StagePackageDto {
   PackageId: string;
@@ -70,11 +76,34 @@ interface NormalizedAssignTruck extends AssignTruckDto {
   IdempotencyKey: string;
 }
 
+interface NormalizedScanLoading extends ScanLoadingDto {
+  ScannedPackageId: string | null;
+  ScannedPackageCode: string | null;
+  ShipmentReference: string | null;
+  LoadReference: string | null;
+  TruckReference: string | null;
+  VehicleNumber: string | null;
+  ReasonCode: string;
+  ReasonNote: string | null;
+  EvidenceRefs: string[];
+  IdempotencyKey: string;
+}
+
+interface NormalizedConfirmShipment extends ConfirmShipmentDto {
+  ShipmentReference: string | null;
+  RequireFullLoad: boolean;
+  ReasonCode: string;
+  ReasonNote: string | null;
+  EvidenceRefs: string[];
+  IdempotencyKey: string;
+}
+
 export class ShippingStagingLifecycleService {
   constructor(
     private readonly stagings: IShippingStagingRepository,
     private readonly packing: IPackingRepository,
     private readonly coreFlows: ICoreFlowRepository,
+    private readonly integrations: IIntegrationRepository,
     private readonly reasonCatalog: IReasonCodeCatalog,
     private readonly audited: AuditedTransaction,
     private readonly permissionChecker?: IPermissionChecker,
@@ -170,6 +199,16 @@ export class ShippingStagingLifecycleService {
   }
 
   private BuildDockTruckAuditAfterJson(
+    staging: ShipmentPackageStagingEntity,
+    coreFlowMilestone: Record<string, unknown>,
+  ): Record<string, unknown> {
+    return {
+      Staging: ShippingStagingDtoMapper.ToDto(staging),
+      ...this.BuildCoreFlowAuditMetadata(coreFlowMilestone),
+    };
+  }
+
+  private BuildLoadingAuditAfterJson(
     staging: ShipmentPackageStagingEntity,
     coreFlowMilestone: Record<string, unknown>,
   ): Record<string, unknown> {
@@ -453,6 +492,232 @@ export class ShippingStagingLifecycleService {
     return ShippingStagingDtoMapper.ToDto(saved);
   }
 
+  public async ScanLoading(id: string, request: ScanLoadingDto, context: AuditContext) {
+    const normalized = this.NormalizeScanLoading(request);
+    this.AssertActor(context);
+    const staging = await this.LoadStaging(id);
+    await this.AssertPermission(context.ActorUserId, ActionCode.Update, staging);
+    const fingerprint = this.Hash({
+      Operation: 'ScanLoading',
+      StagingId: staging.Id,
+      ScannedPackageId: normalized.ScannedPackageId,
+      ScannedPackageCode: normalized.ScannedPackageCode,
+      ShipmentReference: normalized.ShipmentReference,
+      LoadReference: normalized.LoadReference,
+      TruckReference: normalized.TruckReference,
+      VehicleNumber: normalized.VehicleNumber,
+      ReasonCode: normalized.ReasonCode,
+      ReasonNote: normalized.ReasonNote,
+      EvidenceRefs: normalized.EvidenceRefs,
+    });
+    if (staging.LoadingIdempotencyKey === normalized.IdempotencyKey) {
+      this.AssertSameFingerprint(
+        staging.LoadingPayloadFingerprint,
+        fingerprint,
+        'Loading idempotency key already used',
+      );
+      return ShippingStagingDtoMapper.ToDto(staging);
+    }
+    const duplicate = await this.stagings.FindByLoadingIdempotencyKey(normalized.IdempotencyKey);
+    if (duplicate && duplicate.Id !== staging.Id) {
+      throw new ConflictException('Loading idempotency key already used', { StagingId: duplicate.Id });
+    }
+    await this.AssertLoadingScanMatches(context, staging, normalized);
+    await this.AssertReadyForLoadingWithAudit(context, staging);
+    const reason = await this.ValidateReason(normalized.ReasonCode, ActionCode.Update, normalized.EvidenceRefs);
+
+    let saved: ShipmentPackageStagingEntity;
+    try {
+      saved = await this.audited.Run<ShipmentPackageStagingEntity>(async (manager) => {
+        const locked = await this.stagings.FindByIdForUpdate(staging.Id, manager);
+        if (!locked) throw new NotFoundException('Package staging not found', { StagingId: staging.Id });
+        if (locked.LoadingIdempotencyKey === normalized.IdempotencyKey) {
+          this.AssertSameFingerprint(
+            locked.LoadingPayloadFingerprint,
+            fingerprint,
+            'Loading idempotency key already used',
+          );
+          return {
+            result: locked,
+            entry: this.BuildDuplicateAudit(context, locked, 'LoadingScan'),
+          };
+        }
+        const concurrentDuplicate = await this.stagings.FindByLoadingIdempotencyKey(normalized.IdempotencyKey, manager);
+        if (concurrentDuplicate && concurrentDuplicate.Id !== locked.Id) {
+          throw new ConflictException('Loading idempotency key already used', {
+            StagingId: concurrentDuplicate.Id,
+          });
+        }
+        await this.AssertReadyForLoadingWithAudit(context, locked);
+        locked.LoadReference = normalized.LoadReference ?? locked.LoadReference;
+        locked.LoadingIdempotencyKey = normalized.IdempotencyKey;
+        locked.LoadingPayloadFingerprint = fingerprint;
+        locked.InventoryStatusCode = LOADED_INVENTORY_STATUS;
+        locked.Status = ShipmentPackageStagingStatus.Loaded;
+        locked.ReasonCode = normalized.ReasonCode;
+        locked.ReasonCodeId = reason.ReasonCodeId;
+        locked.ReasonNote = normalized.ReasonNote;
+        locked.EvidenceRefs = normalized.EvidenceRefs;
+        locked.LoadedAt = new Date();
+        locked.LoadedBy = context.ActorUserId;
+        locked.LoadingOutboxMessageId = randomUUID();
+        locked.UpdatedAt = new Date();
+        locked.UpdatedBy = context.ActorUserId;
+        const updated = await this.stagings.Update(locked, manager);
+        await this.integrations.CreateOutboxMessage(
+          this.BuildOutboxMessage(
+            updated.LoadingOutboxMessageId,
+            'PackageLoaded',
+            updated,
+            normalized.IdempotencyKey,
+            context,
+          ),
+          manager,
+        );
+        const coreFlowMilestone = await this.RecordLoadingMilestone(updated, context, manager, 'PackageLoaded');
+        return {
+          result: updated,
+          entry: this.BuildMutationAudit(
+            context,
+            updated,
+            ActionCode.Update,
+            reason.ReasonCodeId,
+            normalized,
+            coreFlowMilestone,
+          ),
+        };
+      });
+    } catch (error) {
+      const duplicate = await this.LoadLoadingDuplicateAfterUniqueViolation(
+        error,
+        normalized.IdempotencyKey,
+        fingerprint,
+        staging.Id,
+      );
+      if (duplicate) return ShippingStagingDtoMapper.ToDto(duplicate);
+      throw error;
+    }
+    return ShippingStagingDtoMapper.ToDto(saved);
+  }
+
+  public async ConfirmShipment(id: string, request: ConfirmShipmentDto, context: AuditContext) {
+    const normalized = this.NormalizeConfirmShipment(request);
+    this.AssertActor(context);
+    const staging = await this.LoadStaging(id);
+    await this.AssertPermission(context.ActorUserId, ActionCode.Update, staging);
+    const fingerprint = this.Hash({
+      Operation: 'ConfirmShipment',
+      StagingId: staging.Id,
+      ShipmentReference: normalized.ShipmentReference,
+      RequireFullLoad: normalized.RequireFullLoad,
+      ReasonCode: normalized.ReasonCode,
+      ReasonNote: normalized.ReasonNote,
+      EvidenceRefs: normalized.EvidenceRefs,
+    });
+    if (staging.ShipmentConfirmIdempotencyKey === normalized.IdempotencyKey) {
+      this.AssertSameFingerprint(
+        staging.ShipmentConfirmPayloadFingerprint,
+        fingerprint,
+        'Shipment confirmation idempotency key already used',
+      );
+      return ShippingStagingDtoMapper.ToDto(staging);
+    }
+    const duplicate = await this.stagings.FindByShipmentConfirmIdempotencyKey(normalized.IdempotencyKey);
+    if (duplicate && duplicate.Id !== staging.Id) {
+      throw new ConflictException('Shipment confirmation idempotency key already used', { StagingId: duplicate.Id });
+    }
+    await this.AssertShipmentConfirmationMatches(context, staging, normalized);
+    await this.AssertLoadedForConfirmationWithAudit(context, staging);
+    await this.AssertFullLoadComplete(context, staging, normalized.RequireFullLoad);
+    const reason = await this.ValidateReason(normalized.ReasonCode, ActionCode.Update, normalized.EvidenceRefs);
+
+    let saved: ShipmentPackageStagingEntity;
+    try {
+      saved = await this.audited.Run<ShipmentPackageStagingEntity>(async (manager) => {
+        const locked = await this.stagings.FindByIdForUpdate(staging.Id, manager);
+        if (!locked) throw new NotFoundException('Package staging not found', { StagingId: staging.Id });
+        if (locked.ShipmentConfirmIdempotencyKey === normalized.IdempotencyKey) {
+          this.AssertSameFingerprint(
+            locked.ShipmentConfirmPayloadFingerprint,
+            fingerprint,
+            'Shipment confirmation idempotency key already used',
+          );
+          return {
+            result: locked,
+            entry: this.BuildDuplicateAudit(context, locked, 'ShipmentConfirmation'),
+          };
+        }
+        const concurrentDuplicate = await this.stagings.FindByShipmentConfirmIdempotencyKey(
+          normalized.IdempotencyKey,
+          manager,
+        );
+        if (concurrentDuplicate && concurrentDuplicate.Id !== locked.Id) {
+          throw new ConflictException('Shipment confirmation idempotency key already used', {
+            StagingId: concurrentDuplicate.Id,
+          });
+        }
+        await this.AssertLoadedForConfirmationWithAudit(context, locked);
+        const cohort = await this.AssertFullLoadComplete(context, locked, normalized.RequireFullLoad, manager);
+        const now = new Date();
+        const outboxMessageId = randomUUID();
+        let updated = locked;
+        for (const item of cohort) {
+          if (item.Status !== ShipmentPackageStagingStatus.ShipmentConfirmed) {
+            item.Status = ShipmentPackageStagingStatus.ShipmentConfirmed;
+            item.ReasonCode = normalized.ReasonCode;
+            item.ReasonCodeId = reason.ReasonCodeId;
+            item.ReasonNote = normalized.ReasonNote;
+            item.EvidenceRefs = normalized.EvidenceRefs;
+            item.ShipmentConfirmedAt = now;
+            item.ShipmentConfirmedBy = context.ActorUserId;
+            item.UpdatedAt = now;
+            item.UpdatedBy = context.ActorUserId;
+          }
+          if (item.Id === locked.Id) {
+            item.ShipmentConfirmIdempotencyKey = normalized.IdempotencyKey;
+            item.ShipmentConfirmPayloadFingerprint = fingerprint;
+            item.ShipmentConfirmOutboxMessageId = outboxMessageId;
+            updated = await this.stagings.Update(item, manager);
+          } else if (item.Status === ShipmentPackageStagingStatus.ShipmentConfirmed) {
+            await this.stagings.Update(item, manager);
+          }
+        }
+        await this.integrations.CreateOutboxMessage(
+          this.BuildOutboxMessage(
+            updated.ShipmentConfirmOutboxMessageId,
+            'ShipmentConfirmed',
+            updated,
+            normalized.IdempotencyKey,
+            context,
+          ),
+          manager,
+        );
+        const coreFlowMilestone = await this.RecordLoadingMilestone(updated, context, manager, 'ShipmentConfirmed');
+        return {
+          result: updated,
+          entry: this.BuildMutationAudit(
+            context,
+            updated,
+            ActionCode.Update,
+            reason.ReasonCodeId,
+            normalized,
+            coreFlowMilestone,
+          ),
+        };
+      });
+    } catch (error) {
+      const duplicate = await this.LoadShipmentConfirmDuplicateAfterUniqueViolation(
+        error,
+        normalized.IdempotencyKey,
+        fingerprint,
+        staging.Id,
+      );
+      if (duplicate) return ShippingStagingDtoMapper.ToDto(duplicate);
+      throw error;
+    }
+    return ShippingStagingDtoMapper.ToDto(saved);
+  }
+
   private async ResolveCoreFlow(pack: PackageEntity) {
     if (!pack.WarehouseCode) return null;
     return this.coreFlows.FindInstanceByBusinessReference(
@@ -482,6 +747,46 @@ export class ShippingStagingLifecycleService {
     });
   }
 
+  private BuildOutboxMessage(
+    outboxId: string | null,
+    eventType: 'PackageLoaded' | 'ShipmentConfirmed',
+    staging: ShipmentPackageStagingEntity,
+    idempotencyKey: string,
+    context: AuditContext,
+  ): OutboxMessageEntity {
+    const idempotencyDigest = this.Hash({
+      EventType: eventType,
+      StagingId: staging.Id,
+      IdempotencyKey: idempotencyKey,
+    }).slice(0, 24);
+    return new OutboxMessageEntity({
+      Id: outboxId ?? randomUUID(),
+      MessageId: `${eventType}:${staging.Id}:${idempotencyDigest}`,
+      EventType: eventType,
+      Version: '1.0',
+      BusinessReference: staging.ShipmentReference ?? staging.OutboundOrderId,
+      SourceSystem: 'LTA-WMS',
+      TargetSystem: 'INTEGRATION',
+      WarehouseContext: staging.WarehouseCode ?? staging.WarehouseId ?? 'UNRESOLVED',
+      OwnerContext: staging.OwnerCode ?? staging.OwnerId,
+      EventTime:
+        eventType === 'PackageLoaded' ? (staging.LoadedAt ?? new Date()) : (staging.ShipmentConfirmedAt ?? new Date()),
+      CorrelationId: context.CorrelationId ?? staging.OutboundOrderId,
+      CausationId: staging.Id,
+      Payload: {
+        EventName: eventType,
+        Staging: ShippingStagingDtoMapper.ToDto(staging),
+        PackageId: staging.PackageId,
+        PackageCode: staging.PackageCode,
+        ShipmentReference: staging.ShipmentReference,
+        LoadReference: staging.LoadReference,
+        InventoryStatusCode: staging.InventoryStatusCode,
+      },
+      Status: OutboxMessageStatus.Pending,
+      CreatedBy: context.ActorUserId ?? null,
+    });
+  }
+
   private async RecordDockTruckMilestone(
     staging: ShipmentPackageStagingEntity,
     context: AuditContext,
@@ -500,6 +805,38 @@ export class ShippingStagingLifecycleService {
             DockDoorCode: staging.DockDoorCode,
             TruckReference: staging.TruckReference,
             VehicleNumber: staging.VehicleNumber,
+            Status: staging.Status,
+          },
+          context.ActorUserId,
+        ),
+        manager,
+      );
+      return { Status: 'Recorded', CoreFlowInstanceId: staging.CoreFlowInstanceId };
+    } catch (error) {
+      return this.BuildCoreFlowMilestoneMetadata({ Id: staging.CoreFlowInstanceId }, 'FailedNonBlocking', error);
+    }
+  }
+
+  private async RecordLoadingMilestone(
+    staging: ShipmentPackageStagingEntity,
+    context: AuditContext,
+    manager: Parameters<ICoreFlowRepository['CreateMilestone']>[1],
+    eventName: 'PackageLoaded' | 'ShipmentConfirmed',
+  ): Promise<Record<string, unknown>> {
+    if (!staging.CoreFlowInstanceId) return { Status: 'UnresolvedNonBlocking' };
+    try {
+      await this.coreFlows.CreateMilestone(
+        this.BuildMilestone(
+          staging.CoreFlowInstanceId,
+          CoreFlowStepCode.LoadingConfirmed,
+          staging.InventoryStatusCode,
+          {
+            EventName: eventName,
+            StagingId: staging.Id,
+            PackageId: staging.PackageId,
+            PackageCode: staging.PackageCode,
+            ShipmentReference: staging.ShipmentReference,
+            LoadReference: staging.LoadReference,
             Status: staging.Status,
           },
           context.ActorUserId,
@@ -583,12 +920,41 @@ export class ShippingStagingLifecycleService {
     throw new BusinessRuleException(reason, details);
   }
 
+  private async FailLoadingWithAudit(
+    context: AuditContext,
+    staging: ShipmentPackageStagingEntity,
+    reason: string,
+    details: Record<string, unknown>,
+  ): Promise<never> {
+    await this.audited.Run(async () => ({
+      result: null,
+      entry: MergeAuditContext(context, {
+        Action: ActionCode.Update,
+        ObjectType: ObjectType.Shipment,
+        ObjectId: staging.Id,
+        ObjectCode: staging.StagingCode,
+        AfterJson: {
+          Decision: 'Blocked',
+          Reason: reason,
+          Staging: ShippingStagingDtoMapper.ToDto(staging),
+          ...details,
+        },
+        ReferenceType: 'LoadingScanGate',
+        ReferenceId: staging.Id,
+        WarehouseId: staging.WarehouseId,
+        OwnerId: staging.OwnerId,
+        Result: AuditResult.Failed,
+      }),
+    }));
+    throw new BusinessRuleException(reason, details);
+  }
+
   private BuildMutationAudit(
     context: AuditContext,
     staging: ShipmentPackageStagingEntity,
     action: ActionCode,
     reasonCodeId: string,
-    request: NormalizedAssignDock | NormalizedAssignTruck,
+    request: NormalizedAssignDock | NormalizedAssignTruck | NormalizedScanLoading | NormalizedConfirmShipment,
     coreFlowMilestone: Record<string, unknown>,
   ) {
     return MergeAuditContext(context, {
@@ -596,7 +962,7 @@ export class ShippingStagingLifecycleService {
       ObjectType: ObjectType.Shipment,
       ObjectId: staging.Id,
       ObjectCode: staging.StagingCode,
-      AfterJson: this.BuildDockTruckAuditAfterJson(staging, coreFlowMilestone),
+      AfterJson: this.BuildLoadingAuditAfterJson(staging, coreFlowMilestone),
       ReasonCodeId: reasonCodeId,
       ReasonNote: request.ReasonNote ?? request.ReasonCode,
       EvidenceRefs: request.EvidenceRefs,
@@ -626,9 +992,40 @@ export class ShippingStagingLifecycleService {
   private AssertStagingMutable(staging: ShipmentPackageStagingEntity): void {
     if (
       staging.Status === ShipmentPackageStagingStatus.Blocked ||
-      staging.Status === ShipmentPackageStagingStatus.ReadyForLoading
+      staging.Status === ShipmentPackageStagingStatus.ReadyForLoading ||
+      staging.Status === ShipmentPackageStagingStatus.Loaded ||
+      staging.Status === ShipmentPackageStagingStatus.ShipmentConfirmed
     ) {
       throw new BusinessRuleException('Package staging is blocked', { StagingId: staging.Id });
+    }
+  }
+
+  private async AssertReadyForLoadingWithAudit(
+    context: AuditContext,
+    staging: ShipmentPackageStagingEntity,
+  ): Promise<void> {
+    if (staging.Status !== ShipmentPackageStagingStatus.ReadyForLoading) {
+      await this.FailLoadingWithAudit(context, staging, 'Package staging is not ready for loading', {
+        StagingId: staging.Id,
+        Status: staging.Status,
+      });
+    }
+    if ((!staging.DockDoorId && !staging.DockDoorCode) || (!staging.TruckReference && !staging.VehicleNumber)) {
+      await this.FailLoadingWithAudit(context, staging, 'Dock and truck milestones are required before loading', {
+        StagingId: staging.Id,
+      });
+    }
+  }
+
+  private async AssertLoadedForConfirmationWithAudit(
+    context: AuditContext,
+    staging: ShipmentPackageStagingEntity,
+  ): Promise<void> {
+    if (staging.Status !== ShipmentPackageStagingStatus.Loaded) {
+      await this.FailLoadingWithAudit(context, staging, 'Package must be loaded before shipment confirmation', {
+        StagingId: staging.Id,
+        Status: staging.Status,
+      });
     }
   }
 
@@ -708,6 +1105,205 @@ export class ShippingStagingLifecycleService {
     }
     if (!normalized.IdempotencyKey) throw new BusinessRuleException('IdempotencyKey is required for truck assignment');
     return normalized;
+  }
+
+  private NormalizeScanLoading(request: ScanLoadingDto): NormalizedScanLoading {
+    const normalized = {
+      ...request,
+      ScannedPackageId: request.ScannedPackageId?.trim() || null,
+      ScannedPackageCode: request.ScannedPackageCode?.trim() || null,
+      ShipmentReference: request.ShipmentReference?.trim() || null,
+      LoadReference: request.LoadReference?.trim() || null,
+      TruckReference: request.TruckReference?.trim() || null,
+      VehicleNumber: request.VehicleNumber?.trim() || null,
+      ReasonCode: request.ReasonCode?.trim().toUpperCase() || DEFAULT_REASON_CODE,
+      ReasonNote: request.ReasonNote?.trim() || null,
+      EvidenceRefs: this.NormalizeEvidence(request.EvidenceRefs),
+      IdempotencyKey: request.IdempotencyKey?.trim() ?? '',
+    };
+    if (!normalized.ScannedPackageId && !normalized.ScannedPackageCode) {
+      throw new BusinessRuleException('ScannedPackageId or ScannedPackageCode is required');
+    }
+    if (!normalized.IdempotencyKey) throw new BusinessRuleException('IdempotencyKey is required for loading scan');
+    return normalized;
+  }
+
+  private NormalizeConfirmShipment(request: ConfirmShipmentDto): NormalizedConfirmShipment {
+    const normalized = {
+      ...request,
+      ShipmentReference: request.ShipmentReference?.trim() || null,
+      RequireFullLoad: request.RequireFullLoad !== false,
+      ReasonCode: request.ReasonCode?.trim().toUpperCase() || DEFAULT_REASON_CODE,
+      ReasonNote: request.ReasonNote?.trim() || null,
+      EvidenceRefs: this.NormalizeEvidence(request.EvidenceRefs),
+      IdempotencyKey: request.IdempotencyKey?.trim() ?? '',
+    };
+    if (!normalized.IdempotencyKey) {
+      throw new BusinessRuleException('IdempotencyKey is required for shipment confirmation');
+    }
+    return normalized;
+  }
+
+  private async AssertLoadingScanMatches(
+    context: AuditContext,
+    staging: ShipmentPackageStagingEntity,
+    request: NormalizedScanLoading,
+  ): Promise<void> {
+    if (request.ScannedPackageId && request.ScannedPackageId !== staging.PackageId) {
+      await this.FailLoadingWithAudit(context, staging, 'Scanned package does not match staging package', {
+        ScannedPackageId: request.ScannedPackageId,
+        ExpectedPackageId: staging.PackageId,
+      });
+    }
+    if (request.ScannedPackageCode && request.ScannedPackageCode !== staging.PackageCode) {
+      await this.FailLoadingWithAudit(context, staging, 'Scanned package does not match staging package', {
+        ScannedPackageCode: request.ScannedPackageCode,
+        ExpectedPackageCode: staging.PackageCode,
+      });
+    }
+    if (
+      request.ShipmentReference &&
+      staging.ShipmentReference &&
+      request.ShipmentReference !== staging.ShipmentReference
+    ) {
+      await this.FailLoadingWithAudit(context, staging, 'Scanned shipment does not match staging shipment', {
+        ScannedShipmentReference: request.ShipmentReference,
+        ExpectedShipmentReference: staging.ShipmentReference,
+      });
+    }
+    if (request.TruckReference && staging.TruckReference && request.TruckReference !== staging.TruckReference) {
+      await this.FailLoadingWithAudit(context, staging, 'Scanned truck does not match assigned truck', {
+        ScannedTruckReference: request.TruckReference,
+        ExpectedTruckReference: staging.TruckReference,
+      });
+    }
+    if (request.VehicleNumber && staging.VehicleNumber && request.VehicleNumber !== staging.VehicleNumber) {
+      await this.FailLoadingWithAudit(context, staging, 'Scanned vehicle does not match assigned vehicle', {
+        ScannedVehicleNumber: request.VehicleNumber,
+        ExpectedVehicleNumber: staging.VehicleNumber,
+      });
+    }
+  }
+
+  private async AssertShipmentConfirmationMatches(
+    context: AuditContext,
+    staging: ShipmentPackageStagingEntity,
+    request: NormalizedConfirmShipment,
+  ): Promise<void> {
+    if (
+      request.ShipmentReference &&
+      staging.ShipmentReference &&
+      request.ShipmentReference !== staging.ShipmentReference
+    ) {
+      await this.FailLoadingWithAudit(context, staging, 'Shipment confirmation does not match staging shipment', {
+        ConfirmedShipmentReference: request.ShipmentReference,
+        ExpectedShipmentReference: staging.ShipmentReference,
+      });
+    }
+  }
+
+  private async AssertFullLoadComplete(
+    context: AuditContext,
+    staging: ShipmentPackageStagingEntity,
+    requireFullLoad: boolean,
+    manager?: Parameters<IShippingStagingRepository['ListByShipmentReference']>[2],
+  ): Promise<ShipmentPackageStagingEntity[]> {
+    if (!requireFullLoad) return [staging];
+    if (!staging.ShipmentReference) {
+      await this.FailLoadingWithAudit(context, staging, 'ShipmentReference is required for full-load confirmation', {
+        StagingId: staging.Id,
+      });
+    }
+    const shipmentItems = await this.stagings.ListByShipmentReference(
+      staging.ShipmentReference!,
+      {
+        WarehouseId: staging.WarehouseId,
+        OwnerId: staging.OwnerId,
+        OutboundOrderId: staging.OutboundOrderId,
+      },
+      manager,
+    );
+    const missingItems = shipmentItems.filter(
+      (item) =>
+        item.Status !== ShipmentPackageStagingStatus.Loaded &&
+        item.Status !== ShipmentPackageStagingStatus.ShipmentConfirmed,
+    );
+    if (missingItems.length > 0) {
+      await this.FailLoadingWithAudit(
+        context,
+        staging,
+        'Full-load shipment confirmation is blocked by missing packages',
+        {
+          ShipmentReference: staging.ShipmentReference,
+          MissingStagingIds: missingItems.map((item) => item.Id),
+        },
+      );
+    }
+    return shipmentItems.length > 0 ? shipmentItems : [staging];
+  }
+
+  private async LoadLoadingDuplicateAfterUniqueViolation(
+    error: unknown,
+    idempotencyKey: string,
+    fingerprint: string,
+    stagingId: string,
+  ): Promise<ShipmentPackageStagingEntity | null> {
+    if (!this.IsUniqueViolation(error)) return null;
+    const duplicateByKey = await this.stagings.FindByLoadingIdempotencyKey(idempotencyKey);
+    if (duplicateByKey) {
+      if (duplicateByKey.Id !== stagingId) {
+        throw new ConflictException('Loading idempotency key already used', { StagingId: duplicateByKey.Id });
+      }
+      this.AssertSameFingerprint(
+        duplicateByKey.LoadingPayloadFingerprint,
+        fingerprint,
+        'Loading idempotency key already used',
+      );
+      return duplicateByKey;
+    }
+    const staging = await this.stagings.FindById(stagingId);
+    if (staging?.LoadingIdempotencyKey === idempotencyKey) {
+      this.AssertSameFingerprint(
+        staging.LoadingPayloadFingerprint,
+        fingerprint,
+        'Loading idempotency key already used',
+      );
+      return staging;
+    }
+    return null;
+  }
+
+  private async LoadShipmentConfirmDuplicateAfterUniqueViolation(
+    error: unknown,
+    idempotencyKey: string,
+    fingerprint: string,
+    stagingId: string,
+  ): Promise<ShipmentPackageStagingEntity | null> {
+    if (!this.IsUniqueViolation(error)) return null;
+    const duplicateByKey = await this.stagings.FindByShipmentConfirmIdempotencyKey(idempotencyKey);
+    if (duplicateByKey) {
+      if (duplicateByKey.Id !== stagingId) {
+        throw new ConflictException('Shipment confirmation idempotency key already used', {
+          StagingId: duplicateByKey.Id,
+        });
+      }
+      this.AssertSameFingerprint(
+        duplicateByKey.ShipmentConfirmPayloadFingerprint,
+        fingerprint,
+        'Shipment confirmation idempotency key already used',
+      );
+      return duplicateByKey;
+    }
+    const staging = await this.stagings.FindById(stagingId);
+    if (staging?.ShipmentConfirmIdempotencyKey === idempotencyKey) {
+      this.AssertSameFingerprint(
+        staging.ShipmentConfirmPayloadFingerprint,
+        fingerprint,
+        'Shipment confirmation idempotency key already used',
+      );
+      return staging;
+    }
+    return null;
   }
 
   private NormalizeEvidence(value?: string[] | null): string[] {

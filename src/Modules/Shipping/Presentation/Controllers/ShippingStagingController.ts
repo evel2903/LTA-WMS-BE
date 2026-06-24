@@ -9,14 +9,18 @@ import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAut
 import {
   AssignDockUseCase,
   AssignTruckUseCase,
+  ConfirmShipmentUseCase,
   GetShippingStagingUseCase,
   ListShippingStagingUseCase,
+  ScanLoadingUseCase,
   StagePackageUseCase,
 } from '@modules/Shipping/Application/UseCases/ShippingStagingUseCases';
 import {
   AssignDockRequest,
   AssignTruckRequest,
+  ConfirmShipmentRequest,
   ListShippingStagingQuery,
+  ScanLoadingRequest,
   StagePackageRequest,
 } from '@modules/Shipping/Presentation/Requests/ShippingStagingRequests';
 
@@ -29,6 +33,8 @@ export class ShippingStagingController {
     private readonly stagePackageUseCase: StagePackageUseCase,
     private readonly assignDockUseCase: AssignDockUseCase,
     private readonly assignTruckUseCase: AssignTruckUseCase,
+    private readonly scanLoadingUseCase: ScanLoadingUseCase,
+    private readonly confirmShipmentUseCase: ConfirmShipmentUseCase,
   ) {}
 
   @Get('packages')
@@ -70,5 +76,25 @@ export class ShippingStagingController {
     @CurrentAuditContext() context: AuditContext,
   ) {
     return this.assignTruckUseCase.Execute(id, request, context);
+  }
+
+  @Post('packages/:id/loading')
+  @RequirePermission(ActionCode.Update, ObjectType.Shipment)
+  public async ScanLoading(
+    @Param('id') id: string,
+    @Body() request: ScanLoadingRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return this.scanLoadingUseCase.Execute(id, request, context);
+  }
+
+  @Post('packages/:id/confirm')
+  @RequirePermission(ActionCode.Update, ObjectType.Shipment)
+  public async ConfirmShipment(
+    @Param('id') id: string,
+    @Body() request: ConfirmShipmentRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return this.confirmShipmentUseCase.Execute(id, request, context);
   }
 }

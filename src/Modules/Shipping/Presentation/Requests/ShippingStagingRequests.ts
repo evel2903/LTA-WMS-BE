@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { ShipmentPackageStagingStatus } from '@modules/Shipping/Domain/Enums/ShipmentPackageStagingStatus';
 
 export class ListShippingStagingQuery {
@@ -123,6 +123,74 @@ export class AssignTruckRequest {
   @IsOptional()
   @IsString()
   public CarrierCode?: string;
+
+  @IsOptional()
+  @IsString()
+  public ReasonCode?: string;
+
+  @IsOptional()
+  @IsString()
+  public ReasonNote?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  public EvidenceRefs?: string[];
+
+  @IsString()
+  public IdempotencyKey!: string;
+}
+
+export class ScanLoadingRequest {
+  @IsOptional()
+  @IsString()
+  public ScannedPackageId?: string;
+
+  @IsOptional()
+  @IsString()
+  public ScannedPackageCode?: string;
+
+  @IsOptional()
+  @IsString()
+  public ShipmentReference?: string;
+
+  @IsOptional()
+  @IsString()
+  public LoadReference?: string;
+
+  @IsOptional()
+  @IsString()
+  public TruckReference?: string;
+
+  @IsOptional()
+  @IsString()
+  public VehicleNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  public ReasonCode?: string;
+
+  @IsOptional()
+  @IsString()
+  public ReasonNote?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  public EvidenceRefs?: string[];
+
+  @IsString()
+  public IdempotencyKey!: string;
+}
+
+export class ConfirmShipmentRequest {
+  @IsOptional()
+  @IsString()
+  public ShipmentReference?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  public RequireFullLoad?: boolean;
 
   @IsOptional()
   @IsString()

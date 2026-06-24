@@ -3,5 +3,7 @@ export enum ShipmentPackageStagingStatus {
   DockAssigned = 'DockAssigned',
   TruckAssigned = 'TruckAssigned',
   ReadyForLoading = 'ReadyForLoading',
+  Loaded = 'Loaded',
+  ShipmentConfirmed = 'ShipmentConfirmed',
   Blocked = 'Blocked',
 }

@@ -11,6 +11,20 @@ export interface IShippingStagingRepository {
   FindByIdForUpdate(id: string, manager: EntityManager): Promise<ShipmentPackageStagingEntity | null>;
   FindByPackageId(packageId: string, manager?: EntityManager): Promise<ShipmentPackageStagingEntity | null>;
   FindByStageIdempotencyKey(key: string): Promise<ShipmentPackageStagingEntity | null>;
+  FindByLoadingIdempotencyKey(key: string, manager?: EntityManager): Promise<ShipmentPackageStagingEntity | null>;
+  FindByShipmentConfirmIdempotencyKey(
+    key: string,
+    manager?: EntityManager,
+  ): Promise<ShipmentPackageStagingEntity | null>;
+  ListByShipmentReference(
+    shipmentReference: string,
+    scope?: {
+      WarehouseId?: string | null;
+      OwnerId?: string | null;
+      OutboundOrderId?: string | null;
+    },
+    manager?: EntityManager,
+  ): Promise<ShipmentPackageStagingEntity[]>;
   List(
     skip: number,
     take: number,

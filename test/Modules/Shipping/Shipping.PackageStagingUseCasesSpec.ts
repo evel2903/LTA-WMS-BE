@@ -19,6 +19,10 @@ import { WorkflowMilestoneEntity } from '@modules/CoreFlow/Domain/Entities/Workf
 import { CoreFlowStageCode } from '@modules/CoreFlow/Domain/Enums/CoreFlowStageCode';
 import { CoreFlowStepCode } from '@modules/CoreFlow/Domain/Enums/CoreFlowStepCode';
 import { CoreFlowInstanceStatus } from '@modules/CoreFlow/Domain/Enums/CoreFlowInstanceStatus';
+import { IIntegrationRepository } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
+import { ImportBatchEntity } from '@modules/Integration/Domain/Entities/ImportBatchEntity';
+import { InterfaceMessageEntity } from '@modules/Integration/Domain/Entities/InterfaceMessageEntity';
+import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/OutboxMessageEntity';
 import { IPackingRepository, PackageAggregate } from '@modules/Outbound/Application/Interfaces/IPackingRepository';
 import { PackageContentEntity } from '@modules/Outbound/Domain/Entities/PackageContentEntity';
 import { PackageEntity } from '@modules/Outbound/Domain/Entities/PackageEntity';
@@ -26,7 +30,11 @@ import { PackSessionEntity } from '@modules/Outbound/Domain/Entities/PackSession
 import { PackageCheckResult } from '@modules/Outbound/Domain/Enums/PackageCheckResult';
 import { PackageStatus } from '@modules/Outbound/Domain/Enums/PackageStatus';
 import { ShippingStagingLifecycleService } from '@modules/Shipping/Application/Services/ShippingStagingLifecycleService';
-import { StagePackageUseCase } from '@modules/Shipping/Application/UseCases/ShippingStagingUseCases';
+import {
+  ConfirmShipmentUseCase,
+  ScanLoadingUseCase,
+  StagePackageUseCase,
+} from '@modules/Shipping/Application/UseCases/ShippingStagingUseCases';
 import { IShippingStagingRepository } from '@modules/Shipping/Application/Interfaces/IShippingStagingRepository';
 import { ShipmentPackageStagingEntity } from '@modules/Shipping/Domain/Entities/ShipmentPackageStagingEntity';
 import { ShipmentPackageStagingStatus } from '@modules/Shipping/Domain/Enums/ShipmentPackageStagingStatus';
@@ -159,6 +167,31 @@ class MemoryShippingStagingRepository implements IShippingStagingRepository {
     return this.items.find((item) => item.StageIdempotencyKey === key) ?? null;
   }
 
+  async FindByLoadingIdempotencyKey(key: string): Promise<ShipmentPackageStagingEntity | null> {
+    return this.items.find((item) => item.LoadingIdempotencyKey === key) ?? null;
+  }
+
+  async FindByShipmentConfirmIdempotencyKey(key: string): Promise<ShipmentPackageStagingEntity | null> {
+    return this.items.find((item) => item.ShipmentConfirmIdempotencyKey === key) ?? null;
+  }
+
+  async ListByShipmentReference(
+    shipmentReference: string,
+    scope: {
+      WarehouseId?: string | null;
+      OwnerId?: string | null;
+      OutboundOrderId?: string | null;
+    } = {},
+  ): Promise<ShipmentPackageStagingEntity[]> {
+    return this.items.filter(
+      (item) =>
+        item.ShipmentReference === shipmentReference &&
+        (!scope.WarehouseId || item.WarehouseId === scope.WarehouseId) &&
+        (!scope.OwnerId || item.OwnerId === scope.OwnerId) &&
+        (!scope.OutboundOrderId || item.OutboundOrderId === scope.OutboundOrderId),
+    );
+  }
+
   async List(
     skip = 0,
     take = this.items.length,
@@ -214,6 +247,44 @@ class MemoryCoreFlowRepository implements ICoreFlowRepository {
   }
 }
 
+class MemoryIntegrationRepository implements IIntegrationRepository {
+  public Outbox: OutboxMessageEntity[] = [];
+
+  async FindInterfaceMessageByMessageId(): Promise<InterfaceMessageEntity | null> {
+    return null;
+  }
+
+  async FindOutboxMessageByMessageId(messageId: string): Promise<OutboxMessageEntity | null> {
+    return this.Outbox.find((item) => item.MessageId === messageId) ?? null;
+  }
+
+  async CreateImport(
+    importBatch: ImportBatchEntity,
+    interfaceMessages: InterfaceMessageEntity[],
+    outboxMessages: OutboxMessageEntity[],
+  ): Promise<{
+    ImportBatch: ImportBatchEntity;
+    InterfaceMessages: InterfaceMessageEntity[];
+    OutboxMessages: OutboxMessageEntity[];
+  }> {
+    this.Outbox.push(...outboxMessages);
+    return { ImportBatch: importBatch, InterfaceMessages: interfaceMessages, OutboxMessages: outboxMessages };
+  }
+
+  async CreateOutboxMessage(outboxMessage: OutboxMessageEntity): Promise<OutboxMessageEntity> {
+    this.Outbox.push(outboxMessage);
+    return outboxMessage;
+  }
+
+  async ListImportBatches(): Promise<{ Items: ImportBatchEntity[]; TotalItems: number }> {
+    return { Items: [], TotalItems: 0 };
+  }
+
+  async ListOutboxMessages(): Promise<{ Items: OutboxMessageEntity[]; TotalItems: number }> {
+    return { Items: this.Outbox, TotalItems: this.Outbox.length };
+  }
+}
+
 class MemoryAuditedTransaction {
   public entries: AuditEntry[] = [];
 
@@ -241,16 +312,18 @@ function makeHarness(input: { permissionChecker?: IPermissionChecker; pack?: Pac
   const packing = new MemoryPackingRepository();
   packing.packageAggregate = { Package: input.pack ?? makePackage(), Contents: [] };
   const coreFlows = new MemoryCoreFlowRepository();
+  const integrations = new MemoryIntegrationRepository();
   const audited = new MemoryAuditedTransaction();
   const service = new ShippingStagingLifecycleService(
     stagings,
     packing,
     coreFlows,
+    integrations,
     reasonCatalog,
     audited as never,
     input.permissionChecker ?? allowPermissionChecker,
   );
-  return { service, stagings, packing, coreFlows, audited };
+  return { service, stagings, packing, coreFlows, integrations, audited };
 }
 
 function makeStaging(
@@ -300,6 +373,29 @@ async function stagePackage(harness = makeHarness()) {
   );
 }
 
+async function readyForLoading(harness = makeHarness()) {
+  const staged = await stagePackage(harness);
+  await harness.service.AssignDock(
+    staged.Id,
+    {
+      DockDoorCode: 'DOCK-01',
+      EvidenceRefs: ['dock:scan'],
+      IdempotencyKey: 'dock-1',
+    },
+    context,
+  );
+  return harness.service.AssignTruck(
+    staged.Id,
+    {
+      TruckReference: 'TRUCK-001',
+      VehicleNumber: '51C-001',
+      EvidenceRefs: ['truck:scan'],
+      IdempotencyKey: 'truck-1',
+    },
+    context,
+  );
+}
+
 describe('ShippingStagingLifecycleService V1-24', () => {
   it('exposes shipping staging routes with Shipment permissions', () => {
     expect(Reflect.getMetadata(PATH_METADATA, ShippingStagingController)).toBe('shipping/staging');
@@ -315,6 +411,12 @@ describe('ShippingStagingLifecycleService V1-24', () => {
     });
     expect(Reflect.getMetadata(PATH_METADATA, ShippingStagingController.prototype.AssignDock)).toBe(
       'packages/:id/dock',
+    );
+    expect(Reflect.getMetadata(PATH_METADATA, ShippingStagingController.prototype.ScanLoading)).toBe(
+      'packages/:id/loading',
+    );
+    expect(Reflect.getMetadata(PATH_METADATA, ShippingStagingController.prototype.ConfirmShipment)).toBe(
+      'packages/:id/confirm',
     );
     expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ShippingStagingController.prototype.Stage)).toEqual({
       Action: ActionCode.Create,
@@ -443,7 +545,7 @@ describe('ShippingStagingLifecycleService V1-24', () => {
     );
   });
 
-  it('records dock and truck milestones without opening loading scan', async () => {
+  it('records dock and truck milestones before loading scan', async () => {
     const harness = makeHarness();
     const staged = await stagePackage(harness);
 
@@ -476,6 +578,317 @@ describe('ShippingStagingLifecycleService V1-24', () => {
       CoreFlowStepCode.DockTruckMilestoneRecorded,
     ]);
     expect(JSON.stringify(trucked)).not.toMatch(/SHIPPED|GATE_OUT|GOODS_ISSUE_POSTED/);
+  });
+
+  it('scans loading for a ReadyForLoading package and records audit plus CoreFlow milestone', async () => {
+    const harness = makeHarness();
+    const ready = await readyForLoading(harness);
+
+    const loaded = await harness.service.ScanLoading(
+      ready.Id,
+      {
+        ScannedPackageCode: 'PKG-001',
+        ShipmentReference: 'SHIP-001',
+        LoadReference: 'LOAD-001',
+        TruckReference: 'TRUCK-001',
+        EvidenceRefs: ['loading:scan'],
+        IdempotencyKey: 'loading-1',
+      },
+      context,
+    );
+
+    expect(loaded).toMatchObject({
+      Status: ShipmentPackageStagingStatus.Loaded,
+      InventoryStatusCode: 'LOADED',
+      LoadReference: 'LOAD-001',
+      LoadedBy: 'shipper-1',
+      LoadingOutboxMessageId: expect.any(String),
+    });
+    expect(harness.integrations.Outbox).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          EventType: 'PackageLoaded',
+          BusinessReference: 'SHIP-001',
+          Payload: expect.objectContaining({ EventName: 'PackageLoaded', PackageCode: 'PKG-001' }),
+        }),
+      ]),
+    );
+    expect(harness.coreFlows.milestones.map((item) => item.StepCode)).toContain(CoreFlowStepCode.LoadingConfirmed);
+    expect(harness.audited.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ObjectType: ObjectType.Shipment,
+          Action: ActionCode.Update,
+          Result: AuditResult.Success,
+          ReferenceType: 'ShippingMilestone',
+        }),
+      ]),
+    );
+    expect(JSON.stringify(loaded)).not.toMatch(/SHIPPED|GATE_OUT|GOODS_ISSUE_POSTED/);
+  });
+
+  it('rejects wrong package during loading scan and writes failed audit', async () => {
+    const harness = makeHarness();
+    const ready = await readyForLoading(harness);
+
+    await expect(
+      harness.service.ScanLoading(
+        ready.Id,
+        {
+          ScannedPackageCode: 'PKG-OTHER',
+          ShipmentReference: 'SHIP-001',
+          EvidenceRefs: ['loading:scan'],
+          IdempotencyKey: 'loading-1',
+        },
+        context,
+      ),
+    ).rejects.toThrow('Scanned package does not match staging package');
+    expect(harness.stagings.items[0].Status).toBe(ShipmentPackageStagingStatus.ReadyForLoading);
+    expect(harness.audited.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          Result: AuditResult.Failed,
+          ReferenceType: 'LoadingScanGate',
+        }),
+      ]),
+    );
+  });
+
+  it('rejects shipment or truck mismatch during loading scan', async () => {
+    const harness = makeHarness();
+    const ready = await readyForLoading(harness);
+
+    await expect(
+      harness.service.ScanLoading(
+        ready.Id,
+        {
+          ScannedPackageCode: 'PKG-001',
+          ShipmentReference: 'SHIP-OTHER',
+          EvidenceRefs: ['loading:scan'],
+          IdempotencyKey: 'loading-ship-mismatch',
+        },
+        context,
+      ),
+    ).rejects.toThrow('Scanned shipment does not match staging shipment');
+    await expect(
+      harness.service.ScanLoading(
+        ready.Id,
+        {
+          ScannedPackageCode: 'PKG-001',
+          TruckReference: 'TRUCK-OTHER',
+          EvidenceRefs: ['loading:scan'],
+          IdempotencyKey: 'loading-truck-mismatch',
+        },
+        context,
+      ),
+    ).rejects.toThrow('Scanned truck does not match assigned truck');
+  });
+
+  it('blocks shipment confirmation until the package is loaded', async () => {
+    const harness = makeHarness();
+    const ready = await readyForLoading(harness);
+
+    await expect(
+      harness.service.ConfirmShipment(
+        ready.Id,
+        {
+          ShipmentReference: 'SHIP-001',
+          EvidenceRefs: ['confirm:shipment'],
+          IdempotencyKey: 'confirm-1',
+        },
+        context,
+      ),
+    ).rejects.toThrow('Package must be loaded before shipment confirmation');
+  });
+
+  it('blocks full-load shipment confirmation when another shipment package is missing', async () => {
+    const harness = makeHarness();
+    const ready = await readyForLoading(harness);
+    harness.stagings.items.push(
+      makeStaging({
+        Id: 'staging-2',
+        StagingCode: 'STG-002',
+        PackageId: 'package-2',
+        PackageCode: 'PKG-002',
+        DockDoorCode: 'DOCK-01',
+        TruckReference: 'TRUCK-001',
+        Status: ShipmentPackageStagingStatus.ReadyForLoading,
+      }),
+    );
+    await harness.service.ScanLoading(
+      ready.Id,
+      {
+        ScannedPackageCode: 'PKG-001',
+        ShipmentReference: 'SHIP-001',
+        EvidenceRefs: ['loading:scan'],
+        IdempotencyKey: 'loading-1',
+      },
+      context,
+    );
+
+    await expect(
+      harness.service.ConfirmShipment(
+        ready.Id,
+        {
+          ShipmentReference: 'SHIP-001',
+          EvidenceRefs: ['confirm:shipment'],
+          IdempotencyKey: 'confirm-1',
+        },
+        context,
+      ),
+    ).rejects.toThrow('Full-load shipment confirmation is blocked by missing packages');
+  });
+
+  it('blocks full-load shipment confirmation when the shipment reference is missing', async () => {
+    const harness = makeHarness();
+    const ready = await readyForLoading(harness);
+    const loaded = await harness.service.ScanLoading(
+      ready.Id,
+      {
+        ScannedPackageCode: 'PKG-001',
+        EvidenceRefs: ['loading:scan'],
+        IdempotencyKey: 'loading-1',
+      },
+      context,
+    );
+    const stored = harness.stagings.items.find((item) => item.Id === loaded.Id);
+    if (!stored) throw new Error('Expected loaded staging in memory repository');
+    stored.ShipmentReference = null;
+
+    await expect(
+      harness.service.ConfirmShipment(
+        ready.Id,
+        {
+          EvidenceRefs: ['confirm:shipment'],
+          IdempotencyKey: 'confirm-no-shipment-ref',
+        },
+        context,
+      ),
+    ).rejects.toThrow('ShipmentReference is required for full-load confirmation');
+    expect(harness.audited.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          Result: AuditResult.Failed,
+          ReferenceType: 'LoadingScanGate',
+        }),
+      ]),
+    );
+  });
+
+  it('confirms loaded shipment and keeps duplicate idempotency stable', async () => {
+    const harness = makeHarness();
+    const ready = await readyForLoading(harness);
+    const loaded = await harness.service.ScanLoading(
+      ready.Id,
+      {
+        ScannedPackageCode: 'PKG-001',
+        ShipmentReference: 'SHIP-001',
+        EvidenceRefs: ['loading:scan'],
+        IdempotencyKey: 'loading-1',
+      },
+      context,
+    );
+
+    const confirmed = await harness.service.ConfirmShipment(
+      loaded.Id,
+      {
+        ShipmentReference: 'SHIP-001',
+        EvidenceRefs: ['confirm:shipment'],
+        IdempotencyKey: 'confirm-1',
+      },
+      context,
+    );
+    const duplicate = await harness.service.ConfirmShipment(
+      loaded.Id,
+      {
+        ShipmentReference: 'SHIP-001',
+        EvidenceRefs: ['confirm:shipment'],
+        IdempotencyKey: 'confirm-1',
+      },
+      context,
+    );
+
+    expect(confirmed.Status).toBe(ShipmentPackageStagingStatus.ShipmentConfirmed);
+    expect(confirmed.ShipmentConfirmedBy).toBe('shipper-1');
+    expect(confirmed.ShipmentConfirmOutboxMessageId).toEqual(expect.any(String));
+    expect(duplicate.Status).toBe(ShipmentPackageStagingStatus.ShipmentConfirmed);
+    expect(harness.integrations.Outbox.map((item) => item.EventType)).toEqual(['PackageLoaded', 'ShipmentConfirmed']);
+    expect(JSON.stringify(confirmed)).not.toMatch(/SHIPPED|GATE_OUT|GOODS_ISSUE_POSTED/);
+  });
+
+  it('confirms every loaded package in the scoped full-load shipment cohort', async () => {
+    const harness = makeHarness();
+    const ready = await readyForLoading(harness);
+    const loaded = await harness.service.ScanLoading(
+      ready.Id,
+      {
+        ScannedPackageCode: 'PKG-001',
+        ShipmentReference: 'SHIP-001',
+        EvidenceRefs: ['loading:scan'],
+        IdempotencyKey: 'loading-1',
+      },
+      context,
+    );
+    harness.stagings.items.push(
+      makeStaging({
+        Id: 'staging-2',
+        StagingCode: 'STG-002',
+        PackageId: 'package-2',
+        PackageCode: 'PKG-002',
+        DockDoorCode: 'DOCK-01',
+        TruckReference: 'TRUCK-001',
+        Status: ShipmentPackageStagingStatus.Loaded,
+        InventoryStatusCode: 'LOADED',
+        LoadedAt: now,
+        LoadedBy: 'shipper-1',
+        LoadingIdempotencyKey: 'loading-2',
+        LoadingPayloadFingerprint: 'loading-fingerprint-2',
+      }),
+    );
+
+    await harness.service.ConfirmShipment(
+      loaded.Id,
+      {
+        ShipmentReference: 'SHIP-001',
+        EvidenceRefs: ['confirm:shipment'],
+        IdempotencyKey: 'confirm-1',
+      },
+      context,
+    );
+
+    expect(harness.stagings.items.find((item) => item.Id === loaded.Id)?.Status).toBe(
+      ShipmentPackageStagingStatus.ShipmentConfirmed,
+    );
+    expect(harness.stagings.items.find((item) => item.Id === 'staging-2')?.Status).toBe(
+      ShipmentPackageStagingStatus.ShipmentConfirmed,
+    );
+  });
+
+  it('detects loading idempotency conflict for changed payloads', async () => {
+    const harness = makeHarness();
+    const ready = await readyForLoading(harness);
+    await harness.service.ScanLoading(
+      ready.Id,
+      {
+        ScannedPackageCode: 'PKG-001',
+        EvidenceRefs: ['loading:scan'],
+        IdempotencyKey: 'loading-1',
+      },
+      context,
+    );
+
+    await expect(
+      harness.service.ScanLoading(
+        ready.Id,
+        {
+          ScannedPackageCode: 'PKG-001',
+          LoadReference: 'LOAD-CHANGED',
+          EvidenceRefs: ['loading:scan'],
+          IdempotencyKey: 'loading-1',
+        },
+        context,
+      ),
+    ).rejects.toThrow('Loading idempotency key already used');
   });
 
   it('does not overwrite dock or truck milestones with a new idempotency key', async () => {
@@ -570,5 +983,27 @@ describe('Shipping staging use case wrappers', () => {
       { PackageId: 'package-1', StagingLaneCode: 'STAGE-A', IdempotencyKey: 'stage' },
       context,
     );
+  });
+
+  it('passes loading and confirmation calls through the lifecycle use cases', async () => {
+    const lifecycle = {
+      ScanLoading: jest.fn(async () => ({ loaded: true })),
+      ConfirmShipment: jest.fn(async () => ({ confirmed: true })),
+    };
+    const scanUseCase = new ScanLoadingUseCase(lifecycle as never);
+    const confirmUseCase = new ConfirmShipmentUseCase(lifecycle as never);
+
+    await expect(
+      scanUseCase.Execute('staging-1', { ScannedPackageCode: 'PKG-001', IdempotencyKey: 'load' }, context),
+    ).resolves.toEqual({ loaded: true });
+    await expect(confirmUseCase.Execute('staging-1', { IdempotencyKey: 'confirm' }, context)).resolves.toEqual({
+      confirmed: true,
+    });
+    expect(lifecycle.ScanLoading).toHaveBeenCalledWith(
+      'staging-1',
+      { ScannedPackageCode: 'PKG-001', IdempotencyKey: 'load' },
+      context,
+    );
+    expect(lifecycle.ConfirmShipment).toHaveBeenCalledWith('staging-1', { IdempotencyKey: 'confirm' }, context);
   });
 });

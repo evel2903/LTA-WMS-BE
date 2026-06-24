@@ -36,6 +36,13 @@ export class ShippingStagingDtoMapper {
       DockAssignedBy: entity.DockAssignedBy,
       TruckAssignedAt: date(entity.TruckAssignedAt),
       TruckAssignedBy: entity.TruckAssignedBy,
+      LoadReference: entity.LoadReference,
+      LoadedAt: date(entity.LoadedAt),
+      LoadedBy: entity.LoadedBy,
+      ShipmentConfirmedAt: date(entity.ShipmentConfirmedAt),
+      ShipmentConfirmedBy: entity.ShipmentConfirmedBy,
+      LoadingOutboxMessageId: entity.LoadingOutboxMessageId,
+      ShipmentConfirmOutboxMessageId: entity.ShipmentConfirmOutboxMessageId,
       CreatedAt: entity.CreatedAt.toISOString(),
       UpdatedAt: entity.UpdatedAt.toISOString(),
     };
