@@ -268,3 +268,25 @@ export class EvaluateGoodsIssueTriggerRequest {
   @IsString()
   public IdempotencyKey!: string;
 }
+
+export class PostGoodsIssueRequest {
+  @IsOptional()
+  @IsString()
+  public InventoryStatusCode?: string;
+
+  @IsOptional()
+  @IsString()
+  public ReasonCode?: string;
+
+  @IsOptional()
+  @IsString()
+  public ReasonNote?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  public EvidenceRefs?: string[];
+
+  @IsString()
+  public IdempotencyKey!: string;
+}

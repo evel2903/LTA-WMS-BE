@@ -18,10 +18,23 @@ import { WorkflowMilestoneEntity } from '@modules/CoreFlow/Domain/Entities/Workf
 import { CoreFlowStageCode } from '@modules/CoreFlow/Domain/Enums/CoreFlowStageCode';
 import { CoreFlowStepCode } from '@modules/CoreFlow/Domain/Enums/CoreFlowStepCode';
 import { WorkflowMilestoneStatus } from '@modules/CoreFlow/Domain/Enums/WorkflowMilestoneStatus';
+import { IInventoryTransactionRepository } from '@modules/InventoryExecution/Application/Interfaces/IInventoryTransactionRepository';
+import { InventoryMovementEntity } from '@modules/InventoryExecution/Domain/Entities/InventoryMovementEntity';
+import { InventoryTransactionEntity } from '@modules/InventoryExecution/Domain/Entities/InventoryTransactionEntity';
+import { InventoryMovementStatus } from '@modules/InventoryExecution/Domain/Enums/InventoryMovementStatus';
+import { InventoryTransactionStatus } from '@modules/InventoryExecution/Domain/Enums/InventoryTransactionStatus';
+import { InventoryTransactionType } from '@modules/InventoryExecution/Domain/Enums/InventoryTransactionType';
 import { IIntegrationRepository } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
 import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/OutboxMessageEntity';
 import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
+import { IInventoryBalanceRepository } from '@modules/MasterData/Application/Interfaces/IInventoryBalanceRepository';
+import { IInventoryDimensionRepository } from '@modules/MasterData/Application/Interfaces/IInventoryDimensionRepository';
+import { IInventoryStatusRepository } from '@modules/MasterData/Application/Interfaces/IInventoryStatusRepository';
+import { ILocationRepository } from '@modules/MasterData/Application/Interfaces/ILocationRepository';
+import { InventoryBalanceEntity } from '@modules/MasterData/Domain/Entities/InventoryBalanceEntity';
+import { InventoryDimensionEntity } from '@modules/MasterData/Domain/Entities/InventoryDimensionEntity';
 import { IPackingRepository } from '@modules/Outbound/Application/Interfaces/IPackingRepository';
+import { PackageContentEntity } from '@modules/Outbound/Domain/Entities/PackageContentEntity';
 import { PackageEntity } from '@modules/Outbound/Domain/Entities/PackageEntity';
 import { PackageStatus } from '@modules/Outbound/Domain/Enums/PackageStatus';
 import {
@@ -30,6 +43,7 @@ import {
   ConfirmShipmentDto,
   EvaluateGoodsIssueTriggerDto,
   ListShipmentPackageStagingDto,
+  PostGoodsIssueDto,
   RecordGateOutDto,
   ScanLoadingDto,
   StagePackageDto,
@@ -39,6 +53,7 @@ import { ShippingStagingDtoMapper } from '@modules/Shipping/Application/Mappers/
 import { ShipmentPackageStagingEntity } from '@modules/Shipping/Domain/Entities/ShipmentPackageStagingEntity';
 import { GoodsIssueTrigger } from '@modules/Shipping/Domain/Enums/GoodsIssueTrigger';
 import { GoodsIssueTriggerStatus } from '@modules/Shipping/Domain/Enums/GoodsIssueTriggerStatus';
+import { GoodsIssueStatus } from '@modules/Shipping/Domain/Enums/GoodsIssueStatus';
 import { ShipmentPackageStagingStatus } from '@modules/Shipping/Domain/Enums/ShipmentPackageStagingStatus';
 import { IWarehouseProfileRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
 import { GoodsIssueTriggerPolicy } from '@modules/WarehouseProfile/Application/Services/GoodsIssueTriggerPolicy';
@@ -125,6 +140,14 @@ interface NormalizedEvaluateGoodsIssueTrigger extends EvaluateGoodsIssueTriggerD
   IdempotencyKey: string;
 }
 
+interface NormalizedPostGoodsIssue extends PostGoodsIssueDto {
+  InventoryStatusCode: string | null;
+  ReasonCode: string;
+  ReasonNote: string | null;
+  EvidenceRefs: string[];
+  IdempotencyKey: string;
+}
+
 export class ShippingStagingLifecycleService {
   private readonly goodsIssueTriggerPolicy = new GoodsIssueTriggerPolicy();
 
@@ -137,6 +160,11 @@ export class ShippingStagingLifecycleService {
     private readonly audited: AuditedTransaction,
     private readonly permissionChecker?: IPermissionChecker,
     private readonly warehouseProfiles?: IWarehouseProfileRepository,
+    private readonly inventoryTransactions?: IInventoryTransactionRepository,
+    private readonly inventoryBalances?: IInventoryBalanceRepository,
+    private readonly inventoryDimensions?: IInventoryDimensionRepository,
+    private readonly inventoryStatuses?: IInventoryStatusRepository,
+    private readonly locations?: ILocationRepository,
   ) {}
 
   public async List(query: ListShipmentPackageStagingDto, actorUserId?: string | null) {
@@ -968,6 +996,197 @@ export class ShippingStagingLifecycleService {
     return ShippingStagingDtoMapper.ToDto(saved);
   }
 
+  public async PostGoodsIssue(id: string, request: PostGoodsIssueDto, context: AuditContext) {
+    const normalized = this.NormalizePostGoodsIssue(request);
+    this.AssertActor(context);
+    this.AssertGoodsIssueDependencies();
+    const staging = await this.LoadStaging(id);
+    await this.AssertGoodsIssueInventoryStatusCodeWithAudit(context, staging, normalized.InventoryStatusCode);
+    await this.AssertGoodsIssuePermissionWithAudit(context, staging);
+
+    const aggregate = await this.packing.FindPackageById(staging.PackageId);
+    if (!aggregate) throw new NotFoundException('Package not found', { PackageId: staging.PackageId });
+    await this.AssertGoodsIssuePackageScopeWithAudit(context, staging, aggregate.Package);
+    await this.AssertGoodsIssueContentsWithAudit(context, staging, aggregate.Contents);
+    const fingerprint = this.BuildGoodsIssueFingerprint(staging, aggregate.Contents, normalized);
+
+    if (staging.GoodsIssueIdempotencyKey === normalized.IdempotencyKey) {
+      this.AssertSameFingerprint(
+        staging.GoodsIssuePayloadFingerprint,
+        fingerprint,
+        'Goods Issue idempotency key already used',
+      );
+      return ShippingStagingDtoMapper.ToDto(staging);
+    }
+    const duplicate = await this.stagings.FindByGoodsIssueIdempotencyKey(normalized.IdempotencyKey);
+    if (duplicate) {
+      if (duplicate.Id !== staging.Id) {
+        throw new ConflictException('Goods Issue idempotency key already used', { StagingId: duplicate.Id });
+      }
+      this.AssertSameFingerprint(
+        duplicate.GoodsIssuePayloadFingerprint,
+        fingerprint,
+        'Goods Issue idempotency key already used',
+      );
+      return ShippingStagingDtoMapper.ToDto(duplicate);
+    }
+    await this.AssertGoodsIssueReadyWithAudit(context, staging);
+
+    const reason = await this.ValidateReason(
+      normalized.ReasonCode,
+      ActionCode.Adjust,
+      normalized.EvidenceRefs,
+      ObjectType.GoodsIssue,
+    );
+
+    let saved: ShipmentPackageStagingEntity;
+    try {
+      saved = await this.audited.Run<ShipmentPackageStagingEntity>(async (manager) => {
+        const shipmentCohort = staging.ShipmentReference
+          ? await this.stagings.ListByShipmentReference(
+              staging.ShipmentReference,
+              {
+                WarehouseId: staging.WarehouseId,
+                OwnerId: staging.OwnerId,
+                OutboundOrderId: staging.OutboundOrderId,
+              },
+              manager,
+            )
+          : [];
+        const locked =
+          shipmentCohort.find((item) => item.Id === staging.Id) ??
+          (await this.stagings.FindByIdForUpdate(staging.Id, manager));
+        if (!locked) throw new NotFoundException('Package staging not found', { StagingId: staging.Id });
+        const lockedAggregate = await this.packing.FindPackageByIdForUpdate(locked.PackageId, manager);
+        if (!lockedAggregate) throw new NotFoundException('Package not found', { PackageId: locked.PackageId });
+        await this.AssertGoodsIssuePackageScopeWithAudit(context, locked, lockedAggregate.Package);
+        await this.AssertGoodsIssueContentsWithAudit(context, locked, lockedAggregate.Contents);
+        const lockedFingerprint = this.BuildGoodsIssueFingerprint(locked, lockedAggregate.Contents, normalized);
+        if (locked.GoodsIssueIdempotencyKey === normalized.IdempotencyKey) {
+          this.AssertSameFingerprint(
+            locked.GoodsIssuePayloadFingerprint,
+            lockedFingerprint,
+            'Goods Issue idempotency key already used',
+          );
+          return {
+            result: locked,
+            entry: this.BuildDuplicateAudit(context, locked, 'GoodsIssue'),
+          };
+        }
+        const concurrentDuplicate = await this.stagings.FindByGoodsIssueIdempotencyKey(
+          normalized.IdempotencyKey,
+          manager,
+        );
+        if (concurrentDuplicate && concurrentDuplicate.Id !== locked.Id) {
+          throw new ConflictException('Goods Issue idempotency key already used', {
+            StagingId: concurrentDuplicate.Id,
+          });
+        }
+        await this.AssertGoodsIssueReadyWithAudit(context, locked);
+
+        const now = new Date();
+        const goodsIssueOutboxId = locked.GoodsIssueOutboxMessageId ?? randomUUID();
+        const inventoryResult = await this.PostGoodsIssueInventory(
+          locked,
+          lockedAggregate.Contents,
+          normalized,
+          reason.ReasonCodeId,
+          context,
+          now,
+          goodsIssueOutboxId,
+          manager,
+        );
+
+        locked.GoodsIssueIdempotencyKey = normalized.IdempotencyKey;
+        locked.GoodsIssuePayloadFingerprint = lockedFingerprint;
+        locked.GoodsIssueStatus = GoodsIssueStatus.Posted;
+        locked.GoodsIssuePostedAt = now;
+        locked.GoodsIssuePostedBy = context.ActorUserId;
+        locked.GoodsIssueInventoryTransactionId = inventoryResult.TransactionIds[0] ?? null;
+        locked.GoodsIssueInventoryMovementId = inventoryResult.MovementIds[0] ?? null;
+        locked.GoodsIssueOutboxMessageId = goodsIssueOutboxId;
+        locked.ReasonCode = normalized.ReasonCode;
+        locked.ReasonCodeId = reason.ReasonCodeId;
+        locked.ReasonNote = normalized.ReasonNote;
+        locked.EvidenceRefs = normalized.EvidenceRefs;
+        locked.UpdatedAt = now;
+        locked.UpdatedBy = context.ActorUserId;
+
+        let updated = await this.stagings.Update(locked, manager);
+        const shouldCloseShipment = this.ShouldCloseShipmentAfterGoodsIssue(updated, shipmentCohort);
+        const shipmentClosedOutboxId = shouldCloseShipment
+          ? (updated.ShipmentClosedOutboxMessageId ?? randomUUID())
+          : null;
+        if (shipmentClosedOutboxId) {
+          updated.ShipmentClosedOutboxMessageId = shipmentClosedOutboxId;
+          updated.ShipmentClosedAt = now;
+          updated = await this.stagings.Update(updated, manager);
+        }
+        const outboxMessageIds = shipmentClosedOutboxId
+          ? [goodsIssueOutboxId, shipmentClosedOutboxId]
+          : [goodsIssueOutboxId];
+        await this.integrations.CreateOutboxMessage(
+          this.BuildGoodsIssueOutboxMessage(
+            goodsIssueOutboxId,
+            'GoodsIssuePosted',
+            updated,
+            normalized.IdempotencyKey,
+            context,
+            inventoryResult.TransactionIds,
+          ),
+          manager,
+        );
+        if (shipmentClosedOutboxId) {
+          await this.integrations.CreateOutboxMessage(
+            this.BuildGoodsIssueOutboxMessage(
+              shipmentClosedOutboxId,
+              'ShipmentClosed',
+              updated,
+              `${normalized.IdempotencyKey}:shipment-closed`,
+              context,
+              inventoryResult.TransactionIds,
+            ),
+            manager,
+          );
+        }
+        const coreFlowMilestone = await this.RecordGoodsIssueMilestone(updated, context, manager);
+        return {
+          result: updated,
+          entry: MergeAuditContext(context, {
+            Action: ActionCode.Adjust,
+            ObjectType: ObjectType.GoodsIssue,
+            ObjectId: updated.Id,
+            ObjectCode: updated.StagingCode,
+            AfterJson: {
+              Staging: ShippingStagingDtoMapper.ToDto(updated),
+              InventoryTransactionIds: inventoryResult.TransactionIds,
+              OutboxMessageIds: outboxMessageIds,
+              ...this.BuildCoreFlowAuditMetadata(coreFlowMilestone),
+            },
+            ReasonCodeId: reason.ReasonCodeId,
+            ReasonNote: normalized.ReasonNote ?? normalized.ReasonCode,
+            EvidenceRefs: normalized.EvidenceRefs,
+            ReferenceType: 'GoodsIssue',
+            ReferenceId: updated.Id,
+            WarehouseId: updated.WarehouseId,
+            OwnerId: updated.OwnerId,
+            Result: AuditResult.Success,
+          }),
+        };
+      });
+    } catch (error) {
+      const duplicate = await this.LoadGoodsIssueDuplicateAfterUniqueViolation(
+        error,
+        normalized.IdempotencyKey,
+        fingerprint,
+        staging.Id,
+      );
+      if (duplicate) return ShippingStagingDtoMapper.ToDto(duplicate);
+      throw error;
+    }
+    return ShippingStagingDtoMapper.ToDto(saved);
+  }
+
   private async ResolveCoreFlow(pack: PackageEntity) {
     if (!pack.WarehouseCode) return null;
     return this.coreFlows.FindInstanceByBusinessReference(
@@ -1144,6 +1363,569 @@ export class ShippingStagingLifecycleService {
     }
   }
 
+  private async RecordGoodsIssueMilestone(
+    staging: ShipmentPackageStagingEntity,
+    context: AuditContext,
+    manager: Parameters<ICoreFlowRepository['CreateMilestone']>[1],
+  ): Promise<Record<string, unknown>> {
+    if (!staging.CoreFlowInstanceId) return { Status: 'UnresolvedNonBlocking' };
+    try {
+      await this.coreFlows.CreateMilestone(
+        this.BuildMilestone(
+          staging.CoreFlowInstanceId,
+          CoreFlowStepCode.GoodsIssuePosted,
+          staging.InventoryStatusCode,
+          {
+            EventName: 'GoodsIssuePosted',
+            StagingId: staging.Id,
+            PackageId: staging.PackageId,
+            PackageCode: staging.PackageCode,
+            ShipmentReference: staging.ShipmentReference,
+            GoodsIssueStatus: staging.GoodsIssueStatus,
+            GoodsIssueInventoryTransactionId: staging.GoodsIssueInventoryTransactionId,
+            GoodsIssueOutboxMessageId: staging.GoodsIssueOutboxMessageId,
+            ShipmentClosedOutboxMessageId: staging.ShipmentClosedOutboxMessageId,
+          },
+          context.ActorUserId,
+        ),
+        manager,
+      );
+      return { Status: 'Recorded', CoreFlowInstanceId: staging.CoreFlowInstanceId };
+    } catch (error) {
+      return this.BuildCoreFlowMilestoneMetadata({ Id: staging.CoreFlowInstanceId }, 'FailedNonBlocking', error);
+    }
+  }
+
+  private ShouldCloseShipmentAfterGoodsIssue(
+    staging: ShipmentPackageStagingEntity,
+    cohort: ShipmentPackageStagingEntity[],
+  ): boolean {
+    if (!staging.ShipmentReference || cohort.length === 0) return false;
+    if (cohort.length <= 1) return true;
+    return cohort.every((item) => item.Id === staging.Id || item.GoodsIssueStatus === GoodsIssueStatus.Posted);
+  }
+
+  private AssertGoodsIssueDependencies(): void {
+    if (
+      !this.inventoryTransactions ||
+      !this.inventoryBalances ||
+      !this.inventoryDimensions ||
+      !this.inventoryStatuses ||
+      !this.locations
+    ) {
+      throw new BusinessRuleException('Goods Issue posting requires inventory repositories');
+    }
+  }
+
+  private BuildGoodsIssueFingerprint(
+    staging: ShipmentPackageStagingEntity,
+    contents: PackageContentEntity[],
+    request: NormalizedPostGoodsIssue,
+  ): string {
+    return this.Hash({
+      Operation: 'PostGoodsIssue',
+      StagingId: staging.Id,
+      PackageId: staging.PackageId,
+      ShipmentReference: staging.ShipmentReference,
+      OwnerId: staging.OwnerId,
+      OwnerCode: staging.OwnerCode,
+      WarehouseId: staging.WarehouseId,
+      WarehouseCode: staging.WarehouseCode,
+      ReasonCode: request.ReasonCode,
+      ReasonNote: request.ReasonNote,
+      EvidenceRefs: request.EvidenceRefs,
+      InventoryStatusCode: request.InventoryStatusCode,
+      Contents: contents.map((content) => ({
+        ContentId: content.Id,
+        SourceBalanceId: content.SourceBalanceId,
+        SourceDimensionId: content.SourceDimensionId,
+        SkuId: content.SkuId,
+        UomId: content.UomId,
+        Quantity: content.Quantity,
+        InventoryStatusCode: content.InventoryStatusCode,
+        LotNumber: content.LotNumber,
+        SerialNumber: content.SerialNumber,
+        ExpiryDate: content.ExpiryDate,
+      })),
+    });
+  }
+
+  private BuildGoodsIssueLineIdempotencyKey(stagingId: string, contentId: string, idempotencyKey: string): string {
+    return `GI-LINE:${this.Hash({ StagingId: stagingId, ContentId: contentId, IdempotencyKey: idempotencyKey }).slice(
+      0,
+      48,
+    )}`;
+  }
+
+  private async AssertGoodsIssueInventoryStatusCodeWithAudit(
+    context: AuditContext,
+    staging: ShipmentPackageStagingEntity,
+    inventoryStatusCode: string | null,
+  ): Promise<void> {
+    if (inventoryStatusCode && FORBIDDEN_SHIPMENT_MILESTONE_STATUS_CODES.includes(inventoryStatusCode)) {
+      await this.FailGoodsIssueWithAudit(
+        context,
+        staging,
+        'Shipment/goods issue milestones must not be used as InventoryStatus',
+        { InventoryStatusCode: inventoryStatusCode },
+        'GoodsIssueInventoryStatus',
+      );
+    }
+  }
+
+  private async AssertGoodsIssuePackageScopeWithAudit(
+    context: AuditContext,
+    staging: ShipmentPackageStagingEntity,
+    pack: PackageEntity,
+  ): Promise<void> {
+    if (!this.ResolveOwnerContext(staging)) {
+      await this.FailGoodsIssueWithAudit(context, staging, 'Goods Issue requires owner context before posting', {
+        PackageOwnerId: pack.OwnerId,
+        PackageOwnerCode: pack.OwnerCode,
+      });
+    }
+    if (!staging.OwnerId || !staging.WarehouseId) {
+      await this.FailGoodsIssueWithAudit(
+        context,
+        staging,
+        'Goods Issue requires owner and warehouse identifiers before posting',
+        {
+          OwnerId: staging.OwnerId,
+          OwnerCode: staging.OwnerCode,
+          WarehouseId: staging.WarehouseId,
+          WarehouseCode: staging.WarehouseCode,
+        },
+      );
+    }
+    if (pack.Id !== staging.PackageId) {
+      await this.FailGoodsIssueWithAudit(context, staging, 'Goods Issue package does not match staging package', {
+        PackageId: pack.Id,
+        ExpectedPackageId: staging.PackageId,
+      });
+    }
+    if (staging.OwnerId && pack.OwnerId && staging.OwnerId !== pack.OwnerId) {
+      await this.FailGoodsIssueWithAudit(context, staging, 'Goods Issue package owner does not match shipment owner', {
+        PackageOwnerId: pack.OwnerId,
+        ShipmentOwnerId: staging.OwnerId,
+      });
+    }
+    if (staging.WarehouseId && pack.WarehouseId && staging.WarehouseId !== pack.WarehouseId) {
+      await this.FailGoodsIssueWithAudit(
+        context,
+        staging,
+        'Goods Issue package warehouse does not match shipment warehouse',
+        {
+          PackageWarehouseId: pack.WarehouseId,
+          ShipmentWarehouseId: staging.WarehouseId,
+        },
+      );
+    }
+  }
+
+  private async AssertGoodsIssueContentsWithAudit(
+    context: AuditContext,
+    staging: ShipmentPackageStagingEntity,
+    contents: PackageContentEntity[],
+  ): Promise<void> {
+    if (contents.length === 0) {
+      await this.FailGoodsIssueWithAudit(context, staging, 'Goods Issue package has no packed content', {
+        PackageId: staging.PackageId,
+      });
+    }
+    for (const content of contents) {
+      if (!Number.isFinite(content.Quantity) || content.Quantity <= 0) {
+        await this.FailGoodsIssueWithAudit(context, staging, 'Goods Issue package content quantity must be positive', {
+          PackageContentId: content.Id,
+          Quantity: content.Quantity,
+        });
+      }
+      await this.AssertGoodsIssueInventoryStatusCodeWithAudit(context, staging, content.InventoryStatusCode);
+      const dimension = await this.inventoryDimensions!.FindById(content.SourceDimensionId);
+      if (!dimension) {
+        await this.FailGoodsIssueWithAudit(context, staging, 'Goods Issue source inventory dimension not found', {
+          SourceDimensionId: content.SourceDimensionId,
+        });
+      }
+      await this.AssertGoodsIssueSourceScope(context, staging, content, dimension as InventoryDimensionEntity);
+    }
+  }
+
+  private async AssertGoodsIssueSourceScope(
+    context: AuditContext,
+    staging: ShipmentPackageStagingEntity,
+    content: PackageContentEntity,
+    dimension: InventoryDimensionEntity,
+  ): Promise<void> {
+    if (staging.OwnerId && dimension.OwnerId !== staging.OwnerId) {
+      await this.FailGoodsIssueWithAudit(
+        context,
+        staging,
+        'Goods Issue source inventory owner does not match shipment owner',
+        {
+          SourceDimensionId: content.SourceDimensionId,
+          SourceOwnerId: dimension.OwnerId,
+          ShipmentOwnerId: staging.OwnerId,
+        },
+      );
+    }
+    if (staging.WarehouseId && dimension.WarehouseId !== staging.WarehouseId) {
+      await this.FailGoodsIssueWithAudit(
+        context,
+        staging,
+        'Goods Issue source inventory warehouse does not match shipment warehouse',
+        {
+          SourceDimensionId: content.SourceDimensionId,
+          SourceWarehouseId: dimension.WarehouseId,
+          ShipmentWarehouseId: staging.WarehouseId,
+        },
+      );
+    }
+    if (dimension.SkuId !== content.SkuId) {
+      await this.FailGoodsIssueWithAudit(
+        context,
+        staging,
+        'Goods Issue source inventory SKU does not match package content',
+        {
+          SourceDimensionId: content.SourceDimensionId,
+          SourceSkuId: dimension.SkuId,
+          ContentSkuId: content.SkuId,
+        },
+      );
+    }
+    if (dimension.UomId !== content.UomId) {
+      await this.FailGoodsIssueWithAudit(
+        context,
+        staging,
+        'Goods Issue source inventory UOM does not match package content',
+        {
+          SourceDimensionId: content.SourceDimensionId,
+          SourceUomId: dimension.UomId,
+          ContentUomId: content.UomId,
+        },
+      );
+    }
+    const expectedStatusCode = content.InventoryStatusCode ?? staging.InventoryStatusCode;
+    if (expectedStatusCode) {
+      const status = await this.inventoryStatuses!.FindById(dimension.InventoryStatusId);
+      if (!status || status.StatusCode !== expectedStatusCode) {
+        await this.FailGoodsIssueWithAudit(
+          context,
+          staging,
+          'Goods Issue source inventory status does not match package content',
+          {
+            SourceDimensionId: content.SourceDimensionId,
+            SourceInventoryStatusId: dimension.InventoryStatusId,
+            SourceInventoryStatusCode: status?.StatusCode ?? null,
+            ExpectedInventoryStatusCode: expectedStatusCode,
+          },
+        );
+      }
+    }
+    if (content.LotNumber && dimension.LotNumber !== content.LotNumber) {
+      await this.FailGoodsIssueWithAudit(
+        context,
+        staging,
+        'Goods Issue source inventory lot does not match package content',
+        {
+          SourceDimensionId: content.SourceDimensionId,
+          SourceLotNumber: dimension.LotNumber,
+          ContentLotNumber: content.LotNumber,
+        },
+      );
+    }
+    if (content.SerialNumber && dimension.SerialNumber !== content.SerialNumber) {
+      await this.FailGoodsIssueWithAudit(
+        context,
+        staging,
+        'Goods Issue source inventory serial does not match package content',
+        {
+          SourceDimensionId: content.SourceDimensionId,
+          SourceSerialNumber: dimension.SerialNumber,
+          ContentSerialNumber: content.SerialNumber,
+        },
+      );
+    }
+    if (content.ExpiryDate && this.ToTime(dimension.ExpiryDate) !== this.ToTime(content.ExpiryDate)) {
+      await this.FailGoodsIssueWithAudit(
+        context,
+        staging,
+        'Goods Issue source inventory expiry does not match package content',
+        {
+          SourceDimensionId: content.SourceDimensionId,
+          SourceExpiryDate: dimension.ExpiryDate?.toISOString() ?? null,
+          ContentExpiryDate: content.ExpiryDate.toISOString(),
+        },
+      );
+    }
+  }
+
+  private async AssertGoodsIssueReadyWithAudit(
+    context: AuditContext,
+    staging: ShipmentPackageStagingEntity,
+  ): Promise<void> {
+    if (staging.GoodsIssueStatus === GoodsIssueStatus.Posted) {
+      await this.FailGoodsIssueWithAudit(context, staging, 'Goods Issue already posted', {
+        StagingId: staging.Id,
+        GoodsIssueStatus: staging.GoodsIssueStatus,
+      });
+    }
+    if (staging.GoodsIssueTriggerStatus !== GoodsIssueTriggerStatus.Ready) {
+      await this.FailGoodsIssueWithAudit(context, staging, 'Goods Issue trigger must be ready before posting', {
+        StagingId: staging.Id,
+        GoodsIssueTriggerStatus: staging.GoodsIssueTriggerStatus,
+      });
+    }
+  }
+
+  private async PostGoodsIssueInventory(
+    staging: ShipmentPackageStagingEntity,
+    contents: PackageContentEntity[],
+    request: NormalizedPostGoodsIssue,
+    reasonCodeId: string,
+    context: AuditContext,
+    now: Date,
+    goodsIssueOutboxId: string,
+    manager: NonNullable<Parameters<IInventoryTransactionRepository['CreateTransaction']>[1]>,
+  ): Promise<{ TransactionIds: string[]; MovementIds: string[] }> {
+    const transactionIds: string[] = [];
+    const movementIds: string[] = [];
+    for (let index = 0; index < contents.length; index += 1) {
+      const content = contents[index];
+      const dimension = await this.inventoryDimensions!.FindById(content.SourceDimensionId);
+      if (!dimension) {
+        await this.FailGoodsIssueWithAudit(context, staging, 'Goods Issue source inventory dimension not found', {
+          SourceDimensionId: content.SourceDimensionId,
+        });
+      }
+      const sourceDimension = dimension as InventoryDimensionEntity;
+      await this.AssertGoodsIssueSourceScope(context, staging, content, sourceDimension);
+      const balance = await this.inventoryBalances!.FindByDimensionIdForUpdate(content.SourceDimensionId, manager);
+      if (!balance || balance.Id !== content.SourceBalanceId) {
+        await this.FailGoodsIssueWithAudit(
+          context,
+          staging,
+          'Goods Issue source balance does not match package content',
+          {
+            SourceBalanceId: content.SourceBalanceId,
+            SourceDimensionId: content.SourceDimensionId,
+          },
+        );
+      }
+      const sourceBalance = balance as InventoryBalanceEntity;
+      const sourceLocation = await this.locations!.FindById(sourceDimension.LocationId);
+      const sourceLocationCode = sourceLocation?.LocationCode;
+      if (!sourceLocationCode) {
+        await this.FailGoodsIssueWithAudit(context, staging, 'Goods Issue source location not found', {
+          SourceDimensionId: content.SourceDimensionId,
+          SourceLocationId: sourceDimension.LocationId,
+        });
+      }
+      const resolvedSourceLocationCode = sourceLocationCode as string;
+      if (sourceBalance.QtyOnHand < content.Quantity) {
+        await this.FailGoodsIssueWithAudit(context, staging, 'Goods Issue source inventory is insufficient', {
+          SourceBalanceId: sourceBalance.Id,
+          QtyOnHand: sourceBalance.QtyOnHand,
+          QtyReserved: sourceBalance.QtyReserved,
+          Quantity: content.Quantity,
+        });
+      }
+
+      const releasedReservedQuantity = Math.min(sourceBalance.QtyReserved, content.Quantity);
+      const transactionIdempotencyKey = this.BuildGoodsIssueLineIdempotencyKey(
+        staging.Id,
+        content.Id,
+        request.IdempotencyKey,
+      );
+      const existing = await this.inventoryTransactions!.FindTransactionByTypeAndIdempotencyKey(
+        InventoryTransactionType.GoodsIssue,
+        transactionIdempotencyKey,
+        manager,
+      );
+      if (existing) {
+        transactionIds.push(existing.Id);
+        const movement = await this.inventoryTransactions!.FindMovementByTransactionId(existing.Id, manager);
+        if (movement) movementIds.push(movement.Id);
+        continue;
+      }
+
+      const updatedBalance = new InventoryBalanceEntity({
+        Id: sourceBalance.Id,
+        DimensionId: sourceBalance.DimensionId,
+        QtyOnHand: sourceBalance.QtyOnHand - content.Quantity,
+        QtyReserved: sourceBalance.QtyReserved - releasedReservedQuantity,
+        SourceSystem: sourceBalance.SourceSystem,
+        ReferenceId: sourceBalance.ReferenceId,
+        CreatedAt: sourceBalance.CreatedAt,
+        UpdatedAt: now,
+        CreatedBy: sourceBalance.CreatedBy,
+        UpdatedBy: context.ActorUserId ?? sourceBalance.UpdatedBy,
+      });
+      await this.inventoryBalances!.Update(updatedBalance, manager);
+
+      const transaction = await this.inventoryTransactions!.CreateTransaction(
+        new InventoryTransactionEntity({
+          TransactionCode: this.BuildCode('GI-TXN'),
+          TransactionType: InventoryTransactionType.GoodsIssue,
+          TransactionStatus: InventoryTransactionStatus.Posted,
+          OwnerId: staging.OwnerId ?? sourceDimension.OwnerId,
+          OwnerCode: staging.OwnerCode,
+          WarehouseId: staging.WarehouseId ?? sourceDimension.WarehouseId,
+          WarehouseCode: staging.WarehouseCode,
+          SkuId: content.SkuId,
+          SkuCode: content.SkuCode,
+          UomId: content.UomId,
+          UomCode: content.UomCode,
+          Quantity: content.Quantity,
+          FromInventoryStatusCode:
+            content.InventoryStatusCode ?? staging.InventoryStatusCode ?? LOADED_INVENTORY_STATUS,
+          ToInventoryStatusCode: content.InventoryStatusCode ?? staging.InventoryStatusCode ?? LOADED_INVENTORY_STATUS,
+          FromLocationId: sourceDimension.LocationId,
+          FromLocationCode: resolvedSourceLocationCode,
+          ToLocationId: sourceDimension.LocationId,
+          ToLocationCode: resolvedSourceLocationCode,
+          LpnCode: sourceDimension.LpnCode,
+          IdempotencyKey: transactionIdempotencyKey,
+          OutboxMessageId: goodsIssueOutboxId,
+          ReasonCode: request.ReasonCode,
+          ReasonCodeId: reasonCodeId,
+          ReasonNote: request.ReasonNote,
+          EvidenceRefs: request.EvidenceRefs,
+          PostedAt: now,
+          PostedBy: context.ActorUserId,
+        }),
+        manager,
+      );
+      const movement = await this.inventoryTransactions!.CreateMovement(
+        new InventoryMovementEntity({
+          MovementCode: this.BuildCode('GI-MOV'),
+          MovementStatus: InventoryMovementStatus.Posted,
+          InventoryTransactionId: transaction.Id,
+          OwnerId: transaction.OwnerId,
+          OwnerCode: transaction.OwnerCode,
+          WarehouseId: transaction.WarehouseId,
+          WarehouseCode: transaction.WarehouseCode,
+          SkuId: transaction.SkuId,
+          SkuCode: transaction.SkuCode,
+          UomId: transaction.UomId,
+          UomCode: transaction.UomCode,
+          Quantity: transaction.Quantity,
+          FromDimensionId: content.SourceDimensionId,
+          FromBalanceId: content.SourceBalanceId,
+          FromLocationId: sourceDimension.LocationId,
+          FromLocationCode: resolvedSourceLocationCode,
+          FromInventoryStatusCode: transaction.FromInventoryStatusCode,
+          ToDimensionId: content.SourceDimensionId,
+          ToBalanceId: content.SourceBalanceId,
+          ToLocationId: sourceDimension.LocationId,
+          ToLocationCode: resolvedSourceLocationCode,
+          ToInventoryStatusCode: transaction.ToInventoryStatusCode,
+          LpnCode: sourceDimension.LpnCode,
+          ScanEvidenceJson: {
+            Operation: 'PostGoodsIssue',
+            StagingId: staging.Id,
+            PackageId: staging.PackageId,
+            PackageContentId: content.Id,
+            SourceBalanceId: content.SourceBalanceId,
+            IdempotencyKey: request.IdempotencyKey,
+            LineIdempotencyKey: transactionIdempotencyKey,
+            ReleasedReservedQuantity: releasedReservedQuantity,
+          },
+          CreatedAt: now,
+          CreatedBy: context.ActorUserId,
+        }),
+        manager,
+      );
+      transaction.InventoryMovementId = movement.Id;
+      await this.inventoryTransactions!.SaveTransaction(transaction, manager);
+      transactionIds.push(transaction.Id);
+      movementIds.push(movement.Id);
+    }
+    return { TransactionIds: transactionIds, MovementIds: movementIds };
+  }
+
+  private BuildGoodsIssueOutboxMessage(
+    outboxId: string,
+    eventType: 'GoodsIssuePosted' | 'ShipmentClosed',
+    staging: ShipmentPackageStagingEntity,
+    idempotencyKey: string,
+    context: AuditContext,
+    inventoryTransactionIds: string[],
+  ): OutboxMessageEntity {
+    const ownerContext = this.ResolveOwnerContext(staging);
+    const warehouseContext = this.ResolveWarehouseContext(staging);
+    const idempotencyDigest = this.Hash({
+      EventType: eventType,
+      StagingId: staging.Id,
+      IdempotencyKey: idempotencyKey,
+    }).slice(0, 24);
+    return new OutboxMessageEntity({
+      Id: outboxId,
+      MessageId: `${eventType}:${staging.Id}:${idempotencyDigest}`,
+      EventType: eventType,
+      Version: '1.0',
+      BusinessReference: staging.ShipmentReference ?? staging.OutboundOrderId,
+      SourceSystem: 'LTA-WMS',
+      TargetSystem: 'INTEGRATION',
+      WarehouseContext: warehouseContext,
+      OwnerContext: ownerContext,
+      EventTime: staging.GoodsIssuePostedAt ?? new Date(),
+      CorrelationId: context.CorrelationId ?? staging.OutboundOrderId,
+      CausationId: staging.Id,
+      Payload: {
+        EventName: eventType,
+        StagingId: staging.Id,
+        PackageId: staging.PackageId,
+        PackageCode: staging.PackageCode,
+        ShipmentReference: staging.ShipmentReference,
+        BusinessReference: staging.ShipmentReference ?? staging.OutboundOrderId,
+        WarehouseContext: warehouseContext,
+        OwnerContext: ownerContext,
+        GoodsIssueStatus: staging.GoodsIssueStatus,
+        InventoryTransactionIds: inventoryTransactionIds,
+      },
+      Status: OutboxMessageStatus.Pending,
+      CreatedBy: context.ActorUserId ?? null,
+    });
+  }
+
+  private ResolveOwnerContext(staging: ShipmentPackageStagingEntity): string | null {
+    return staging.OwnerCode ?? staging.OwnerId;
+  }
+
+  private ResolveWarehouseContext(staging: ShipmentPackageStagingEntity): string {
+    return staging.WarehouseCode ?? staging.WarehouseId ?? 'UNRESOLVED';
+  }
+
+  private async FailGoodsIssueWithAudit(
+    context: AuditContext,
+    staging: ShipmentPackageStagingEntity,
+    reason: string,
+    details: Record<string, unknown>,
+    referenceType = 'GoodsIssueGate',
+  ): Promise<never> {
+    await this.audited.Run(async () => ({
+      result: null,
+      entry: MergeAuditContext(context, {
+        Action: ActionCode.Adjust,
+        ObjectType: ObjectType.GoodsIssue,
+        ObjectId: staging.Id,
+        ObjectCode: staging.StagingCode,
+        AfterJson: {
+          Decision: 'Blocked',
+          Reason: reason,
+          Staging: ShippingStagingDtoMapper.ToDto(staging),
+          ...details,
+        },
+        ReferenceType: referenceType,
+        ReferenceId: staging.Id,
+        WarehouseId: staging.WarehouseId,
+        OwnerId: staging.OwnerId,
+        Result: AuditResult.Failed,
+      }),
+    }));
+    throw new BusinessRuleException(reason, details);
+  }
+
   private async LoadStaging(id: string): Promise<ShipmentPackageStagingEntity> {
     const staging = await this.stagings.FindById(id?.trim() ?? '');
     if (!staging) throw new NotFoundException('Package staging not found', { StagingId: id });
@@ -1180,6 +1962,50 @@ export class ShippingStagingLifecycleService {
         ObjectType: objectType,
       });
     }
+  }
+
+  private async AssertGoodsIssuePermissionWithAudit(
+    context: AuditContext,
+    staging: ShipmentPackageStagingEntity,
+  ): Promise<void> {
+    if (!context.ActorUserId) {
+      await this.DenyGoodsIssueWithAudit(context, staging, 'Authenticated actor is required', {});
+    }
+    if (!(await this.CheckPermission(context.ActorUserId, ActionCode.Adjust, staging, ObjectType.GoodsIssue))) {
+      await this.DenyGoodsIssueWithAudit(context, staging, 'Permission denied for Goods Issue posting', {
+        Action: ActionCode.Adjust,
+        ObjectType: ObjectType.GoodsIssue,
+      });
+    }
+  }
+
+  private async DenyGoodsIssueWithAudit(
+    context: AuditContext,
+    staging: ShipmentPackageStagingEntity,
+    reason: string,
+    details: Record<string, unknown>,
+  ): Promise<never> {
+    await this.audited.Run(async () => ({
+      result: null,
+      entry: MergeAuditContext(context, {
+        Action: ActionCode.Adjust,
+        ObjectType: ObjectType.GoodsIssue,
+        ObjectId: staging.Id,
+        ObjectCode: staging.StagingCode,
+        AfterJson: {
+          Decision: 'Denied',
+          Reason: reason,
+          Staging: ShippingStagingDtoMapper.ToDto(staging),
+          ...details,
+        },
+        ReferenceType: 'GoodsIssuePermission',
+        ReferenceId: staging.Id,
+        WarehouseId: staging.WarehouseId,
+        OwnerId: staging.OwnerId,
+        Result: AuditResult.Failed,
+      }),
+    }));
+    throw new ForbiddenAppException(reason, details);
   }
 
   private async CheckPermission(
@@ -1490,6 +2316,21 @@ export class ShippingStagingLifecycleService {
     }
     if (!normalized.IdempotencyKey) {
       throw new BusinessRuleException('IdempotencyKey is required for Goods Issue trigger');
+    }
+    return normalized;
+  }
+
+  private NormalizePostGoodsIssue(request: PostGoodsIssueDto): NormalizedPostGoodsIssue {
+    const normalized = {
+      ...request,
+      InventoryStatusCode: request.InventoryStatusCode?.trim().toUpperCase() || null,
+      ReasonCode: request.ReasonCode?.trim().toUpperCase() || 'RC-V1-GOODS-ISSUE-CORRECTION',
+      ReasonNote: request.ReasonNote?.trim() || null,
+      EvidenceRefs: this.NormalizeEvidence(request.EvidenceRefs),
+      IdempotencyKey: request.IdempotencyKey?.trim() ?? '',
+    };
+    if (!normalized.IdempotencyKey) {
+      throw new BusinessRuleException('IdempotencyKey is required for Goods Issue posting');
     }
     return normalized;
   }
@@ -1886,6 +2727,37 @@ export class ShippingStagingLifecycleService {
     return null;
   }
 
+  private async LoadGoodsIssueDuplicateAfterUniqueViolation(
+    error: unknown,
+    idempotencyKey: string,
+    fingerprint: string,
+    stagingId: string,
+  ): Promise<ShipmentPackageStagingEntity | null> {
+    if (!this.IsUniqueViolation(error)) return null;
+    const duplicateByKey = await this.stagings.FindByGoodsIssueIdempotencyKey(idempotencyKey);
+    if (duplicateByKey) {
+      if (duplicateByKey.Id !== stagingId) {
+        throw new ConflictException('Goods Issue idempotency key already used', { StagingId: duplicateByKey.Id });
+      }
+      this.AssertSameFingerprint(
+        duplicateByKey.GoodsIssuePayloadFingerprint,
+        fingerprint,
+        'Goods Issue idempotency key already used',
+      );
+      return duplicateByKey;
+    }
+    const staging = await this.stagings.FindById(stagingId);
+    if (staging?.GoodsIssueIdempotencyKey === idempotencyKey) {
+      this.AssertSameFingerprint(
+        staging.GoodsIssuePayloadFingerprint,
+        fingerprint,
+        'Goods Issue idempotency key already used',
+      );
+      return staging;
+    }
+    return null;
+  }
+
   private NormalizeEvidence(value?: string[] | null): string[] {
     return (value ?? []).map((item) => item.trim()).filter(Boolean);
   }
@@ -1934,6 +2806,10 @@ export class ShippingStagingLifecycleService {
 
   private BuildCode(prefix: string): string {
     return `${prefix}-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`;
+  }
+
+  private ToTime(value: Date | null): number | null {
+    return value ? value.getTime() : null;
   }
 
   private Hash(payload: unknown): string {

@@ -88,6 +88,14 @@ export class ShippingStagingRepository implements IShippingStagingRepository {
     return entity ? ShippingStagingOrmMapper.ToDomain(entity) : null;
   }
 
+  public async FindByGoodsIssueIdempotencyKey(
+    key: string,
+    manager?: EntityManager,
+  ): Promise<ShipmentPackageStagingEntity | null> {
+    const entity = await this.Repo(manager).findOne({ where: { GoodsIssueIdempotencyKey: key } });
+    return entity ? ShippingStagingOrmMapper.ToDomain(entity) : null;
+  }
+
   public async ListByShipmentReference(
     shipmentReference: string,
     scope: {

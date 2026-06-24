@@ -1,6 +1,7 @@
 import { ShipmentPackageStagingStatus } from '@modules/Shipping/Domain/Enums/ShipmentPackageStagingStatus';
 import { GoodsIssueTrigger } from '@modules/Shipping/Domain/Enums/GoodsIssueTrigger';
 import { GoodsIssueTriggerStatus } from '@modules/Shipping/Domain/Enums/GoodsIssueTriggerStatus';
+import { GoodsIssueStatus } from '@modules/Shipping/Domain/Enums/GoodsIssueStatus';
 
 export interface ShipmentPackageStagingDto {
   Id: string;
@@ -45,10 +46,18 @@ export interface ShipmentPackageStagingDto {
   GoodsIssueTriggerStatus: GoodsIssueTriggerStatus | null;
   GoodsIssueTriggeredAt: string | null;
   GoodsIssueTriggeredBy: string | null;
+  GoodsIssueStatus: GoodsIssueStatus | null;
+  GoodsIssuePostedAt: string | null;
+  GoodsIssuePostedBy: string | null;
+  GoodsIssueInventoryTransactionId: string | null;
+  GoodsIssueInventoryMovementId: string | null;
   LoadingOutboxMessageId: string | null;
   ShipmentConfirmOutboxMessageId: string | null;
   GateOutOutboxMessageId: string | null;
   GoodsIssueTriggerOutboxMessageId: string | null;
+  GoodsIssueOutboxMessageId: string | null;
+  ShipmentClosedOutboxMessageId: string | null;
+  ShipmentClosedAt: string | null;
   CreatedAt: string;
   UpdatedAt: string;
 }
@@ -132,6 +141,14 @@ export interface RecordGateOutDto {
 
 export interface EvaluateGoodsIssueTriggerDto {
   GoodsIssueTrigger?: GoodsIssueTrigger | null;
+  InventoryStatusCode?: string | null;
+  ReasonCode?: string | null;
+  ReasonNote?: string | null;
+  EvidenceRefs?: string[] | null;
+  IdempotencyKey: string;
+}
+
+export interface PostGoodsIssueDto {
   InventoryStatusCode?: string | null;
   ReasonCode?: string | null;
   ReasonNote?: string | null;

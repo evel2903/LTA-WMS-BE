@@ -13,6 +13,7 @@ import {
   EvaluateGoodsIssueTriggerUseCase,
   GetShippingStagingUseCase,
   ListShippingStagingUseCase,
+  PostGoodsIssueUseCase,
   RecordGateOutUseCase,
   ScanLoadingUseCase,
   StagePackageUseCase,
@@ -23,6 +24,7 @@ import {
   ConfirmShipmentRequest,
   EvaluateGoodsIssueTriggerRequest,
   ListShippingStagingQuery,
+  PostGoodsIssueRequest,
   RecordGateOutRequest,
   ScanLoadingRequest,
   StagePackageRequest,
@@ -41,6 +43,7 @@ export class ShippingStagingController {
     private readonly confirmShipmentUseCase: ConfirmShipmentUseCase,
     private readonly recordGateOutUseCase: RecordGateOutUseCase,
     private readonly evaluateGoodsIssueTriggerUseCase: EvaluateGoodsIssueTriggerUseCase,
+    private readonly postGoodsIssueUseCase: PostGoodsIssueUseCase,
   ) {}
 
   @Get('packages')
@@ -122,5 +125,15 @@ export class ShippingStagingController {
     @CurrentAuditContext() context: AuditContext,
   ) {
     return this.evaluateGoodsIssueTriggerUseCase.Execute(id, request, context);
+  }
+
+  @Post('packages/:id/goods-issue')
+  @RequirePermission(ActionCode.Adjust, ObjectType.GoodsIssue)
+  public async PostGoodsIssue(
+    @Param('id') id: string,
+    @Body() request: PostGoodsIssueRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return this.postGoodsIssueUseCase.Execute(id, request, context);
   }
 }
