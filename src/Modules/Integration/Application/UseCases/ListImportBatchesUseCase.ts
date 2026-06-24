@@ -6,10 +6,15 @@ import {
 } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
 import { IntegrationDtoMapper } from '@modules/Integration/Application/Mappers/IntegrationDtoMapper';
 
+type ListImportBatchesQuery = Pick<IntegrationListFilter, 'SourceSystem' | 'Status'> & {
+  Page?: number;
+  PageSize?: number;
+};
+
 export class ListImportBatchesUseCase {
   constructor(private readonly integrations: IIntegrationRepository) {}
 
-  public async Execute(query: IntegrationListFilter & { Page?: number; PageSize?: number }): Promise<{
+  public async Execute(query: ListImportBatchesQuery): Promise<{
     Items: ImportBatchDto[];
     Meta: { Page: number; PageSize: number; TotalItems: number; TotalPages: number };
   }> {

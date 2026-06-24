@@ -11,6 +11,9 @@ import { ImportIntegrationBatchUseCase } from '@modules/Integration/Application/
 import { ListImportBatchesUseCase } from '@modules/Integration/Application/UseCases/ListImportBatchesUseCase';
 import { ListOutboxMessagesUseCase } from '@modules/Integration/Application/UseCases/ListOutboxMessagesUseCase';
 import { RecordOutboxEventUseCase } from '@modules/Integration/Application/UseCases/RecordOutboxEventUseCase';
+import { GetOutboxMessageUseCase } from '@modules/Integration/Application/UseCases/GetOutboxMessageUseCase';
+import { RecordOutboxFailureUseCase } from '@modules/Integration/Application/UseCases/RecordOutboxFailureUseCase';
+import { ResolveDeadLetterUseCase } from '@modules/Integration/Application/UseCases/ResolveDeadLetterUseCase';
 import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 
 describe('E2E IntegrationController (no DB)', () => {
@@ -20,6 +23,9 @@ describe('E2E IntegrationController (no DB)', () => {
   const listImportsExecute = jest.fn();
   const listEventsExecute = jest.fn();
   const recordEventExecute = jest.fn();
+  const getEventExecute = jest.fn();
+  const recordFailureExecute = jest.fn();
+  const resolveDeadLetterExecute = jest.fn();
 
   const buildModule = () =>
     Test.createTestingModule({
@@ -30,6 +36,9 @@ describe('E2E IntegrationController (no DB)', () => {
         { provide: ListImportBatchesUseCase, useValue: { Execute: listImportsExecute } },
         { provide: ListOutboxMessagesUseCase, useValue: { Execute: listEventsExecute } },
         { provide: RecordOutboxEventUseCase, useValue: { Execute: recordEventExecute } },
+        { provide: GetOutboxMessageUseCase, useValue: { Execute: getEventExecute } },
+        { provide: RecordOutboxFailureUseCase, useValue: { Execute: recordFailureExecute } },
+        { provide: ResolveDeadLetterUseCase, useValue: { Execute: resolveDeadLetterExecute } },
       ],
     });
 
@@ -50,6 +59,9 @@ describe('E2E IntegrationController (no DB)', () => {
     listImportsExecute.mockReset();
     listEventsExecute.mockReset();
     recordEventExecute.mockReset();
+    getEventExecute.mockReset();
+    recordFailureExecute.mockReset();
+    resolveDeadLetterExecute.mockReset();
   });
 
   it('declares IntegrationMessage permissions on read and mutation endpoints', () => {
@@ -68,6 +80,22 @@ describe('E2E IntegrationController (no DB)', () => {
     expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, IntegrationController.prototype.ListEvents)).toMatchObject({
       Action: ActionCode.Read,
       ObjectType: ObjectType.IntegrationMessage,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, IntegrationController.prototype.GetEvent)).toMatchObject({
+      Action: ActionCode.Read,
+      ObjectType: ObjectType.IntegrationMessage,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, IntegrationController.prototype.RecordFailure)).toMatchObject({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.IntegrationMessage,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, IntegrationController.prototype.ListDeadLetters)).toMatchObject({
+      Action: ActionCode.Read,
+      ObjectType: ObjectType.DeadLetterMessage,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, IntegrationController.prototype.RetryDeadLetter)).toMatchObject({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.DeadLetterMessage,
     });
   });
 
@@ -145,5 +173,58 @@ describe('E2E IntegrationController (no DB)', () => {
 
     expect(listImportsExecute).toHaveBeenCalledWith(expect.objectContaining({ Page: 1, PageSize: 500 }));
     expect(listEventsExecute).toHaveBeenCalledWith(expect.objectContaining({ Page: 1, PageSize: 500 }));
+  });
+
+  it('POST /integration/events/:id/failures validates failure category and passes audit context', async () => {
+    recordFailureExecute.mockResolvedValue({ Id: 'outbox-1', Status: 'DeadLetter' });
+
+    await request(app.getHttpServer())
+      .post('/integration/events/outbox-1/failures')
+      .send({ FailureCategory: 'Validation', ErrorMessage: 'Missing owner master' })
+      .expect(201);
+
+    expect(recordFailureExecute).toHaveBeenCalledWith(
+      'outbox-1',
+      expect.objectContaining({ FailureCategory: 'Validation', ErrorMessage: 'Missing owner master' }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+
+    await request(app.getHttpServer())
+      .post('/integration/events/outbox-1/failures')
+      .send({ FailureCategory: 'BadStatus', ErrorMessage: 'x' })
+      .expect(400);
+
+    recordFailureExecute.mockClear();
+    await request(app.getHttpServer())
+      .post('/integration/events/outbox-1/failures')
+      .send({ FailureCategory: 'Transient', ErrorMessage: 'ERP timeout', MaxAttempts: 20 })
+      .expect(400);
+    expect(recordFailureExecute).not.toHaveBeenCalled();
+  });
+
+  it('dead-letter endpoints use list/detail action use cases with reason payload', async () => {
+    listEventsExecute.mockResolvedValue({ Items: [], Meta: { Page: 1, PageSize: 50, TotalItems: 0, TotalPages: 0 } });
+    getEventExecute.mockResolvedValue({ Id: 'outbox-1' });
+    resolveDeadLetterExecute.mockResolvedValue({ Id: 'outbox-1', Status: 'Pending' });
+
+    await request(app.getHttpServer()).get('/integration/dead-letters?PageSize=500').expect(200);
+    await request(app.getHttpServer()).get('/integration/dead-letters/outbox-1').expect(200);
+    await request(app.getHttpServer())
+      .post('/integration/dead-letters/outbox-1/retry')
+      .send({
+        ReasonCode: 'RC-V1-DEAD-LETTER-FIX',
+        EvidenceRefs: ['ticket:INT-1'],
+        IdempotencyKey: 'retry-1',
+      })
+      .expect(201);
+
+    expect(listEventsExecute).toHaveBeenCalledWith(expect.objectContaining({ PageSize: 500, Status: 'DeadLetter' }));
+    expect(getEventExecute).toHaveBeenCalledWith('outbox-1', expect.any(Set));
+    expect(resolveDeadLetterExecute).toHaveBeenCalledWith(
+      'outbox-1',
+      'Retry',
+      expect.objectContaining({ ReasonCode: 'RC-V1-DEAD-LETTER-FIX', EvidenceRefs: ['ticket:INT-1'] }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
   });
 });

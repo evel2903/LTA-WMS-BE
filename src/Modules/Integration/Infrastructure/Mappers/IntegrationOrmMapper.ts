@@ -4,6 +4,8 @@ import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/Outbox
 import { ImportBatchStatus } from '@modules/Integration/Domain/Enums/ImportBatchStatus';
 import { InterfaceMessageStatus } from '@modules/Integration/Domain/Enums/InterfaceMessageStatus';
 import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
+import { IntegrationFailureCategory } from '@modules/Integration/Domain/Enums/IntegrationFailureCategory';
+import { DeadLetterActionType } from '@modules/Integration/Domain/Enums/DeadLetterActionType';
 import { ImportBatchOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/ImportBatchOrmEntity';
 import { InterfaceMessageOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/InterfaceMessageOrmEntity';
 import { OutboxMessageOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/OutboxMessageOrmEntity';
@@ -102,8 +104,25 @@ export class IntegrationOrmMapper {
     orm.CausationId = entity.CausationId;
     orm.Payload = entity.Payload;
     orm.Status = entity.Status;
+    orm.AttemptCount = entity.AttemptCount;
+    orm.MaxAttempts = entity.MaxAttempts;
+    orm.NextRetryAt = entity.NextRetryAt;
+    orm.LastError = entity.LastError;
+    orm.FailureCategory = entity.FailureCategory;
+    orm.DeadLetterReason = entity.DeadLetterReason;
+    orm.DeadLetteredAt = entity.DeadLetteredAt;
+    orm.ResolutionAction = entity.ResolutionAction;
+    orm.ActionIdempotencyKey = entity.ActionIdempotencyKey;
+    orm.ActionPayloadHash = entity.ActionPayloadHash;
+    orm.ResolvedAt = entity.ResolvedAt;
+    orm.ResolvedBy = entity.ResolvedBy;
+    orm.ReasonCode = entity.ReasonCode;
+    orm.ReasonCodeId = entity.ReasonCodeId;
+    orm.ReasonNote = entity.ReasonNote;
+    orm.EvidenceRefs = entity.EvidenceRefs;
     orm.CreatedAt = entity.CreatedAt;
     orm.CreatedBy = entity.CreatedBy;
+    orm.UpdatedAt = entity.UpdatedAt;
     return orm;
   }
 
@@ -124,8 +143,25 @@ export class IntegrationOrmMapper {
       CausationId: orm.CausationId,
       Payload: orm.Payload,
       Status: orm.Status as OutboxMessageStatus,
+      AttemptCount: orm.AttemptCount ?? 0,
+      MaxAttempts: orm.MaxAttempts ?? 5,
+      NextRetryAt: orm.NextRetryAt,
+      LastError: orm.LastError,
+      FailureCategory: orm.FailureCategory as IntegrationFailureCategory | null,
+      DeadLetterReason: orm.DeadLetterReason,
+      DeadLetteredAt: orm.DeadLetteredAt,
+      ResolutionAction: orm.ResolutionAction as DeadLetterActionType | null,
+      ActionIdempotencyKey: orm.ActionIdempotencyKey,
+      ActionPayloadHash: orm.ActionPayloadHash,
+      ResolvedAt: orm.ResolvedAt,
+      ResolvedBy: orm.ResolvedBy,
+      ReasonCode: orm.ReasonCode,
+      ReasonCodeId: orm.ReasonCodeId,
+      ReasonNote: orm.ReasonNote,
+      EvidenceRefs: orm.EvidenceRefs ?? [],
       CreatedAt: orm.CreatedAt,
       CreatedBy: orm.CreatedBy,
+      UpdatedAt: orm.UpdatedAt ?? orm.CreatedAt,
     });
   }
 }

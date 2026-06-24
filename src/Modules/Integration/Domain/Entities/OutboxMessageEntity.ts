@@ -1,4 +1,6 @@
 import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
+import { IntegrationFailureCategory } from '@modules/Integration/Domain/Enums/IntegrationFailureCategory';
+import { DeadLetterActionType } from '@modules/Integration/Domain/Enums/DeadLetterActionType';
 
 export class OutboxMessageEntity {
   public Id: string;
@@ -16,8 +18,25 @@ export class OutboxMessageEntity {
   public CausationId: string | null;
   public Payload: Record<string, unknown>;
   public Status: OutboxMessageStatus;
+  public AttemptCount: number;
+  public MaxAttempts: number;
+  public NextRetryAt: Date | null;
+  public LastError: string | null;
+  public FailureCategory: IntegrationFailureCategory | null;
+  public DeadLetterReason: string | null;
+  public DeadLetteredAt: Date | null;
+  public ResolutionAction: DeadLetterActionType | null;
+  public ActionIdempotencyKey: string | null;
+  public ActionPayloadHash: string | null;
+  public ResolvedAt: Date | null;
+  public ResolvedBy: string | null;
+  public ReasonCode: string | null;
+  public ReasonCodeId: string | null;
+  public ReasonNote: string | null;
+  public EvidenceRefs: string[];
   public CreatedAt: Date;
   public CreatedBy: string | null;
+  public UpdatedAt: Date;
 
   constructor(params: {
     Id: string;
@@ -35,8 +54,25 @@ export class OutboxMessageEntity {
     CausationId?: string | null;
     Payload: Record<string, unknown>;
     Status: OutboxMessageStatus;
+    AttemptCount?: number;
+    MaxAttempts?: number;
+    NextRetryAt?: Date | null;
+    LastError?: string | null;
+    FailureCategory?: IntegrationFailureCategory | null;
+    DeadLetterReason?: string | null;
+    DeadLetteredAt?: Date | null;
+    ResolutionAction?: DeadLetterActionType | null;
+    ActionIdempotencyKey?: string | null;
+    ActionPayloadHash?: string | null;
+    ResolvedAt?: Date | null;
+    ResolvedBy?: string | null;
+    ReasonCode?: string | null;
+    ReasonCodeId?: string | null;
+    ReasonNote?: string | null;
+    EvidenceRefs?: string[];
     CreatedAt?: Date;
     CreatedBy?: string | null;
+    UpdatedAt?: Date;
   }) {
     this.Id = params.Id;
     this.SourceMessageId = params.SourceMessageId ?? null;
@@ -53,7 +89,24 @@ export class OutboxMessageEntity {
     this.CausationId = params.CausationId ?? null;
     this.Payload = params.Payload;
     this.Status = params.Status;
+    this.AttemptCount = params.AttemptCount ?? 0;
+    this.MaxAttempts = params.MaxAttempts ?? 5;
+    this.NextRetryAt = params.NextRetryAt ?? null;
+    this.LastError = params.LastError ?? null;
+    this.FailureCategory = params.FailureCategory ?? null;
+    this.DeadLetterReason = params.DeadLetterReason ?? null;
+    this.DeadLetteredAt = params.DeadLetteredAt ?? null;
+    this.ResolutionAction = params.ResolutionAction ?? null;
+    this.ActionIdempotencyKey = params.ActionIdempotencyKey ?? null;
+    this.ActionPayloadHash = params.ActionPayloadHash ?? null;
+    this.ResolvedAt = params.ResolvedAt ?? null;
+    this.ResolvedBy = params.ResolvedBy ?? null;
+    this.ReasonCode = params.ReasonCode ?? null;
+    this.ReasonCodeId = params.ReasonCodeId ?? null;
+    this.ReasonNote = params.ReasonNote ?? null;
+    this.EvidenceRefs = params.EvidenceRefs ?? [];
     this.CreatedAt = params.CreatedAt ?? new Date();
     this.CreatedBy = params.CreatedBy ?? null;
+    this.UpdatedAt = params.UpdatedAt ?? this.CreatedAt;
   }
 }
