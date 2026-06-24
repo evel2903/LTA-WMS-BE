@@ -76,6 +76,7 @@ import { PackageOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/E
 import { PackSessionOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PackSessionOrmEntity';
 import { PickReleaseOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PickReleaseOrmEntity';
 import { PickTaskOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PickTaskOrmEntity';
+import { ShipmentPackageStagingOrmEntity } from '@modules/Shipping/Infrastructure/Persistence/Entities/ShipmentPackageStagingOrmEntity';
 
 const env = GetEnv();
 
@@ -162,6 +163,7 @@ export default new DataSource({
     PackSessionOrmEntity,
     PackageOrmEntity,
     PackageContentOrmEntity,
+    ShipmentPackageStagingOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

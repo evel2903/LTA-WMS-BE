@@ -29,6 +29,7 @@ import { BarcodeLabelModule } from '@modules/BarcodeLabel/BarcodeLabelModule';
 import { InboundModule } from '@modules/Inbound/InboundModule';
 import { InventoryExecutionModule } from '@modules/InventoryExecution/InventoryExecutionModule';
 import { OutboundModule } from '@modules/Outbound/OutboundModule';
+import { ShippingModule } from '@modules/Shipping/ShippingModule';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { OutboundModule } from '@modules/Outbound/OutboundModule';
     InboundModule,
     InventoryExecutionModule,
     OutboundModule,
+    ShippingModule,
     WarehouseProfileModule,
     AccessControlModule,
     AuthenticationModule,
