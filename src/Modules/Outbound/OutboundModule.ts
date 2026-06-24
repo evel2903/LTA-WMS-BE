@@ -46,11 +46,16 @@ import {
   IAllocationRepository,
 } from '@modules/Outbound/Application/Interfaces/IAllocationRepository';
 import {
+  IPickReleaseRepository,
+  PICK_RELEASE_REPOSITORY,
+} from '@modules/Outbound/Application/Interfaces/IPickReleaseRepository';
+import {
   IOutboundOrderRepository,
   OUTBOUND_ORDER_REPOSITORY,
 } from '@modules/Outbound/Application/Interfaces/IOutboundOrderRepository';
 import { AllocationLifecycleService } from '@modules/Outbound/Application/Services/AllocationLifecycleService';
 import { OutboundOrderLifecycleService } from '@modules/Outbound/Application/Services/OutboundOrderLifecycleService';
+import { PickReleaseLifecycleService } from '@modules/Outbound/Application/Services/PickReleaseLifecycleService';
 import {
   AllocateOutboundOrderUseCase,
   GetAllocationUseCase,
@@ -65,13 +70,21 @@ import {
   RejectOutboundOrderUseCase,
   ValidateOutboundOrderUseCase,
 } from '@modules/Outbound/Application/UseCases/OutboundOrderUseCases';
+import {
+  GetPickReleaseUseCase,
+  ListPickReleasesUseCase,
+  ReleaseOutboundOrderUseCase,
+} from '@modules/Outbound/Application/UseCases/PickReleaseUseCases';
 import { AllocationLineOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/AllocationLineOrmEntity';
 import { AllocationOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/AllocationOrmEntity';
 import { OutboundOrderLineOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/OutboundOrderLineOrmEntity';
 import { OutboundOrderOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/OutboundOrderOrmEntity';
+import { PickReleaseOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PickReleaseOrmEntity';
+import { PickTaskOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PickTaskOrmEntity';
 import { AllocationInventoryRepository } from '@modules/Outbound/Infrastructure/Persistence/Repositories/AllocationInventoryRepository';
 import { AllocationRepository } from '@modules/Outbound/Infrastructure/Persistence/Repositories/AllocationRepository';
 import { OutboundOrderRepository } from '@modules/Outbound/Infrastructure/Persistence/Repositories/OutboundOrderRepository';
+import { PickReleaseRepository } from '@modules/Outbound/Infrastructure/Persistence/Repositories/PickReleaseRepository';
 import { OutboundOrderController } from '@modules/Outbound/Presentation/Controllers/OutboundOrderController';
 import {
   IPartnerRepository,
@@ -86,6 +99,8 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
       OutboundOrderLineOrmEntity,
       AllocationOrmEntity,
       AllocationLineOrmEntity,
+      PickReleaseOrmEntity,
+      PickTaskOrmEntity,
       InventoryBalanceOrmEntity,
     ]),
     AccessControlModule,
@@ -98,6 +113,7 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
   providers: [
     { provide: OUTBOUND_ORDER_REPOSITORY, useClass: OutboundOrderRepository },
     { provide: ALLOCATION_REPOSITORY, useClass: AllocationRepository },
+    { provide: PICK_RELEASE_REPOSITORY, useClass: PickReleaseRepository },
     { provide: ALLOCATION_INVENTORY_REPOSITORY, useClass: AllocationInventoryRepository },
     {
       provide: OutboundOrderLifecycleService,
@@ -114,6 +130,7 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
         reasonCatalog: IReasonCodeCatalog,
         audited: AuditedTransaction,
         permissionChecker: IPermissionChecker,
+        pickReleases: IPickReleaseRepository,
       ) =>
         new OutboundOrderLifecycleService(
           outboundOrders,
@@ -128,6 +145,7 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
           reasonCatalog,
           audited,
           permissionChecker,
+          pickReleases,
         ),
       inject: [
         OUTBOUND_ORDER_REPOSITORY,
@@ -142,6 +160,7 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
         REASON_CODE_CATALOG,
         AuditedTransaction,
         PERMISSION_CHECKER,
+        PICK_RELEASE_REPOSITORY,
       ],
     },
     {
@@ -230,7 +249,55 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
       useFactory: (lifecycle: AllocationLifecycleService) => new GetAllocationUseCase(lifecycle),
       inject: [AllocationLifecycleService],
     },
+    {
+      provide: PickReleaseLifecycleService,
+      useFactory: (
+        releases: IPickReleaseRepository,
+        allocations: IAllocationRepository,
+        outboundOrders: IOutboundOrderRepository,
+        coreFlows: ICoreFlowRepository,
+        integrations: IIntegrationRepository,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) =>
+        new PickReleaseLifecycleService(
+          releases,
+          allocations,
+          outboundOrders,
+          coreFlows,
+          integrations,
+          reasonCatalog,
+          audited,
+          permissionChecker,
+        ),
+      inject: [
+        PICK_RELEASE_REPOSITORY,
+        ALLOCATION_REPOSITORY,
+        OUTBOUND_ORDER_REPOSITORY,
+        CORE_FLOW_REPOSITORY,
+        INTEGRATION_REPOSITORY,
+        REASON_CODE_CATALOG,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
+    {
+      provide: ReleaseOutboundOrderUseCase,
+      useFactory: (lifecycle: PickReleaseLifecycleService) => new ReleaseOutboundOrderUseCase(lifecycle),
+      inject: [PickReleaseLifecycleService],
+    },
+    {
+      provide: ListPickReleasesUseCase,
+      useFactory: (lifecycle: PickReleaseLifecycleService) => new ListPickReleasesUseCase(lifecycle),
+      inject: [PickReleaseLifecycleService],
+    },
+    {
+      provide: GetPickReleaseUseCase,
+      useFactory: (lifecycle: PickReleaseLifecycleService) => new GetPickReleaseUseCase(lifecycle),
+      inject: [PickReleaseLifecycleService],
+    },
   ],
-  exports: [OUTBOUND_ORDER_REPOSITORY, ALLOCATION_REPOSITORY],
+  exports: [OUTBOUND_ORDER_REPOSITORY, ALLOCATION_REPOSITORY, PICK_RELEASE_REPOSITORY],
 })
 export class OutboundModule {}

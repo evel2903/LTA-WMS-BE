@@ -20,11 +20,18 @@ import {
   RejectOutboundOrderUseCase,
   ValidateOutboundOrderUseCase,
 } from '@modules/Outbound/Application/UseCases/OutboundOrderUseCases';
+import {
+  GetPickReleaseUseCase,
+  ListPickReleasesUseCase,
+  ReleaseOutboundOrderUseCase,
+} from '@modules/Outbound/Application/UseCases/PickReleaseUseCases';
 import { AllocateOutboundOrderRequest } from '@modules/Outbound/Presentation/Requests/AllocateOutboundOrderRequest';
 import { ImportOutboundOrderRequest } from '@modules/Outbound/Presentation/Requests/ImportOutboundOrderRequest';
 import { ListAllocationsQuery } from '@modules/Outbound/Presentation/Requests/ListAllocationsQuery';
 import { ListOutboundOrdersQuery } from '@modules/Outbound/Presentation/Requests/ListOutboundOrdersQuery';
+import { ListPickReleasesQuery } from '@modules/Outbound/Presentation/Requests/ListPickReleasesQuery';
 import { ReasonOutboundOrderRequest } from '@modules/Outbound/Presentation/Requests/ReasonOutboundOrderRequest';
+import { ReleaseOutboundOrderRequest } from '@modules/Outbound/Presentation/Requests/ReleaseOutboundOrderRequest';
 
 @UseGuards(JwtAuthGuard, PermissionGuard)
 @Controller('outbound-orders')
@@ -40,6 +47,9 @@ export class OutboundOrderController {
     private readonly allocateOutboundOrderUseCase: AllocateOutboundOrderUseCase,
     private readonly listAllocationsUseCase: ListAllocationsUseCase,
     private readonly getAllocationUseCase: GetAllocationUseCase,
+    private readonly releaseOutboundOrderUseCase: ReleaseOutboundOrderUseCase,
+    private readonly listPickReleasesUseCase: ListPickReleasesUseCase,
+    private readonly getPickReleaseUseCase: GetPickReleaseUseCase,
   ) {}
 
   @Post()
@@ -129,5 +139,31 @@ export class OutboundOrderController {
     @CurrentAuditContext() context: AuditContext,
   ) {
     return this.getAllocationUseCase.Execute(allocationId, context.ActorUserId);
+  }
+
+  @Post(':id/release')
+  @RequirePermission(ActionCode.Update, ObjectType.OutboundOrder)
+  public async Release(
+    @Param('id') id: string,
+    @Body() request: ReleaseOutboundOrderRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return this.releaseOutboundOrderUseCase.Execute({ OutboundOrderId: id, ...request }, context);
+  }
+
+  @Get(':id/releases')
+  @RequirePermission(ActionCode.Read, ObjectType.PickTask)
+  public async ListPickReleases(
+    @Param('id') id: string,
+    @Query() query: ListPickReleasesQuery,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return this.listPickReleasesUseCase.Execute({ OutboundOrderId: id, ...query }, context.ActorUserId);
+  }
+
+  @Get('releases/:releaseId')
+  @RequirePermission(ActionCode.Read, ObjectType.PickTask)
+  public async GetPickRelease(@Param('releaseId') releaseId: string, @CurrentAuditContext() context: AuditContext) {
+    return this.getPickReleaseUseCase.Execute(releaseId, context.ActorUserId);
   }
 }
