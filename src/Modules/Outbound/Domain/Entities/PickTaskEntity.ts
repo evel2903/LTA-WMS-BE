@@ -1,4 +1,6 @@
 import { PickTaskStatus } from '@modules/Outbound/Domain/Enums/PickTaskStatus';
+import { PickExceptionType } from '@modules/Outbound/Domain/Enums/PickExceptionType';
+import { PickSubstitutionStatus } from '@modules/Outbound/Domain/Enums/PickSubstitutionStatus';
 
 export class PickTaskEntity {
   public readonly Id: string;
@@ -32,6 +34,30 @@ export class PickTaskEntity {
   public ConfirmOutboxMessageId: string | null;
   public ConfirmInventoryTransactionId: string | null;
   public ConfirmResultJson: Record<string, unknown> | null;
+  public ExceptionType: PickExceptionType | null;
+  public ExceptionCaseId: string | null;
+  public ExceptionReasonCode: string | null;
+  public ExceptionReasonCodeId: string | null;
+  public ExceptionReasonNote: string | null;
+  public ExceptionEvidenceJson: Record<string, unknown> | null;
+  public ExceptionIdempotencyKey: string | null;
+  public ExceptionPayloadFingerprint: string | null;
+  public ExceptionReportedAt: Date | null;
+  public ExceptionReportedBy: string | null;
+  public ReplenishmentRequired: boolean;
+  public ReplenishmentTaskId: string | null;
+  public SubstitutionStatus: PickSubstitutionStatus | null;
+  public SubstitutionSkuId: string | null;
+  public SubstitutionSkuCode: string | null;
+  public SubstitutionUomId: string | null;
+  public SubstitutionUomCode: string | null;
+  public SubstitutionQuantity: number | null;
+  public SubstitutionApprovalRequestId: string | null;
+  public SubstitutionPolicyJson: Record<string, unknown> | null;
+  public SubstitutionIdempotencyKey: string | null;
+  public SubstitutionPayloadFingerprint: string | null;
+  public SubstitutionRequestedAt: Date | null;
+  public SubstitutionRequestedBy: string | null;
   public readonly CreatedAt: Date;
 
   constructor(params: {
@@ -66,6 +92,30 @@ export class PickTaskEntity {
     ConfirmOutboxMessageId?: string | null;
     ConfirmInventoryTransactionId?: string | null;
     ConfirmResultJson?: Record<string, unknown> | null;
+    ExceptionType?: PickExceptionType | null;
+    ExceptionCaseId?: string | null;
+    ExceptionReasonCode?: string | null;
+    ExceptionReasonCodeId?: string | null;
+    ExceptionReasonNote?: string | null;
+    ExceptionEvidenceJson?: Record<string, unknown> | null;
+    ExceptionIdempotencyKey?: string | null;
+    ExceptionPayloadFingerprint?: string | null;
+    ExceptionReportedAt?: Date | null;
+    ExceptionReportedBy?: string | null;
+    ReplenishmentRequired?: boolean;
+    ReplenishmentTaskId?: string | null;
+    SubstitutionStatus?: PickSubstitutionStatus | null;
+    SubstitutionSkuId?: string | null;
+    SubstitutionSkuCode?: string | null;
+    SubstitutionUomId?: string | null;
+    SubstitutionUomCode?: string | null;
+    SubstitutionQuantity?: number | null;
+    SubstitutionApprovalRequestId?: string | null;
+    SubstitutionPolicyJson?: Record<string, unknown> | null;
+    SubstitutionIdempotencyKey?: string | null;
+    SubstitutionPayloadFingerprint?: string | null;
+    SubstitutionRequestedAt?: Date | null;
+    SubstitutionRequestedBy?: string | null;
     CreatedAt: Date;
   }) {
     this.Id = params.Id;
@@ -99,6 +149,30 @@ export class PickTaskEntity {
     this.ConfirmOutboxMessageId = params.ConfirmOutboxMessageId ?? null;
     this.ConfirmInventoryTransactionId = params.ConfirmInventoryTransactionId ?? null;
     this.ConfirmResultJson = params.ConfirmResultJson ?? null;
+    this.ExceptionType = params.ExceptionType ?? null;
+    this.ExceptionCaseId = params.ExceptionCaseId ?? null;
+    this.ExceptionReasonCode = params.ExceptionReasonCode ?? null;
+    this.ExceptionReasonCodeId = params.ExceptionReasonCodeId ?? null;
+    this.ExceptionReasonNote = params.ExceptionReasonNote ?? null;
+    this.ExceptionEvidenceJson = params.ExceptionEvidenceJson ?? null;
+    this.ExceptionIdempotencyKey = params.ExceptionIdempotencyKey ?? null;
+    this.ExceptionPayloadFingerprint = params.ExceptionPayloadFingerprint ?? null;
+    this.ExceptionReportedAt = params.ExceptionReportedAt ?? null;
+    this.ExceptionReportedBy = params.ExceptionReportedBy ?? null;
+    this.ReplenishmentRequired = params.ReplenishmentRequired ?? false;
+    this.ReplenishmentTaskId = params.ReplenishmentTaskId ?? null;
+    this.SubstitutionStatus = params.SubstitutionStatus ?? null;
+    this.SubstitutionSkuId = params.SubstitutionSkuId ?? null;
+    this.SubstitutionSkuCode = params.SubstitutionSkuCode ?? null;
+    this.SubstitutionUomId = params.SubstitutionUomId ?? null;
+    this.SubstitutionUomCode = params.SubstitutionUomCode ?? null;
+    this.SubstitutionQuantity = params.SubstitutionQuantity ?? null;
+    this.SubstitutionApprovalRequestId = params.SubstitutionApprovalRequestId ?? null;
+    this.SubstitutionPolicyJson = params.SubstitutionPolicyJson ?? null;
+    this.SubstitutionIdempotencyKey = params.SubstitutionIdempotencyKey ?? null;
+    this.SubstitutionPayloadFingerprint = params.SubstitutionPayloadFingerprint ?? null;
+    this.SubstitutionRequestedAt = params.SubstitutionRequestedAt ?? null;
+    this.SubstitutionRequestedBy = params.SubstitutionRequestedBy ?? null;
     this.CreatedAt = params.CreatedAt;
   }
 }

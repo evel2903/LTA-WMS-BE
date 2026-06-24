@@ -20,13 +20,13 @@ import {
 
 const REQUIRED_EX_CODES = ['CTRL-EX-01', 'CTRL-EX-02', 'CTRL-EX-03', 'CTRL-EX-04', 'CTRL-EX-05', 'CTRL-EX-08'];
 const DEFERRED_V1PLUS_EX_CODES = ['CTRL-EX-06', 'CTRL-EX-07', 'CTRL-EX-09'];
-const V1_EX_CODES = ['CTRL-V1-INVENTORY-RECONCILIATION'];
+const V1_EX_CODES = ['CTRL-V1-INVENTORY-RECONCILIATION', 'CTRL-V1-PICK-EXCEPTION', 'CTRL-V1-PICK-SUBSTITUTION'];
 const DOC09_EX_CODES = [...REQUIRED_EX_CODES, ...DEFERRED_V1PLUS_EX_CODES];
 const ALL_EX_CODES = [...DOC09_EX_CODES, ...V1_EX_CODES];
 const ALL_VAL_CODES = Array.from({ length: 10 }, (_, i) => `RBAC-VAL-${String(i + 1).padStart(2, '0')}`);
 
 describe('SeedControlExceptionCatalog (C8 AC2 / AC4)', () => {
-  it('seeds the 9 doc-09 CTRL-EX rows plus V1 reconciliation extension', async () => {
+  it('seeds the 9 doc-09 CTRL-EX rows plus V1 extensions', async () => {
     const repo = new InMemoryControlExceptionCatalogRepository();
     await SeedControlExceptionCatalog(repo);
 
@@ -63,6 +63,18 @@ describe('SeedControlExceptionCatalog (C8 AC2 / AC4)', () => {
     expect(v1Recon!.EvidenceRequired).toBe(true);
     expect(v1Recon!.ApprovalRequired).toBe(false);
     expect(v1Recon!.ImplementationStatus).toBe(CatalogImplementationStatus.Implemented);
+
+    const v1PickException = await repo.FindByCode('CTRL-V1-PICK-EXCEPTION');
+    expect(v1PickException!.ReasonRequired).toBe(true);
+    expect(v1PickException!.EvidenceRequired).toBe(true);
+    expect(v1PickException!.ApprovalRequired).toBe(false);
+    expect(v1PickException!.ImplementationStatus).toBe(CatalogImplementationStatus.Implemented);
+
+    const v1PickSubstitution = await repo.FindByCode('CTRL-V1-PICK-SUBSTITUTION');
+    expect(v1PickSubstitution!.ReasonRequired).toBe(true);
+    expect(v1PickSubstitution!.EvidenceRequired).toBe(true);
+    expect(v1PickSubstitution!.ApprovalRequired).toBe(true);
+    expect(v1PickSubstitution!.ImplementationStatus).toBe(CatalogImplementationStatus.Implemented);
   });
 
   it('is idempotent (re-run keeps expected rows, no duplicates)', async () => {
@@ -210,6 +222,14 @@ describe('ControlExceptionCatalog.ValidateExceptionType (C8 AC5 — C9 contract)
     const entry = await catalog.ValidateExceptionType('CTRL-V1-INVENTORY-RECONCILIATION');
     expect(entry.Code).toBe('CTRL-V1-INVENTORY-RECONCILIATION');
     expect(entry.Category).toBe(ControlExceptionCategory.ManualDataFix);
+  });
+
+  it('returns the entries for the V1 pick exception and substitution codes', async () => {
+    const catalog = await buildCatalog();
+    const pickException = await catalog.ValidateExceptionType('CTRL-V1-PICK-EXCEPTION');
+    const pickSubstitution = await catalog.ValidateExceptionType('CTRL-V1-PICK-SUBSTITUTION');
+    expect(pickException.Code).toBe('CTRL-V1-PICK-EXCEPTION');
+    expect(pickSubstitution.Code).toBe('CTRL-V1-PICK-SUBSTITUTION');
   });
 
   it('throws BusinessRuleException for an unknown code', async () => {

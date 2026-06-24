@@ -8,7 +8,20 @@ import {
   IReasonCodeCatalog,
   REASON_CODE_CATALOG,
 } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
+import {
+  APPROVAL_REQUEST_REPOSITORY,
+  IApprovalRequestRepository,
+} from '@modules/AccessControl/Application/Interfaces/IApprovalRequestRepository';
+import {
+  CONTROL_EXCEPTION_CATALOG,
+  IControlExceptionCatalog,
+} from '@modules/AccessControl/Application/Interfaces/IControlExceptionCatalog';
+import {
+  EXCEPTION_CASE_REPOSITORY,
+  IExceptionCaseRepository,
+} from '@modules/AccessControl/Application/Interfaces/IExceptionCaseRepository';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { CreateApprovalRequestUseCase } from '@modules/AccessControl/Application/UseCases/CreateApprovalRequestUseCase';
 import { AccessControlModule } from '@modules/AccessControl/AccessControlModule';
 import {
   CORE_FLOW_REPOSITORY,
@@ -21,6 +34,7 @@ import {
 } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
 import { IntegrationModule } from '@modules/Integration/IntegrationModule';
 import { InventoryControlUseCase } from '@modules/InventoryExecution/Application/UseCases/InventoryControlUseCase';
+import { ReleaseReplenishmentTaskUseCase } from '@modules/InventoryExecution/Application/UseCases/ReplenishmentTaskUseCases';
 import { InventoryExecutionModule } from '@modules/InventoryExecution/InventoryExecutionModule';
 import {
   IItemCoverageRepository,
@@ -59,6 +73,7 @@ import { AllocationLifecycleService } from '@modules/Outbound/Application/Servic
 import { OutboundOrderLifecycleService } from '@modules/Outbound/Application/Services/OutboundOrderLifecycleService';
 import { PickReleaseLifecycleService } from '@modules/Outbound/Application/Services/PickReleaseLifecycleService';
 import { PickTaskConfirmationService } from '@modules/Outbound/Application/Services/PickTaskConfirmationService';
+import { PickTaskExceptionService } from '@modules/Outbound/Application/Services/PickTaskExceptionService';
 import {
   AllocateOutboundOrderUseCase,
   GetAllocationUseCase,
@@ -79,6 +94,10 @@ import {
   ReleaseOutboundOrderUseCase,
 } from '@modules/Outbound/Application/UseCases/PickReleaseUseCases';
 import { ConfirmPickTaskUseCase } from '@modules/Outbound/Application/UseCases/PickTaskConfirmUseCases';
+import {
+  ReportPickExceptionUseCase,
+  RequestPickSubstitutionUseCase,
+} from '@modules/Outbound/Application/UseCases/PickTaskExceptionUseCases';
 import { AllocationLineOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/AllocationLineOrmEntity';
 import { AllocationOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/AllocationOrmEntity';
 import { OutboundOrderLineOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/OutboundOrderLineOrmEntity';
@@ -337,6 +356,55 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
       provide: ConfirmPickTaskUseCase,
       useFactory: (service: PickTaskConfirmationService) => new ConfirmPickTaskUseCase(service),
       inject: [PickTaskConfirmationService],
+    },
+    {
+      provide: PickTaskExceptionService,
+      useFactory: (
+        pickReleases: IPickReleaseRepository,
+        taskExecution: ITaskExecutionRepository,
+        exceptionCases: IExceptionCaseRepository,
+        controlExceptionCatalog: IControlExceptionCatalog,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+        approvalRequests: IApprovalRequestRepository,
+        createApprovalRequest: CreateApprovalRequestUseCase,
+        releaseReplenishmentTask: ReleaseReplenishmentTaskUseCase,
+        permissionChecker: IPermissionChecker,
+      ) =>
+        new PickTaskExceptionService(
+          pickReleases,
+          taskExecution,
+          exceptionCases,
+          controlExceptionCatalog,
+          reasonCatalog,
+          audited,
+          approvalRequests,
+          createApprovalRequest,
+          releaseReplenishmentTask,
+          permissionChecker,
+        ),
+      inject: [
+        PICK_RELEASE_REPOSITORY,
+        TASK_EXECUTION_REPOSITORY,
+        EXCEPTION_CASE_REPOSITORY,
+        CONTROL_EXCEPTION_CATALOG,
+        REASON_CODE_CATALOG,
+        AuditedTransaction,
+        APPROVAL_REQUEST_REPOSITORY,
+        CreateApprovalRequestUseCase,
+        ReleaseReplenishmentTaskUseCase,
+        PERMISSION_CHECKER,
+      ],
+    },
+    {
+      provide: ReportPickExceptionUseCase,
+      useFactory: (service: PickTaskExceptionService) => new ReportPickExceptionUseCase(service),
+      inject: [PickTaskExceptionService],
+    },
+    {
+      provide: RequestPickSubstitutionUseCase,
+      useFactory: (service: PickTaskExceptionService) => new RequestPickSubstitutionUseCase(service),
+      inject: [PickTaskExceptionService],
     },
     {
       provide: ReleaseOutboundOrderUseCase,

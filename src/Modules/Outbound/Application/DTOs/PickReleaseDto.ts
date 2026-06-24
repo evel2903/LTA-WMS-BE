@@ -1,6 +1,8 @@
 import { PickReleaseMode } from '@modules/Outbound/Domain/Enums/PickReleaseMode';
 import { PickReleaseStatus } from '@modules/Outbound/Domain/Enums/PickReleaseStatus';
 import { PickTaskStatus } from '@modules/Outbound/Domain/Enums/PickTaskStatus';
+import { PickExceptionType } from '@modules/Outbound/Domain/Enums/PickExceptionType';
+import { PickSubstitutionStatus } from '@modules/Outbound/Domain/Enums/PickSubstitutionStatus';
 
 export interface PickTaskDto {
   Id: string;
@@ -32,6 +34,25 @@ export interface PickTaskDto {
   ConfirmIdempotencyKey: string | null;
   ConfirmOutboxMessageId: string | null;
   ConfirmInventoryTransactionId: string | null;
+  ExceptionType: PickExceptionType | null;
+  ExceptionCaseId: string | null;
+  ExceptionReasonCode: string | null;
+  ExceptionReasonNote: string | null;
+  ExceptionEvidenceJson: Record<string, unknown> | null;
+  ExceptionReportedAt: Date | null;
+  ExceptionReportedBy: string | null;
+  ReplenishmentRequired: boolean;
+  ReplenishmentTaskId: string | null;
+  SubstitutionStatus: PickSubstitutionStatus | null;
+  SubstitutionSkuId: string | null;
+  SubstitutionSkuCode: string | null;
+  SubstitutionUomId: string | null;
+  SubstitutionUomCode: string | null;
+  SubstitutionQuantity: number | null;
+  SubstitutionApprovalRequestId: string | null;
+  SubstitutionPolicyJson: Record<string, unknown> | null;
+  SubstitutionRequestedAt: Date | null;
+  SubstitutionRequestedBy: string | null;
   CreatedAt: Date;
 }
 
