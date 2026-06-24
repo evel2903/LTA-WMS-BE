@@ -522,6 +522,10 @@ class MemoryIntegrationRepository implements IIntegrationRepository {
     return this.Outbox.find((item) => item.MessageId === messageId) ?? null;
   }
 
+  async FindOutboxMessageById(id: string): Promise<OutboxMessageEntity | null> {
+    return this.Outbox.find((item) => item.Id === id) ?? null;
+  }
+
   async CreateImport(
     importBatch: ImportBatchEntity,
     interfaceMessages: InterfaceMessageEntity[],
@@ -537,6 +541,11 @@ class MemoryIntegrationRepository implements IIntegrationRepository {
 
   async CreateOutboxMessage(outboxMessage: OutboxMessageEntity): Promise<OutboxMessageEntity> {
     this.Outbox.push(outboxMessage);
+    return outboxMessage;
+  }
+
+  async UpdateOutboxMessage(outboxMessage: OutboxMessageEntity): Promise<OutboxMessageEntity> {
+    this.Outbox = this.Outbox.map((item) => (item.Id === outboxMessage.Id ? outboxMessage : item));
     return outboxMessage;
   }
 

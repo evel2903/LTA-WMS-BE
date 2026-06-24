@@ -5,17 +5,31 @@ import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/Outbox
 
 export const INTEGRATION_REPOSITORY = Symbol('INTEGRATION_REPOSITORY');
 
+export interface IntegrationReadOptions {
+  Lock?: boolean;
+}
+
 export interface IntegrationListFilter {
   SourceSystem?: string;
   Status?: string;
+  EventType?: string;
   BusinessReference?: string;
   WarehouseContext?: string;
   OwnerContext?: string;
+  CreatedFrom?: Date;
+  CreatedTo?: Date;
+  UpdatedFrom?: Date;
+  UpdatedTo?: Date;
 }
 
 export interface IIntegrationRepository {
   FindInterfaceMessageByMessageId(messageId: string): Promise<InterfaceMessageEntity | null>;
-  FindOutboxMessageByMessageId(messageId: string): Promise<OutboxMessageEntity | null>;
+  FindOutboxMessageByMessageId(messageId: string, manager?: EntityManager): Promise<OutboxMessageEntity | null>;
+  FindOutboxMessageById(
+    id: string,
+    manager?: EntityManager,
+    options?: IntegrationReadOptions,
+  ): Promise<OutboxMessageEntity | null>;
   CreateImport(
     importBatch: ImportBatchEntity,
     interfaceMessages: InterfaceMessageEntity[],
@@ -27,6 +41,7 @@ export interface IIntegrationRepository {
     OutboxMessages: OutboxMessageEntity[];
   }>;
   CreateOutboxMessage(outboxMessage: OutboxMessageEntity, manager?: EntityManager): Promise<OutboxMessageEntity>;
+  UpdateOutboxMessage(outboxMessage: OutboxMessageEntity, manager?: EntityManager): Promise<OutboxMessageEntity>;
   ListImportBatches(
     skip: number,
     take: number,

@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
-import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
+import { Between, EntityManager, FindOptionsWhere, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
 import {
   IIntegrationRepository,
+  IntegrationReadOptions,
   IntegrationListFilter,
 } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
 import { ImportBatchEntity } from '@modules/Integration/Domain/Entities/ImportBatchEntity';
@@ -30,8 +31,25 @@ export class IntegrationRepository implements IIntegrationRepository {
     return entity ? IntegrationOrmMapper.ToInterfaceMessageDomain(entity) : null;
   }
 
-  public async FindOutboxMessageByMessageId(messageId: string): Promise<OutboxMessageEntity | null> {
-    const entity = await this.outboxMessages.findOne({ where: { MessageId: messageId } });
+  public async FindOutboxMessageByMessageId(
+    messageId: string,
+    manager?: EntityManager,
+  ): Promise<OutboxMessageEntity | null> {
+    const repo = manager ? manager.getRepository(OutboxMessageOrmEntity) : this.outboxMessages;
+    const entity = await repo.findOne({ where: { MessageId: messageId } });
+    return entity ? IntegrationOrmMapper.ToOutboxMessageDomain(entity) : null;
+  }
+
+  public async FindOutboxMessageById(
+    id: string,
+    manager?: EntityManager,
+    options: IntegrationReadOptions = {},
+  ): Promise<OutboxMessageEntity | null> {
+    const repo = manager ? manager.getRepository(OutboxMessageOrmEntity) : this.outboxMessages;
+    const entity = await repo.findOne({
+      where: { Id: id },
+      lock: manager && options.Lock ? { mode: 'pessimistic_write' } : undefined,
+    });
     return entity ? IntegrationOrmMapper.ToOutboxMessageDomain(entity) : null;
   }
 
@@ -81,6 +99,15 @@ export class IntegrationRepository implements IIntegrationRepository {
     }
   }
 
+  public async UpdateOutboxMessage(
+    outboxMessage: OutboxMessageEntity,
+    manager?: EntityManager,
+  ): Promise<OutboxMessageEntity> {
+    const repo = manager ? manager.getRepository(OutboxMessageOrmEntity) : this.outboxMessages;
+    const saved = await repo.save(IntegrationOrmMapper.ToOutboxMessageOrm(outboxMessage));
+    return IntegrationOrmMapper.ToOutboxMessageDomain(saved);
+  }
+
   public async ListImportBatches(
     skip: number,
     take: number,
@@ -106,9 +133,16 @@ export class IntegrationRepository implements IIntegrationRepository {
     const where: FindOptionsWhere<OutboxMessageOrmEntity> = {};
     if (filter.SourceSystem) where.SourceSystem = filter.SourceSystem;
     if (filter.Status) where.Status = filter.Status;
+    if (filter.EventType) where.EventType = filter.EventType;
     if (filter.BusinessReference) where.BusinessReference = filter.BusinessReference;
     if (filter.WarehouseContext) where.WarehouseContext = filter.WarehouseContext;
     if (filter.OwnerContext) where.OwnerContext = filter.OwnerContext;
+    if (filter.CreatedFrom && filter.CreatedTo) where.CreatedAt = Between(filter.CreatedFrom, filter.CreatedTo);
+    else if (filter.CreatedFrom) where.CreatedAt = MoreThanOrEqual(filter.CreatedFrom);
+    else if (filter.CreatedTo) where.CreatedAt = LessThanOrEqual(filter.CreatedTo);
+    if (filter.UpdatedFrom && filter.UpdatedTo) where.UpdatedAt = Between(filter.UpdatedFrom, filter.UpdatedTo);
+    else if (filter.UpdatedFrom) where.UpdatedAt = MoreThanOrEqual(filter.UpdatedFrom);
+    else if (filter.UpdatedTo) where.UpdatedAt = LessThanOrEqual(filter.UpdatedTo);
     const [items, total] = await this.outboxMessages.findAndCount({
       where,
       order: { CreatedAt: 'DESC' },

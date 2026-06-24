@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsDateString, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class ListIntegrationQuery {
   @IsOptional()
@@ -26,6 +26,11 @@ export class ListIntegrationQuery {
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
+  public EventType?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(120)
   public BusinessReference?: string;
 
@@ -38,4 +43,20 @@ export class ListIntegrationQuery {
   @IsString()
   @MaxLength(100)
   public OwnerContext?: string;
+
+  @IsOptional()
+  @IsDateString()
+  public CreatedFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  public CreatedTo?: string;
+
+  @IsOptional()
+  @IsDateString()
+  public UpdatedFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  public UpdatedTo?: string;
 }
