@@ -3,7 +3,9 @@ import {
   AssignDockDto,
   AssignTruckDto,
   ConfirmShipmentDto,
+  EvaluateGoodsIssueTriggerDto,
   ListShipmentPackageStagingDto,
+  RecordGateOutDto,
   ScanLoadingDto,
   StagePackageDto,
 } from '@modules/Shipping/Application/DTOs/ShippingStagingDto';
@@ -62,5 +64,21 @@ export class ConfirmShipmentUseCase {
 
   public async Execute(id: string, request: ConfirmShipmentDto, context: AuditContext) {
     return this.lifecycle.ConfirmShipment(id, request, context);
+  }
+}
+
+export class RecordGateOutUseCase {
+  constructor(private readonly lifecycle: ShippingStagingLifecycleService) {}
+
+  public async Execute(id: string, request: RecordGateOutDto, context: AuditContext) {
+    return this.lifecycle.RecordGateOut(id, request, context);
+  }
+}
+
+export class EvaluateGoodsIssueTriggerUseCase {
+  constructor(private readonly lifecycle: ShippingStagingLifecycleService) {}
+
+  public async Execute(id: string, request: EvaluateGoodsIssueTriggerDto, context: AuditContext) {
+    return this.lifecycle.EvaluateGoodsIssueTrigger(id, request, context);
   }
 }

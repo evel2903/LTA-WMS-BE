@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { ShipmentPackageStagingStatus } from '@modules/Shipping/Domain/Enums/ShipmentPackageStagingStatus';
 
 export class ListShippingStagingQuery {
@@ -191,6 +191,66 @@ export class ConfirmShipmentRequest {
   @IsOptional()
   @IsBoolean()
   public RequireFullLoad?: boolean;
+
+  @IsOptional()
+  @IsString()
+  public ReasonCode?: string;
+
+  @IsOptional()
+  @IsString()
+  public ReasonNote?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  public EvidenceRefs?: string[];
+
+  @IsString()
+  public IdempotencyKey!: string;
+}
+
+export class RecordGateOutRequest {
+  @IsOptional()
+  @IsString()
+  public GateOutReference?: string;
+
+  @IsOptional()
+  @IsString()
+  public TruckReference?: string;
+
+  @IsOptional()
+  @IsString()
+  public VehicleNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  public InventoryStatusCode?: string;
+
+  @IsOptional()
+  @IsString()
+  public ReasonCode?: string;
+
+  @IsOptional()
+  @IsString()
+  public ReasonNote?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  public EvidenceRefs?: string[];
+
+  @IsString()
+  public IdempotencyKey!: string;
+}
+
+export class EvaluateGoodsIssueTriggerRequest {
+  @IsOptional()
+  @IsIn(['at_loading', 'at_gate_out'])
+  public GoodsIssueTrigger?: 'at_loading' | 'at_gate_out';
+
+  @IsOptional()
+  @IsString()
+  public InventoryStatusCode?: string;
 
   @IsOptional()
   @IsString()

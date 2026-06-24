@@ -32,13 +32,19 @@ import { PackageStatus } from '@modules/Outbound/Domain/Enums/PackageStatus';
 import { ShippingStagingLifecycleService } from '@modules/Shipping/Application/Services/ShippingStagingLifecycleService';
 import {
   ConfirmShipmentUseCase,
+  EvaluateGoodsIssueTriggerUseCase,
+  RecordGateOutUseCase,
   ScanLoadingUseCase,
   StagePackageUseCase,
 } from '@modules/Shipping/Application/UseCases/ShippingStagingUseCases';
 import { IShippingStagingRepository } from '@modules/Shipping/Application/Interfaces/IShippingStagingRepository';
+import { GoodsIssueTriggerStatus } from '@modules/Shipping/Domain/Enums/GoodsIssueTriggerStatus';
 import { ShipmentPackageStagingEntity } from '@modules/Shipping/Domain/Entities/ShipmentPackageStagingEntity';
 import { ShipmentPackageStagingStatus } from '@modules/Shipping/Domain/Enums/ShipmentPackageStagingStatus';
 import { ShippingStagingController } from '@modules/Shipping/Presentation/Controllers/ShippingStagingController';
+import { IWarehouseProfileRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
+import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileEntity';
+import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/WarehouseProfileStatus';
 
 const now = new Date('2026-06-24T00:00:00.000Z');
 const context: AuditContext = {
@@ -175,6 +181,14 @@ class MemoryShippingStagingRepository implements IShippingStagingRepository {
     return this.items.find((item) => item.ShipmentConfirmIdempotencyKey === key) ?? null;
   }
 
+  async FindByGateOutIdempotencyKey(key: string): Promise<ShipmentPackageStagingEntity | null> {
+    return this.items.find((item) => item.GateOutIdempotencyKey === key) ?? null;
+  }
+
+  async FindByGoodsIssueTriggerIdempotencyKey(key: string): Promise<ShipmentPackageStagingEntity | null> {
+    return this.items.find((item) => item.GoodsIssueTriggerIdempotencyKey === key) ?? null;
+  }
+
   async ListByShipmentReference(
     shipmentReference: string,
     scope: {
@@ -197,6 +211,60 @@ class MemoryShippingStagingRepository implements IShippingStagingRepository {
     take = this.items.length,
   ): Promise<{ Items: ShipmentPackageStagingEntity[]; TotalItems: number }> {
     return { Items: this.items.slice(skip, skip + take), TotalItems: this.items.length };
+  }
+}
+
+class MemoryWarehouseProfileRepository implements IWarehouseProfileRepository {
+  public profile: WarehouseProfileEntity | null;
+
+  constructor(strategyPolicy: Record<string, unknown> = {}) {
+    this.profile = new WarehouseProfileEntity({
+      Id: 'profile-1',
+      ProfileCode: 'WT-01',
+      ProfileName: 'WT-01 Profile',
+      WarehouseTypeCode: 'WT-01',
+      Version: 1,
+      Status: WarehouseProfileStatus.Active,
+      ScopeKey: 'WT-01',
+      EffectiveFrom: now,
+      StrategyPolicy: strategyPolicy,
+      CreatedAt: now,
+      UpdatedAt: now,
+    });
+  }
+
+  async FindById(id: string): Promise<WarehouseProfileEntity | null> {
+    return this.profile?.Id === id ? this.profile : null;
+  }
+
+  async FindByCode(profileCode: string): Promise<WarehouseProfileEntity | null> {
+    return this.profile?.ProfileCode === profileCode ? this.profile : null;
+  }
+
+  async Create(profile: WarehouseProfileEntity): Promise<WarehouseProfileEntity> {
+    this.profile = profile;
+    return profile;
+  }
+
+  async Update(profile: WarehouseProfileEntity): Promise<WarehouseProfileEntity> {
+    this.profile = profile;
+    return profile;
+  }
+
+  async List(): Promise<{ Items: WarehouseProfileEntity[]; TotalItems: number }> {
+    return this.profile ? { Items: [this.profile], TotalItems: 1 } : { Items: [], TotalItems: 0 };
+  }
+
+  async ListActiveByScope(): Promise<WarehouseProfileEntity[]> {
+    return this.profile ? [this.profile] : [];
+  }
+
+  async FindActiveOverlapping(): Promise<WarehouseProfileEntity[]> {
+    return [];
+  }
+
+  async RunInTransaction<T>(work: (txRepository: IWarehouseProfileRepository, manager: EntityManager) => Promise<T>) {
+    return work(this, {} as EntityManager);
   }
 }
 
@@ -307,13 +375,20 @@ const allowPermissionChecker: IPermissionChecker = {
   Check: async (): Promise<PermissionDecision> => ({ Allowed: true }),
 };
 
-function makeHarness(input: { permissionChecker?: IPermissionChecker; pack?: PackageEntity } = {}) {
+function makeHarness(
+  input: {
+    permissionChecker?: IPermissionChecker;
+    pack?: PackageEntity;
+    strategyPolicy?: Record<string, unknown>;
+  } = {},
+) {
   const stagings = new MemoryShippingStagingRepository();
   const packing = new MemoryPackingRepository();
   packing.packageAggregate = { Package: input.pack ?? makePackage(), Contents: [] };
   const coreFlows = new MemoryCoreFlowRepository();
   const integrations = new MemoryIntegrationRepository();
   const audited = new MemoryAuditedTransaction();
+  const warehouseProfiles = new MemoryWarehouseProfileRepository(input.strategyPolicy);
   const service = new ShippingStagingLifecycleService(
     stagings,
     packing,
@@ -322,8 +397,9 @@ function makeHarness(input: { permissionChecker?: IPermissionChecker; pack?: Pac
     reasonCatalog,
     audited as never,
     input.permissionChecker ?? allowPermissionChecker,
+    warehouseProfiles,
   );
-  return { service, stagings, packing, coreFlows, integrations, audited };
+  return { service, stagings, packing, coreFlows, integrations, audited, warehouseProfiles };
 }
 
 function makeStaging(
@@ -418,6 +494,24 @@ describe('ShippingStagingLifecycleService V1-24', () => {
     expect(Reflect.getMetadata(PATH_METADATA, ShippingStagingController.prototype.ConfirmShipment)).toBe(
       'packages/:id/confirm',
     );
+    expect(Reflect.getMetadata(PATH_METADATA, ShippingStagingController.prototype.RecordGateOut)).toBe(
+      'packages/:id/gate-out',
+    );
+    expect(Reflect.getMetadata(PATH_METADATA, ShippingStagingController.prototype.EvaluateGoodsIssueTrigger)).toBe(
+      'packages/:id/goods-issue-trigger',
+    );
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ShippingStagingController.prototype.RecordGateOut)).toEqual({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.Shipment,
+      Scope: undefined,
+    });
+    expect(
+      Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ShippingStagingController.prototype.EvaluateGoodsIssueTrigger),
+    ).toEqual({
+      Action: ActionCode.Adjust,
+      ObjectType: ObjectType.GoodsIssue,
+      Scope: undefined,
+    });
     expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ShippingStagingController.prototype.Stage)).toEqual({
       Action: ActionCode.Create,
       ObjectType: ObjectType.Shipment,
@@ -602,7 +696,10 @@ describe('ShippingStagingLifecycleService V1-24', () => {
       InventoryStatusCode: 'LOADED',
       LoadReference: 'LOAD-001',
       LoadedBy: 'shipper-1',
+      GoodsIssueTrigger: 'at_loading',
+      GoodsIssueTriggerStatus: GoodsIssueTriggerStatus.Ready,
       LoadingOutboxMessageId: expect.any(String),
+      GoodsIssueTriggerOutboxMessageId: expect.any(String),
     });
     expect(harness.integrations.Outbox).toEqual(
       expect.arrayContaining([
@@ -610,6 +707,15 @@ describe('ShippingStagingLifecycleService V1-24', () => {
           EventType: 'PackageLoaded',
           BusinessReference: 'SHIP-001',
           Payload: expect.objectContaining({ EventName: 'PackageLoaded', PackageCode: 'PKG-001' }),
+        }),
+        expect.objectContaining({
+          EventType: 'GoodsIssueTriggerReady',
+          BusinessReference: 'SHIP-001',
+          Payload: expect.objectContaining({
+            EventName: 'GoodsIssueTriggerReady',
+            GoodsIssueTrigger: 'at_loading',
+            GoodsIssueTriggerStatus: GoodsIssueTriggerStatus.Ready,
+          }),
         }),
       ]),
     );
@@ -625,6 +731,113 @@ describe('ShippingStagingLifecycleService V1-24', () => {
       ]),
     );
     expect(JSON.stringify(loaded)).not.toMatch(/SHIPPED|GATE_OUT|GOODS_ISSUE_POSTED/);
+  });
+
+  it('waits for gate-out before Goods Issue trigger when WarehouseProfile config is at_gate_out', async () => {
+    const harness = makeHarness({ strategyPolicy: { goodsIssueTrigger: 'at_gate_out' } });
+    const ready = await readyForLoading(harness);
+    const loaded = await harness.service.ScanLoading(
+      ready.Id,
+      {
+        ScannedPackageCode: 'PKG-001',
+        ShipmentReference: 'SHIP-001',
+        EvidenceRefs: ['loading:scan'],
+        IdempotencyKey: 'loading-1',
+      },
+      context,
+    );
+
+    expect(loaded).toMatchObject({
+      Status: ShipmentPackageStagingStatus.Loaded,
+      InventoryStatusCode: 'LOADED',
+      GoodsIssueTrigger: 'at_gate_out',
+      GoodsIssueTriggerStatus: GoodsIssueTriggerStatus.Pending,
+      GoodsIssueTriggerOutboxMessageId: null,
+    });
+    expect(harness.integrations.Outbox.map((item) => item.EventType)).not.toContain('GoodsIssueTriggerReady');
+
+    const confirmed = await harness.service.ConfirmShipment(
+      loaded.Id,
+      {
+        ShipmentReference: 'SHIP-001',
+        EvidenceRefs: ['confirm:shipment'],
+        IdempotencyKey: 'confirm-1',
+      },
+      context,
+    );
+    const gated = await harness.service.RecordGateOut(
+      confirmed.Id,
+      {
+        GateOutReference: 'GATE-OUT-001',
+        TruckReference: 'TRUCK-001',
+        VehicleNumber: '51C-001',
+        EvidenceRefs: ['gate:out'],
+        IdempotencyKey: 'gate-out-1',
+      },
+      context,
+    );
+
+    expect(gated).toMatchObject({
+      Status: ShipmentPackageStagingStatus.GateOutRecorded,
+      GateOutReference: 'GATE-OUT-001',
+      GateOutBy: 'shipper-1',
+      GoodsIssueTrigger: 'at_gate_out',
+      GoodsIssueTriggerStatus: GoodsIssueTriggerStatus.Ready,
+      GateOutOutboxMessageId: expect.any(String),
+      GoodsIssueTriggerOutboxMessageId: expect.any(String),
+    });
+    expect(harness.integrations.Outbox.map((item) => item.EventType)).toEqual(
+      expect.arrayContaining(['PackageLoaded', 'ShipmentConfirmed', 'GateOutRecorded', 'GoodsIssueTriggerReady']),
+    );
+    expect(harness.coreFlows.milestones.map((item) => item.StepCode)).toContain(CoreFlowStepCode.GateOutRecorded);
+    expect(JSON.stringify(gated)).not.toMatch(/SHIPPED|GATE_OUT|GOODS_ISSUE_POSTED/);
+  });
+
+  it('rejects shipment milestone codes when callers try to use them as InventoryStatus', async () => {
+    const harness = makeHarness({ strategyPolicy: { goodsIssueTrigger: 'at_gate_out' } });
+    const ready = await readyForLoading(harness);
+    const loaded = await harness.service.ScanLoading(
+      ready.Id,
+      {
+        ScannedPackageCode: 'PKG-001',
+        ShipmentReference: 'SHIP-001',
+        EvidenceRefs: ['loading:scan'],
+        IdempotencyKey: 'loading-1',
+      },
+      context,
+    );
+    const confirmed = await harness.service.ConfirmShipment(
+      loaded.Id,
+      {
+        ShipmentReference: 'SHIP-001',
+        EvidenceRefs: ['confirm:shipment'],
+        IdempotencyKey: 'confirm-1',
+      },
+      context,
+    );
+
+    await expect(
+      harness.service.RecordGateOut(
+        confirmed.Id,
+        {
+          InventoryStatusCode: 'GOODS_ISSUE_POSTED',
+          EvidenceRefs: ['gate:out'],
+          IdempotencyKey: 'gate-out-1',
+        },
+        context,
+      ),
+    ).rejects.toThrow('Shipment/goods issue milestones must not be used as InventoryStatus');
+    await expect(
+      harness.service.EvaluateGoodsIssueTrigger(
+        confirmed.Id,
+        {
+          InventoryStatusCode: 'GATE_OUT',
+          EvidenceRefs: ['gi:trigger'],
+          IdempotencyKey: 'gi-trigger-1',
+        },
+        context,
+      ),
+    ).rejects.toThrow('Shipment/goods issue milestones must not be used as InventoryStatus');
   });
 
   it('rejects wrong package during loading scan and writes failed audit', async () => {
@@ -812,7 +1025,9 @@ describe('ShippingStagingLifecycleService V1-24', () => {
     expect(confirmed.ShipmentConfirmedBy).toBe('shipper-1');
     expect(confirmed.ShipmentConfirmOutboxMessageId).toEqual(expect.any(String));
     expect(duplicate.Status).toBe(ShipmentPackageStagingStatus.ShipmentConfirmed);
-    expect(harness.integrations.Outbox.map((item) => item.EventType)).toEqual(['PackageLoaded', 'ShipmentConfirmed']);
+    expect(harness.integrations.Outbox.map((item) => item.EventType)).toEqual(
+      expect.arrayContaining(['PackageLoaded', 'GoodsIssueTriggerReady', 'ShipmentConfirmed']),
+    );
     expect(JSON.stringify(confirmed)).not.toMatch(/SHIPPED|GATE_OUT|GOODS_ISSUE_POSTED/);
   });
 
@@ -1005,5 +1220,31 @@ describe('Shipping staging use case wrappers', () => {
       context,
     );
     expect(lifecycle.ConfirmShipment).toHaveBeenCalledWith('staging-1', { IdempotencyKey: 'confirm' }, context);
+  });
+
+  it('passes gate-out and Goods Issue trigger calls through the lifecycle use cases', async () => {
+    const lifecycle = {
+      RecordGateOut: jest.fn(async () => ({ gated: true })),
+      EvaluateGoodsIssueTrigger: jest.fn(async () => ({ triggered: true })),
+    };
+    const gateOutUseCase = new RecordGateOutUseCase(lifecycle as never);
+    const goodsIssueUseCase = new EvaluateGoodsIssueTriggerUseCase(lifecycle as never);
+
+    await expect(
+      gateOutUseCase.Execute('staging-1', { GateOutReference: 'GATE-OUT-001', IdempotencyKey: 'gate' }, context),
+    ).resolves.toEqual({ gated: true });
+    await expect(
+      goodsIssueUseCase.Execute('staging-1', { GoodsIssueTrigger: 'at_gate_out', IdempotencyKey: 'gi' }, context),
+    ).resolves.toEqual({ triggered: true });
+    expect(lifecycle.RecordGateOut).toHaveBeenCalledWith(
+      'staging-1',
+      { GateOutReference: 'GATE-OUT-001', IdempotencyKey: 'gate' },
+      context,
+    );
+    expect(lifecycle.EvaluateGoodsIssueTrigger).toHaveBeenCalledWith(
+      'staging-1',
+      { GoodsIssueTrigger: 'at_gate_out', IdempotencyKey: 'gi' },
+      context,
+    );
   });
 });

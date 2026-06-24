@@ -1,4 +1,6 @@
 import { ShipmentPackageStagingStatus } from '@modules/Shipping/Domain/Enums/ShipmentPackageStagingStatus';
+import { GoodsIssueTrigger } from '@modules/Shipping/Domain/Enums/GoodsIssueTrigger';
+import { GoodsIssueTriggerStatus } from '@modules/Shipping/Domain/Enums/GoodsIssueTriggerStatus';
 
 export class ShipmentPackageStagingEntity {
   public readonly Id: string;
@@ -35,6 +37,10 @@ export class ShipmentPackageStagingEntity {
   public LoadingPayloadFingerprint: string | null;
   public ShipmentConfirmIdempotencyKey: string | null;
   public ShipmentConfirmPayloadFingerprint: string | null;
+  public GateOutIdempotencyKey: string | null;
+  public GateOutPayloadFingerprint: string | null;
+  public GoodsIssueTriggerIdempotencyKey: string | null;
+  public GoodsIssueTriggerPayloadFingerprint: string | null;
   public ReasonCode: string | null;
   public ReasonCodeId: string | null;
   public ReasonNote: string | null;
@@ -50,8 +56,17 @@ export class ShipmentPackageStagingEntity {
   public LoadedBy: string | null;
   public ShipmentConfirmedAt: Date | null;
   public ShipmentConfirmedBy: string | null;
+  public GateOutReference: string | null;
+  public GateOutAt: Date | null;
+  public GateOutBy: string | null;
+  public GoodsIssueTrigger: GoodsIssueTrigger | null;
+  public GoodsIssueTriggerStatus: GoodsIssueTriggerStatus | null;
+  public GoodsIssueTriggeredAt: Date | null;
+  public GoodsIssueTriggeredBy: string | null;
   public LoadingOutboxMessageId: string | null;
   public ShipmentConfirmOutboxMessageId: string | null;
+  public GateOutOutboxMessageId: string | null;
+  public GoodsIssueTriggerOutboxMessageId: string | null;
   public CreatedAt: Date;
   public UpdatedAt: Date;
   public CreatedBy: string | null;
@@ -92,6 +107,10 @@ export class ShipmentPackageStagingEntity {
     LoadingPayloadFingerprint?: string | null;
     ShipmentConfirmIdempotencyKey?: string | null;
     ShipmentConfirmPayloadFingerprint?: string | null;
+    GateOutIdempotencyKey?: string | null;
+    GateOutPayloadFingerprint?: string | null;
+    GoodsIssueTriggerIdempotencyKey?: string | null;
+    GoodsIssueTriggerPayloadFingerprint?: string | null;
     ReasonCode?: string | null;
     ReasonCodeId?: string | null;
     ReasonNote?: string | null;
@@ -107,8 +126,17 @@ export class ShipmentPackageStagingEntity {
     LoadedBy?: string | null;
     ShipmentConfirmedAt?: Date | null;
     ShipmentConfirmedBy?: string | null;
+    GateOutReference?: string | null;
+    GateOutAt?: Date | null;
+    GateOutBy?: string | null;
+    GoodsIssueTrigger?: GoodsIssueTrigger | null;
+    GoodsIssueTriggerStatus?: GoodsIssueTriggerStatus | null;
+    GoodsIssueTriggeredAt?: Date | null;
+    GoodsIssueTriggeredBy?: string | null;
     LoadingOutboxMessageId?: string | null;
     ShipmentConfirmOutboxMessageId?: string | null;
+    GateOutOutboxMessageId?: string | null;
+    GoodsIssueTriggerOutboxMessageId?: string | null;
     CreatedAt: Date;
     UpdatedAt: Date;
     CreatedBy?: string | null;
@@ -148,6 +176,10 @@ export class ShipmentPackageStagingEntity {
     this.LoadingPayloadFingerprint = params.LoadingPayloadFingerprint ?? null;
     this.ShipmentConfirmIdempotencyKey = params.ShipmentConfirmIdempotencyKey ?? null;
     this.ShipmentConfirmPayloadFingerprint = params.ShipmentConfirmPayloadFingerprint ?? null;
+    this.GateOutIdempotencyKey = params.GateOutIdempotencyKey ?? null;
+    this.GateOutPayloadFingerprint = params.GateOutPayloadFingerprint ?? null;
+    this.GoodsIssueTriggerIdempotencyKey = params.GoodsIssueTriggerIdempotencyKey ?? null;
+    this.GoodsIssueTriggerPayloadFingerprint = params.GoodsIssueTriggerPayloadFingerprint ?? null;
     this.ReasonCode = params.ReasonCode ?? null;
     this.ReasonCodeId = params.ReasonCodeId ?? null;
     this.ReasonNote = params.ReasonNote ?? null;
@@ -163,8 +195,17 @@ export class ShipmentPackageStagingEntity {
     this.LoadedBy = params.LoadedBy ?? null;
     this.ShipmentConfirmedAt = params.ShipmentConfirmedAt ?? null;
     this.ShipmentConfirmedBy = params.ShipmentConfirmedBy ?? null;
+    this.GateOutReference = params.GateOutReference ?? null;
+    this.GateOutAt = params.GateOutAt ?? null;
+    this.GateOutBy = params.GateOutBy ?? null;
+    this.GoodsIssueTrigger = params.GoodsIssueTrigger ?? null;
+    this.GoodsIssueTriggerStatus = params.GoodsIssueTriggerStatus ?? null;
+    this.GoodsIssueTriggeredAt = params.GoodsIssueTriggeredAt ?? null;
+    this.GoodsIssueTriggeredBy = params.GoodsIssueTriggeredBy ?? null;
     this.LoadingOutboxMessageId = params.LoadingOutboxMessageId ?? null;
     this.ShipmentConfirmOutboxMessageId = params.ShipmentConfirmOutboxMessageId ?? null;
+    this.GateOutOutboxMessageId = params.GateOutOutboxMessageId ?? null;
+    this.GoodsIssueTriggerOutboxMessageId = params.GoodsIssueTriggerOutboxMessageId ?? null;
     this.CreatedAt = params.CreatedAt;
     this.UpdatedAt = params.UpdatedAt;
     this.CreatedBy = params.CreatedBy ?? null;
@@ -174,7 +215,8 @@ export class ShipmentPackageStagingEntity {
   public RefreshStatus(): void {
     if (
       this.Status === ShipmentPackageStagingStatus.Loaded ||
-      this.Status === ShipmentPackageStagingStatus.ShipmentConfirmed
+      this.Status === ShipmentPackageStagingStatus.ShipmentConfirmed ||
+      this.Status === ShipmentPackageStagingStatus.GateOutRecorded
     ) {
       return;
     }
