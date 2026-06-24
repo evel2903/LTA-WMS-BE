@@ -433,6 +433,7 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
     INVENTORY_TRANSACTION_REPOSITORY,
     CYCLE_COUNT_WORK_REPOSITORY,
     REPLENISHMENT_TASK_REPOSITORY,
+    InventoryControlUseCase,
   ],
 })
 export class InventoryExecutionModule {}

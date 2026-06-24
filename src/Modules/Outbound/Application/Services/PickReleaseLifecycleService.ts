@@ -47,6 +47,10 @@ import { OutboundOrderStatus } from '@modules/Outbound/Domain/Enums/OutboundOrde
 import { PickReleaseMode } from '@modules/Outbound/Domain/Enums/PickReleaseMode';
 import { PickReleaseStatus } from '@modules/Outbound/Domain/Enums/PickReleaseStatus';
 import { PickTaskStatus } from '@modules/Outbound/Domain/Enums/PickTaskStatus';
+import { ITaskExecutionRepository } from '@modules/TaskExecution/Application/Interfaces/ITaskExecutionRepository';
+import { MobileTaskEntity } from '@modules/TaskExecution/Domain/Entities/MobileTaskEntity';
+import { MobileTaskStatus } from '@modules/TaskExecution/Domain/Enums/MobileTaskStatus';
+import { MobileTaskType } from '@modules/TaskExecution/Domain/Enums/MobileTaskType';
 
 interface ReasonDecision {
   ReasonCode: string;
@@ -91,6 +95,7 @@ export class PickReleaseLifecycleService {
     private readonly reasonCatalog: IReasonCodeCatalog,
     private readonly audited: AuditedTransaction,
     private readonly permissionChecker?: IPermissionChecker,
+    private readonly taskExecution?: ITaskExecutionRepository,
   ) {}
 
   public async Release(request: ReleaseOutboundOrderDto, context: AuditContext): Promise<PickReleaseDto> {
@@ -168,6 +173,7 @@ export class PickReleaseLifecycleService {
         });
 
         const saved = await this.releases.Create(release, plan.Tasks, manager);
+        await this.EnsureMobilePickTasks(saved, context.ActorUserId, manager);
         await this.WriteOutbox(outboxId, current, saved, context.ActorUserId, manager);
         if (current.Order.CoreFlowInstanceId) {
           await this.coreFlows.CreateMilestone(
@@ -320,6 +326,74 @@ export class PickReleaseLifecycleService {
       SerialNumber: line.SerialNumber,
       ExpiryDate: line.ExpiryDate,
       CreatedAt: now,
+    });
+  }
+
+  private async EnsureMobilePickTasks(
+    releaseAggregate: PickReleaseAggregate,
+    actorUserId: string | null,
+    manager: EntityManager,
+  ): Promise<void> {
+    if (!this.taskExecution || releaseAggregate.Release.Status !== PickReleaseStatus.Released) return;
+    const now = releaseAggregate.Release.UpdatedAt;
+    for (const task of releaseAggregate.Tasks) {
+      const existing = await this.taskExecution.FindBySourceDocument('PickTask', task.Id, manager);
+      if (existing) continue;
+      await this.taskExecution.Save(this.BuildMobileTask(releaseAggregate.Release, task, actorUserId, now), manager);
+    }
+  }
+
+  private BuildMobileTask(
+    release: PickReleaseEntity,
+    task: PickTaskEntity,
+    actorUserId: string | null,
+    now: Date,
+  ): MobileTaskEntity {
+    return new MobileTaskEntity({
+      Id: randomUUID(),
+      TaskCode: `MT-${task.TaskNumber}`,
+      TaskType: MobileTaskType.Pick,
+      TaskStatus: MobileTaskStatus.Released,
+      WarehouseId: release.WarehouseId,
+      WarehouseCode: release.WarehouseCode,
+      OwnerId: release.OwnerId,
+      OwnerCode: release.OwnerCode,
+      SourceDocumentType: 'PickTask',
+      SourceDocumentId: task.Id,
+      SourceDocumentCode: task.TaskNumber,
+      Priority: 50,
+      ReleasedAt: now,
+      TaskPayload: {
+        PickTaskId: task.Id,
+        PickReleaseId: task.PickReleaseId,
+        OutboundOrderId: task.OutboundOrderId,
+        AllocationId: task.AllocationId,
+        AllocationLineId: task.AllocationLineId,
+        SourceBalanceId: task.SourceBalanceId,
+        SourceDimensionId: task.SourceDimensionId,
+        SourceLocationId: task.SourceLocationId,
+        TargetLocationId: task.TargetLocationId,
+        TargetReference: task.TargetReference,
+        SkuId: task.SkuId,
+        SkuCode: task.SkuCode,
+        UomId: task.UomId,
+        UomCode: task.UomCode,
+        Quantity: task.Quantity,
+        InventoryStatusCode: task.InventoryStatusCode,
+        LotNumber: task.LotNumber,
+        SerialNumber: task.SerialNumber,
+        ExpiryDate: task.ExpiryDate?.toISOString().slice(0, 10) ?? null,
+        Sequence: task.Sequence,
+        BatchNumber: task.BatchNumber,
+        ScanPolicy: {
+          MandatoryScanTypes: ['Location', 'Item', 'Quantity'],
+          AllowManualOverride: false,
+        },
+      },
+      CreatedAt: now,
+      CreatedBy: actorUserId,
+      UpdatedAt: now,
+      UpdatedBy: actorUserId,
     });
   }
 

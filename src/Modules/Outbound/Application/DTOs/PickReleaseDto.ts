@@ -27,6 +27,11 @@ export interface PickTaskDto {
   LotNumber: string | null;
   SerialNumber: string | null;
   ExpiryDate: Date | null;
+  CompletedAt: Date | null;
+  CompletedBy: string | null;
+  ConfirmIdempotencyKey: string | null;
+  ConfirmOutboxMessageId: string | null;
+  ConfirmInventoryTransactionId: string | null;
   CreatedAt: Date;
 }
 

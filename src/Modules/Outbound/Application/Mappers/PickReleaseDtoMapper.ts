@@ -34,7 +34,7 @@ export class PickReleaseDtoMapper {
     };
   }
 
-  private static ToTaskDto(task: PickTaskEntity): PickTaskDto {
+  public static ToTaskDto(task: PickTaskEntity): PickTaskDto {
     return {
       Id: task.Id,
       PickReleaseId: task.PickReleaseId,
@@ -60,6 +60,11 @@ export class PickReleaseDtoMapper {
       LotNumber: task.LotNumber,
       SerialNumber: task.SerialNumber,
       ExpiryDate: task.ExpiryDate,
+      CompletedAt: task.CompletedAt,
+      CompletedBy: task.CompletedBy,
+      ConfirmIdempotencyKey: task.ConfirmIdempotencyKey,
+      ConfirmOutboxMessageId: task.ConfirmOutboxMessageId,
+      ConfirmInventoryTransactionId: task.ConfirmInventoryTransactionId,
       CreatedAt: task.CreatedAt,
     };
   }

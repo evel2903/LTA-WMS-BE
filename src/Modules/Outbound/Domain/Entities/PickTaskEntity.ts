@@ -25,6 +25,13 @@ export class PickTaskEntity {
   public LotNumber: string | null;
   public SerialNumber: string | null;
   public ExpiryDate: Date | null;
+  public CompletedAt: Date | null;
+  public CompletedBy: string | null;
+  public ConfirmIdempotencyKey: string | null;
+  public ConfirmPayloadFingerprint: string | null;
+  public ConfirmOutboxMessageId: string | null;
+  public ConfirmInventoryTransactionId: string | null;
+  public ConfirmResultJson: Record<string, unknown> | null;
   public readonly CreatedAt: Date;
 
   constructor(params: {
@@ -52,6 +59,13 @@ export class PickTaskEntity {
     LotNumber?: string | null;
     SerialNumber?: string | null;
     ExpiryDate?: Date | null;
+    CompletedAt?: Date | null;
+    CompletedBy?: string | null;
+    ConfirmIdempotencyKey?: string | null;
+    ConfirmPayloadFingerprint?: string | null;
+    ConfirmOutboxMessageId?: string | null;
+    ConfirmInventoryTransactionId?: string | null;
+    ConfirmResultJson?: Record<string, unknown> | null;
     CreatedAt: Date;
   }) {
     this.Id = params.Id;
@@ -78,6 +92,13 @@ export class PickTaskEntity {
     this.LotNumber = params.LotNumber ?? null;
     this.SerialNumber = params.SerialNumber ?? null;
     this.ExpiryDate = params.ExpiryDate ?? null;
+    this.CompletedAt = params.CompletedAt ?? null;
+    this.CompletedBy = params.CompletedBy ?? null;
+    this.ConfirmIdempotencyKey = params.ConfirmIdempotencyKey ?? null;
+    this.ConfirmPayloadFingerprint = params.ConfirmPayloadFingerprint ?? null;
+    this.ConfirmOutboxMessageId = params.ConfirmOutboxMessageId ?? null;
+    this.ConfirmInventoryTransactionId = params.ConfirmInventoryTransactionId ?? null;
+    this.ConfirmResultJson = params.ConfirmResultJson ?? null;
     this.CreatedAt = params.CreatedAt;
   }
 }

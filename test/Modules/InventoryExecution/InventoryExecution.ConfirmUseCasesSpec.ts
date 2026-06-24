@@ -221,6 +221,21 @@ class FakeTaskExecutionRepository implements ITaskExecutionRepository {
     return this.FindById(id);
   }
 
+  public async FindBySourceDocument(
+    sourceDocumentType: string,
+    sourceDocumentId: string,
+  ): Promise<MobileTaskEntity | null> {
+    return (
+      [...this.tasks.values()].find(
+        (task) => task.SourceDocumentType === sourceDocumentType && task.SourceDocumentId === sourceDocumentId,
+      ) ?? null
+    );
+  }
+
+  public async FindScanEventsByTaskId(taskId: string): Promise<MobileScanEventEntity[]> {
+    return this.scanEvents.filter((scan) => scan.TaskId === taskId);
+  }
+
   public async Save(task: MobileTaskEntity): Promise<MobileTaskEntity> {
     this.tasks.set(task.Id, task);
     return task;

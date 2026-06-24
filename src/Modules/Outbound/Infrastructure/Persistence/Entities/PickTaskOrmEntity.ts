@@ -78,6 +78,27 @@ export class PickTaskOrmEntity {
   @Column({ name: 'expiry_date', type: 'date', nullable: true })
   public ExpiryDate!: Date | null;
 
+  @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
+  public CompletedAt!: Date | null;
+
+  @Column({ name: 'completed_by', type: 'char', length: 36, nullable: true })
+  public CompletedBy!: string | null;
+
+  @Column({ name: 'confirm_idempotency_key', type: 'varchar', length: 180, nullable: true })
+  public ConfirmIdempotencyKey!: string | null;
+
+  @Column({ name: 'confirm_payload_fingerprint', type: 'varchar', length: 64, nullable: true })
+  public ConfirmPayloadFingerprint!: string | null;
+
+  @Column({ name: 'confirm_outbox_message_id', type: 'char', length: 36, nullable: true })
+  public ConfirmOutboxMessageId!: string | null;
+
+  @Column({ name: 'confirm_inventory_transaction_id', type: 'char', length: 36, nullable: true })
+  public ConfirmInventoryTransactionId!: string | null;
+
+  @Column({ name: 'confirm_result_json', type: 'jsonb', nullable: true })
+  public ConfirmResultJson!: Record<string, unknown> | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   public CreatedAt!: Date;
 

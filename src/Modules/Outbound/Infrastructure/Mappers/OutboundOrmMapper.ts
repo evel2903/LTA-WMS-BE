@@ -208,6 +208,13 @@ export class OutboundOrmMapper {
       LotNumber: entity.LotNumber,
       SerialNumber: entity.SerialNumber,
       ExpiryDate: entity.ExpiryDate ? new Date(entity.ExpiryDate) : null,
+      CompletedAt: entity.CompletedAt ? new Date(entity.CompletedAt) : null,
+      CompletedBy: entity.CompletedBy,
+      ConfirmIdempotencyKey: entity.ConfirmIdempotencyKey,
+      ConfirmPayloadFingerprint: entity.ConfirmPayloadFingerprint,
+      ConfirmOutboxMessageId: entity.ConfirmOutboxMessageId,
+      ConfirmInventoryTransactionId: entity.ConfirmInventoryTransactionId,
+      ConfirmResultJson: entity.ConfirmResultJson,
       CreatedAt: entity.CreatedAt,
     });
   }

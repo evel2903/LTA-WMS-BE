@@ -13,6 +13,9 @@ export interface PickReleaseAggregate {
 export interface IPickReleaseRepository {
   Create(release: PickReleaseEntity, tasks: PickTaskEntity[], manager?: EntityManager): Promise<PickReleaseAggregate>;
   FindById(id: string, manager?: EntityManager): Promise<PickReleaseAggregate | null>;
+  FindTaskById(id: string, manager?: EntityManager): Promise<PickTaskEntity | null>;
+  FindTaskByIdForUpdate(id: string, manager: EntityManager): Promise<PickTaskEntity | null>;
+  SaveTask(task: PickTaskEntity, manager?: EntityManager): Promise<PickTaskEntity>;
   FindByIdempotencyKey(idempotencyKey: string, manager?: EntityManager): Promise<PickReleaseAggregate | null>;
   FindActiveByOutboundOrderId(outboundOrderId: string, manager?: EntityManager): Promise<PickReleaseAggregate | null>;
   ListCandidates(

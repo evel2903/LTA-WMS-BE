@@ -76,6 +76,21 @@ class FakeTaskRepository implements ITaskExecutionRepository {
     return this.FindById(id);
   }
 
+  public async FindBySourceDocument(
+    sourceDocumentType: string,
+    sourceDocumentId: string,
+  ): Promise<MobileTaskEntity | null> {
+    return (
+      this.tasks.find(
+        (task) => task.SourceDocumentType === sourceDocumentType && task.SourceDocumentId === sourceDocumentId,
+      ) ?? null
+    );
+  }
+
+  public async FindScanEventsByTaskId(): Promise<MobileScanEventEntity[]> {
+    return [];
+  }
+
   public async Save(task: MobileTaskEntity): Promise<MobileTaskEntity> {
     const index = this.tasks.findIndex((item) => item.Id === task.Id);
     if (index >= 0) this.tasks[index] = task;

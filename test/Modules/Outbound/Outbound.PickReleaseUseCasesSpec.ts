@@ -37,6 +37,14 @@ import { AllocationStatus } from '@modules/Outbound/Domain/Enums/AllocationStatu
 import { OutboundOrderStatus } from '@modules/Outbound/Domain/Enums/OutboundOrderStatus';
 import { PickReleaseMode } from '@modules/Outbound/Domain/Enums/PickReleaseMode';
 import { PickReleaseStatus } from '@modules/Outbound/Domain/Enums/PickReleaseStatus';
+import {
+  ITaskExecutionRepository,
+  MobileTaskListFilter,
+} from '@modules/TaskExecution/Application/Interfaces/ITaskExecutionRepository';
+import { MobileScanEventEntity } from '@modules/TaskExecution/Domain/Entities/MobileScanEventEntity';
+import { MobileTaskEntity } from '@modules/TaskExecution/Domain/Entities/MobileTaskEntity';
+import { MobileTaskStatus } from '@modules/TaskExecution/Domain/Enums/MobileTaskStatus';
+import { MobileTaskType } from '@modules/TaskExecution/Domain/Enums/MobileTaskType';
 
 const context: AuditContext = {
   ActorUserId: 'user-1',
@@ -59,6 +67,25 @@ class MemoryPickReleaseRepository implements IPickReleaseRepository {
 
   async FindById(id: string): Promise<PickReleaseAggregate | null> {
     return this.aggregates.find((item) => item.Release.Id === id) ?? null;
+  }
+
+  async FindTaskById(id: string): Promise<PickTaskEntity | null> {
+    return this.aggregates.flatMap((item) => item.Tasks).find((task) => task.Id === id) ?? null;
+  }
+
+  async FindTaskByIdForUpdate(id: string): Promise<PickTaskEntity | null> {
+    return this.FindTaskById(id);
+  }
+
+  async SaveTask(task: PickTaskEntity): Promise<PickTaskEntity> {
+    for (const aggregate of this.aggregates) {
+      const index = aggregate.Tasks.findIndex((item) => item.Id === task.Id);
+      if (index >= 0) {
+        aggregate.Tasks[index] = task;
+        return task;
+      }
+    }
+    return task;
   }
 
   async FindByIdempotencyKey(idempotencyKey: string): Promise<PickReleaseAggregate | null> {
@@ -170,6 +197,59 @@ class MemoryPermissionChecker implements IPermissionChecker {
   }
 }
 
+class MemoryTaskExecutionRepository implements ITaskExecutionRepository {
+  public tasks: MobileTaskEntity[] = [];
+  public scanEvents: MobileScanEventEntity[] = [];
+
+  public async FindCandidates(filter: MobileTaskListFilter): Promise<MobileTaskEntity[]> {
+    return this.tasks.filter((task) => {
+      if (filter.WarehouseId && task.WarehouseId !== filter.WarehouseId) return false;
+      if (filter.TaskStatus && task.TaskStatus !== filter.TaskStatus) return false;
+      if (filter.TaskType && task.TaskType !== filter.TaskType) return false;
+      return true;
+    });
+  }
+
+  public async FindById(id: string): Promise<MobileTaskEntity | null> {
+    return this.tasks.find((task) => task.Id === id) ?? null;
+  }
+
+  public async FindByIdForUpdate(id: string): Promise<MobileTaskEntity | null> {
+    return this.FindById(id);
+  }
+
+  public async FindBySourceDocument(
+    sourceDocumentType: string,
+    sourceDocumentId: string,
+  ): Promise<MobileTaskEntity | null> {
+    return (
+      this.tasks.find(
+        (task) => task.SourceDocumentType === sourceDocumentType && task.SourceDocumentId === sourceDocumentId,
+      ) ?? null
+    );
+  }
+
+  public async FindScanEventsByTaskId(taskId: string): Promise<MobileScanEventEntity[]> {
+    return this.scanEvents.filter((scan) => scan.TaskId === taskId);
+  }
+
+  public async Save(task: MobileTaskEntity): Promise<MobileTaskEntity> {
+    const index = this.tasks.findIndex((item) => item.Id === task.Id);
+    if (index >= 0) this.tasks[index] = task;
+    else this.tasks.push(task);
+    return task;
+  }
+
+  public async SaveScanEvent(scan: MobileScanEventEntity): Promise<MobileScanEventEntity> {
+    this.scanEvents.push(scan);
+    return scan;
+  }
+
+  public async RunInTransaction<T>(work: (manager: EntityManager) => Promise<T>): Promise<T> {
+    return work({} as EntityManager);
+  }
+}
+
 function orderAggregate(
   options: { status?: OutboundOrderStatus; cutoffAt?: Date | null } = {},
 ): OutboundOrderAggregate {
@@ -274,6 +354,7 @@ function harness(
   const integrations = new MemoryIntegrationRepository();
   const coreFlows = new MemoryCoreFlowRepository();
   const audited = new MemoryAuditedTransaction();
+  const taskExecution = new MemoryTaskExecutionRepository();
   const service = new PickReleaseLifecycleService(
     releases,
     allocations as unknown as IAllocationRepository,
@@ -283,13 +364,14 @@ function harness(
     new MemoryReasonCatalog(),
     audited as unknown as AuditedTransaction,
     new MemoryPermissionChecker(options.permissionAllowed ?? true),
+    taskExecution,
   );
-  return { service, releases, integrations, coreFlows, audited };
+  return { service, releases, integrations, coreFlows, audited, taskExecution };
 }
 
 describe('PickReleaseLifecycleService', () => {
   it('releases allocated demand into pick tasks with audit, outbox and coreflow evidence', async () => {
-    const { service, integrations, coreFlows, audited } = harness();
+    const { service, integrations, coreFlows, audited, taskExecution } = harness();
 
     const result = await service.Release({ OutboundOrderId: 'outbound-1', IdempotencyKey: 'release-1' }, context);
 
@@ -308,6 +390,20 @@ describe('PickReleaseLifecycleService', () => {
       'PickTaskReleased',
       'PickTaskReleased',
     ]);
+    expect(taskExecution.tasks).toHaveLength(2);
+    expect(taskExecution.tasks[0]).toMatchObject({
+      TaskType: MobileTaskType.Pick,
+      TaskStatus: MobileTaskStatus.Released,
+      SourceDocumentType: 'PickTask',
+      WarehouseId: 'warehouse-1',
+      OwnerId: 'owner-1',
+    });
+    expect(taskExecution.tasks[0].TaskPayload).toMatchObject({
+      PickTaskId: result.Tasks[0].Id,
+      SourceLocationId: 'location-1',
+      Quantity: 1,
+      ScanPolicy: { MandatoryScanTypes: ['Location', 'Item', 'Quantity'], AllowManualOverride: false },
+    });
     expect(coreFlows.milestones[0]).toMatchObject({
       StepCode: 'ReleasedToWarehouse',
       MilestoneStatus: 'Completed',

@@ -47,6 +47,28 @@ export class TaskExecutionRepository implements ITaskExecutionRepository {
     return row ? MobileTaskOrmMapper.ToDomain(row) : null;
   }
 
+  public async FindBySourceDocument(
+    sourceDocumentType: string,
+    sourceDocumentId: string,
+    manager?: EntityManager,
+  ): Promise<MobileTaskEntity | null> {
+    const repository = manager?.getRepository(MobileTaskOrmEntity) ?? this.repo;
+    const row = await repository.findOne({
+      where: {
+        SourceDocumentType: sourceDocumentType,
+        SourceDocumentId: sourceDocumentId,
+      },
+    });
+    return row ? MobileTaskOrmMapper.ToDomain(row) : null;
+  }
+
+  public async FindScanEventsByTaskId(taskId: string, manager?: EntityManager): Promise<MobileScanEventEntity[]> {
+    const repository =
+      manager?.getRepository(MobileScanEventOrmEntity) ?? this.repo.manager.getRepository(MobileScanEventOrmEntity);
+    const rows = await repository.find({ where: { TaskId: taskId }, order: { CreatedAt: 'ASC', Id: 'ASC' } });
+    return rows.map(MobileScanEventOrmMapper.ToDomain);
+  }
+
   public async Save(task: MobileTaskEntity, manager?: EntityManager): Promise<MobileTaskEntity> {
     const repository = manager?.getRepository(MobileTaskOrmEntity) ?? this.repo;
     const saved = await repository.save(MobileTaskOrmMapper.ToOrm(task));

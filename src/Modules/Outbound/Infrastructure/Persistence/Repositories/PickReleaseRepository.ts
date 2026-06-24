@@ -52,6 +52,25 @@ export class PickReleaseRepository implements IPickReleaseRepository {
     return this.LoadAggregate(release, manager);
   }
 
+  public async FindTaskById(id: string, manager?: EntityManager): Promise<PickTaskEntity | null> {
+    const repo = manager ? manager.getRepository(PickTaskOrmEntity) : this.tasks;
+    const row = await repo.findOne({ where: { Id: id } });
+    return row ? OutboundOrmMapper.ToPickTaskDomain(row) : null;
+  }
+
+  public async FindTaskByIdForUpdate(id: string, manager: EntityManager): Promise<PickTaskEntity | null> {
+    const row = await manager
+      .getRepository(PickTaskOrmEntity)
+      .findOne({ where: { Id: id }, lock: { mode: 'pessimistic_write' } });
+    return row ? OutboundOrmMapper.ToPickTaskDomain(row) : null;
+  }
+
+  public async SaveTask(task: PickTaskEntity, manager?: EntityManager): Promise<PickTaskEntity> {
+    const repo = manager ? manager.getRepository(PickTaskOrmEntity) : this.tasks;
+    const saved = await repo.save(OutboundOrmMapper.ToPickTaskOrm(task));
+    return OutboundOrmMapper.ToPickTaskDomain(saved);
+  }
+
   public async FindByIdempotencyKey(
     idempotencyKey: string,
     manager?: EntityManager,

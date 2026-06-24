@@ -16,6 +16,12 @@ export interface ITaskExecutionRepository {
   FindCandidates(filter: MobileTaskListFilter): Promise<MobileTaskEntity[]>;
   FindById(id: string, manager?: EntityManager): Promise<MobileTaskEntity | null>;
   FindByIdForUpdate(id: string, manager: EntityManager): Promise<MobileTaskEntity | null>;
+  FindBySourceDocument(
+    sourceDocumentType: string,
+    sourceDocumentId: string,
+    manager?: EntityManager,
+  ): Promise<MobileTaskEntity | null>;
+  FindScanEventsByTaskId(taskId: string, manager?: EntityManager): Promise<MobileScanEventEntity[]>;
   Save(task: MobileTaskEntity, manager?: EntityManager): Promise<MobileTaskEntity>;
   SaveScanEvent(scan: MobileScanEventEntity, manager?: EntityManager): Promise<MobileScanEventEntity>;
   RunInTransaction<T>(work: (manager: EntityManager) => Promise<T>): Promise<T>;

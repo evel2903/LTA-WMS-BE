@@ -20,6 +20,8 @@ import {
   INTEGRATION_REPOSITORY,
 } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
 import { IntegrationModule } from '@modules/Integration/IntegrationModule';
+import { InventoryControlUseCase } from '@modules/InventoryExecution/Application/UseCases/InventoryControlUseCase';
+import { InventoryExecutionModule } from '@modules/InventoryExecution/InventoryExecutionModule';
 import {
   IItemCoverageRepository,
   ITEM_COVERAGE_REPOSITORY,
@@ -56,6 +58,7 @@ import {
 import { AllocationLifecycleService } from '@modules/Outbound/Application/Services/AllocationLifecycleService';
 import { OutboundOrderLifecycleService } from '@modules/Outbound/Application/Services/OutboundOrderLifecycleService';
 import { PickReleaseLifecycleService } from '@modules/Outbound/Application/Services/PickReleaseLifecycleService';
+import { PickTaskConfirmationService } from '@modules/Outbound/Application/Services/PickTaskConfirmationService';
 import {
   AllocateOutboundOrderUseCase,
   GetAllocationUseCase,
@@ -75,6 +78,7 @@ import {
   ListPickReleasesUseCase,
   ReleaseOutboundOrderUseCase,
 } from '@modules/Outbound/Application/UseCases/PickReleaseUseCases';
+import { ConfirmPickTaskUseCase } from '@modules/Outbound/Application/UseCases/PickTaskConfirmUseCases';
 import { AllocationLineOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/AllocationLineOrmEntity';
 import { AllocationOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/AllocationOrmEntity';
 import { OutboundOrderLineOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/OutboundOrderLineOrmEntity';
@@ -87,10 +91,19 @@ import { OutboundOrderRepository } from '@modules/Outbound/Infrastructure/Persis
 import { PickReleaseRepository } from '@modules/Outbound/Infrastructure/Persistence/Repositories/PickReleaseRepository';
 import { OutboundOrderController } from '@modules/Outbound/Presentation/Controllers/OutboundOrderController';
 import {
+  MobilePickTaskController,
+  PickTaskController,
+} from '@modules/Outbound/Presentation/Controllers/PickTaskController';
+import {
   IPartnerRepository,
   PARTNER_REPOSITORY,
 } from '@modules/PartnerMaster/Application/Interfaces/IPartnerRepository';
 import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule';
+import {
+  ITaskExecutionRepository,
+  TASK_EXECUTION_REPOSITORY,
+} from '@modules/TaskExecution/Application/Interfaces/ITaskExecutionRepository';
+import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule';
 
 @Module({
   imports: [
@@ -108,8 +121,10 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
     PartnerMasterModule,
     CoreFlowModule,
     IntegrationModule,
+    TaskExecutionModule,
+    InventoryExecutionModule,
   ],
-  controllers: [OutboundOrderController],
+  controllers: [OutboundOrderController, PickTaskController, MobilePickTaskController],
   providers: [
     { provide: OUTBOUND_ORDER_REPOSITORY, useClass: OutboundOrderRepository },
     { provide: ALLOCATION_REPOSITORY, useClass: AllocationRepository },
@@ -260,6 +275,7 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
         reasonCatalog: IReasonCodeCatalog,
         audited: AuditedTransaction,
         permissionChecker: IPermissionChecker,
+        taskExecution: ITaskExecutionRepository,
       ) =>
         new PickReleaseLifecycleService(
           releases,
@@ -270,6 +286,7 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
           reasonCatalog,
           audited,
           permissionChecker,
+          taskExecution,
         ),
       inject: [
         PICK_RELEASE_REPOSITORY,
@@ -280,7 +297,46 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
         REASON_CODE_CATALOG,
         AuditedTransaction,
         PERMISSION_CHECKER,
+        TASK_EXECUTION_REPOSITORY,
       ],
+    },
+    {
+      provide: PickTaskConfirmationService,
+      useFactory: (
+        pickReleases: IPickReleaseRepository,
+        outboundOrders: IOutboundOrderRepository,
+        taskExecution: ITaskExecutionRepository,
+        inventoryControl: InventoryControlUseCase,
+        integrations: IIntegrationRepository,
+        coreFlows: ICoreFlowRepository,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) =>
+        new PickTaskConfirmationService(
+          pickReleases,
+          outboundOrders,
+          taskExecution,
+          inventoryControl,
+          integrations,
+          coreFlows,
+          audited,
+          permissionChecker,
+        ),
+      inject: [
+        PICK_RELEASE_REPOSITORY,
+        OUTBOUND_ORDER_REPOSITORY,
+        TASK_EXECUTION_REPOSITORY,
+        InventoryControlUseCase,
+        INTEGRATION_REPOSITORY,
+        CORE_FLOW_REPOSITORY,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
+    {
+      provide: ConfirmPickTaskUseCase,
+      useFactory: (service: PickTaskConfirmationService) => new ConfirmPickTaskUseCase(service),
+      inject: [PickTaskConfirmationService],
     },
     {
       provide: ReleaseOutboundOrderUseCase,

@@ -104,4 +104,10 @@ export class MobileTaskEntity {
     this.UpdatedAt = now;
     this.UpdatedBy = actorUserId;
   }
+
+  public Complete(actorUserId: string | null, now = new Date()) {
+    this.TaskStatus = MobileTaskStatus.Completed;
+    this.UpdatedAt = now;
+    this.UpdatedBy = actorUserId;
+  }
 }

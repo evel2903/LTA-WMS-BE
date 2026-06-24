@@ -5,6 +5,7 @@ import { MobileTaskType } from '@modules/TaskExecution/Domain/Enums/MobileTaskTy
 @Entity({ name: 'mobile_tasks' })
 @Index('IDX_mobile_tasks_scope_status_type', ['WarehouseId', 'TaskStatus', 'TaskType'])
 @Index('IDX_mobile_tasks_assignee_status', ['AssignedUserId', 'TaskStatus'])
+@Index('UQ_mobile_tasks_source_document', ['SourceDocumentType', 'SourceDocumentId'], { unique: true })
 export class MobileTaskOrmEntity {
   @PrimaryColumn({ name: 'id', type: 'char', length: 36 })
   public Id!: string;
