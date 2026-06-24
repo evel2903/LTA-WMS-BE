@@ -1,0 +1,84 @@
+import { PickReleaseMode } from '@modules/Outbound/Domain/Enums/PickReleaseMode';
+import { PickReleaseStatus } from '@modules/Outbound/Domain/Enums/PickReleaseStatus';
+
+export class PickReleaseEntity {
+  public readonly Id: string;
+  public ReleaseNumber: string;
+  public OutboundOrderId: string;
+  public AllocationId: string;
+  public WarehouseId: string;
+  public WarehouseCode: string | null;
+  public OwnerId: string;
+  public OwnerCode: string | null;
+  public ReleaseMode: PickReleaseMode;
+  public BatchSize: number;
+  public Status: PickReleaseStatus;
+  public BlockReason: string | null;
+  public TotalTaskCount: number;
+  public TotalReleasedQuantity: number;
+  public OutboxMessageId: string | null;
+  public IdempotencyKey: string;
+  public PayloadFingerprint: string;
+  public ReasonCode: string | null;
+  public ReasonCodeId: string | null;
+  public ReasonNote: string | null;
+  public EvidenceRefs: string[];
+  public readonly CreatedAt: Date;
+  public UpdatedAt: Date;
+  public CreatedBy: string | null;
+  public UpdatedBy: string | null;
+
+  constructor(params: {
+    Id: string;
+    ReleaseNumber: string;
+    OutboundOrderId: string;
+    AllocationId: string;
+    WarehouseId: string;
+    WarehouseCode?: string | null;
+    OwnerId: string;
+    OwnerCode?: string | null;
+    ReleaseMode: PickReleaseMode;
+    BatchSize: number;
+    Status: PickReleaseStatus;
+    BlockReason?: string | null;
+    TotalTaskCount: number;
+    TotalReleasedQuantity: number;
+    OutboxMessageId?: string | null;
+    IdempotencyKey: string;
+    PayloadFingerprint: string;
+    ReasonCode?: string | null;
+    ReasonCodeId?: string | null;
+    ReasonNote?: string | null;
+    EvidenceRefs?: string[];
+    CreatedAt: Date;
+    UpdatedAt: Date;
+    CreatedBy?: string | null;
+    UpdatedBy?: string | null;
+  }) {
+    this.Id = params.Id;
+    this.ReleaseNumber = params.ReleaseNumber;
+    this.OutboundOrderId = params.OutboundOrderId;
+    this.AllocationId = params.AllocationId;
+    this.WarehouseId = params.WarehouseId;
+    this.WarehouseCode = params.WarehouseCode ?? null;
+    this.OwnerId = params.OwnerId;
+    this.OwnerCode = params.OwnerCode ?? null;
+    this.ReleaseMode = params.ReleaseMode;
+    this.BatchSize = params.BatchSize;
+    this.Status = params.Status;
+    this.BlockReason = params.BlockReason ?? null;
+    this.TotalTaskCount = params.TotalTaskCount;
+    this.TotalReleasedQuantity = params.TotalReleasedQuantity;
+    this.OutboxMessageId = params.OutboxMessageId ?? null;
+    this.IdempotencyKey = params.IdempotencyKey;
+    this.PayloadFingerprint = params.PayloadFingerprint;
+    this.ReasonCode = params.ReasonCode ?? null;
+    this.ReasonCodeId = params.ReasonCodeId ?? null;
+    this.ReasonNote = params.ReasonNote ?? null;
+    this.EvidenceRefs = params.EvidenceRefs ?? [];
+    this.CreatedAt = params.CreatedAt;
+    this.UpdatedAt = params.UpdatedAt;
+    this.CreatedBy = params.CreatedBy ?? null;
+    this.UpdatedBy = params.UpdatedBy ?? null;
+  }
+}

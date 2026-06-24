@@ -1,0 +1,83 @@
+import { PickTaskStatus } from '@modules/Outbound/Domain/Enums/PickTaskStatus';
+
+export class PickTaskEntity {
+  public readonly Id: string;
+  public PickReleaseId: string;
+  public OutboundOrderId: string;
+  public AllocationId: string;
+  public AllocationLineId: string;
+  public OutboundOrderLineId: string;
+  public TaskNumber: string;
+  public Status: PickTaskStatus;
+  public Sequence: number;
+  public BatchNumber: string | null;
+  public SourceBalanceId: string;
+  public SourceDimensionId: string;
+  public SourceLocationId: string;
+  public TargetLocationId: string | null;
+  public TargetReference: string | null;
+  public SkuId: string;
+  public SkuCode: string | null;
+  public UomId: string;
+  public UomCode: string | null;
+  public Quantity: number;
+  public InventoryStatusCode: string | null;
+  public LotNumber: string | null;
+  public SerialNumber: string | null;
+  public ExpiryDate: Date | null;
+  public readonly CreatedAt: Date;
+
+  constructor(params: {
+    Id: string;
+    PickReleaseId: string;
+    OutboundOrderId: string;
+    AllocationId: string;
+    AllocationLineId: string;
+    OutboundOrderLineId: string;
+    TaskNumber: string;
+    Status: PickTaskStatus;
+    Sequence: number;
+    BatchNumber?: string | null;
+    SourceBalanceId: string;
+    SourceDimensionId: string;
+    SourceLocationId: string;
+    TargetLocationId?: string | null;
+    TargetReference?: string | null;
+    SkuId: string;
+    SkuCode?: string | null;
+    UomId: string;
+    UomCode?: string | null;
+    Quantity: number;
+    InventoryStatusCode?: string | null;
+    LotNumber?: string | null;
+    SerialNumber?: string | null;
+    ExpiryDate?: Date | null;
+    CreatedAt: Date;
+  }) {
+    this.Id = params.Id;
+    this.PickReleaseId = params.PickReleaseId;
+    this.OutboundOrderId = params.OutboundOrderId;
+    this.AllocationId = params.AllocationId;
+    this.AllocationLineId = params.AllocationLineId;
+    this.OutboundOrderLineId = params.OutboundOrderLineId;
+    this.TaskNumber = params.TaskNumber;
+    this.Status = params.Status;
+    this.Sequence = params.Sequence;
+    this.BatchNumber = params.BatchNumber ?? null;
+    this.SourceBalanceId = params.SourceBalanceId;
+    this.SourceDimensionId = params.SourceDimensionId;
+    this.SourceLocationId = params.SourceLocationId;
+    this.TargetLocationId = params.TargetLocationId ?? null;
+    this.TargetReference = params.TargetReference ?? null;
+    this.SkuId = params.SkuId;
+    this.SkuCode = params.SkuCode ?? null;
+    this.UomId = params.UomId;
+    this.UomCode = params.UomCode ?? null;
+    this.Quantity = params.Quantity;
+    this.InventoryStatusCode = params.InventoryStatusCode ?? null;
+    this.LotNumber = params.LotNumber ?? null;
+    this.SerialNumber = params.SerialNumber ?? null;
+    this.ExpiryDate = params.ExpiryDate ?? null;
+    this.CreatedAt = params.CreatedAt;
+  }
+}

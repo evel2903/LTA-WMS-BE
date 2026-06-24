@@ -20,10 +20,17 @@ import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataSta
 import { SkuStatus } from '@modules/MasterData/Domain/Enums/SkuStatus';
 import { ImportOutboundOrderDto } from '@modules/Outbound/Application/DTOs/OutboundOrderDto';
 import { OutboundOrderAggregate } from '@modules/Outbound/Application/Interfaces/IOutboundOrderRepository';
+import {
+  IPickReleaseRepository,
+  PickReleaseAggregate,
+} from '@modules/Outbound/Application/Interfaces/IPickReleaseRepository';
 import { OutboundOrderLifecycleService } from '@modules/Outbound/Application/Services/OutboundOrderLifecycleService';
 import { OutboundOrderEntity } from '@modules/Outbound/Domain/Entities/OutboundOrderEntity';
 import { OutboundOrderLineEntity } from '@modules/Outbound/Domain/Entities/OutboundOrderLineEntity';
+import { PickReleaseEntity } from '@modules/Outbound/Domain/Entities/PickReleaseEntity';
 import { OutboundOrderStatus } from '@modules/Outbound/Domain/Enums/OutboundOrderStatus';
+import { PickReleaseMode } from '@modules/Outbound/Domain/Enums/PickReleaseMode';
+import { PickReleaseStatus } from '@modules/Outbound/Domain/Enums/PickReleaseStatus';
 import { PartnerEntity } from '@modules/PartnerMaster/Domain/Entities/PartnerEntity';
 import { PartnerStatus } from '@modules/PartnerMaster/Domain/Enums/PartnerStatus';
 import { PartnerType } from '@modules/PartnerMaster/Domain/Enums/PartnerType';
@@ -369,6 +376,39 @@ class CapturingAuditedTransaction {
   }
 }
 
+class MemoryPickReleaseRepository implements Partial<IPickReleaseRepository> {
+  public active: PickReleaseAggregate | null = null;
+
+  async FindActiveByOutboundOrderId(outboundOrderId: string): Promise<PickReleaseAggregate | null> {
+    return this.active?.Release.OutboundOrderId === outboundOrderId ? this.active : null;
+  }
+}
+
+function activePickRelease(outboundOrderId: string): PickReleaseAggregate {
+  return {
+    Release: new PickReleaseEntity({
+      Id: 'release-active',
+      ReleaseNumber: 'REL-ACTIVE',
+      OutboundOrderId: outboundOrderId,
+      AllocationId: 'allocation-1',
+      WarehouseId: 'warehouse-1',
+      WarehouseCode: 'WT-01',
+      OwnerId: 'owner-1',
+      OwnerCode: 'OWN-01',
+      ReleaseMode: PickReleaseMode.Discrete,
+      BatchSize: 50,
+      Status: PickReleaseStatus.Released,
+      TotalTaskCount: 1,
+      TotalReleasedQuantity: 12,
+      IdempotencyKey: 'release-active',
+      PayloadFingerprint: 'release-fingerprint',
+      CreatedAt: now,
+      UpdatedAt: now,
+    }),
+    Tasks: [],
+  };
+}
+
 const buildService = (
   overrides: Partial<{
     partners: MemoryPartnerRepository;
@@ -378,6 +418,7 @@ const buildService = (
     uoms: MemoryMasterRepository<UomEntity>;
     itemCoverages: MemoryItemCoverageRepository;
     permissions: IPermissionChecker;
+    pickReleases: MemoryPickReleaseRepository;
   }> = {},
 ) => {
   const outbound = new MemoryOutboundOrderRepository();
@@ -398,6 +439,7 @@ const buildService = (
     new SimpleReasonCatalog(),
     audited as unknown as AuditedTransaction,
     permissions,
+    (overrides.pickReleases ?? new MemoryPickReleaseRepository()) as unknown as IPickReleaseRepository,
   );
   return { service, outbound, coreFlows, integrations, audited, permissions };
 };
@@ -578,6 +620,51 @@ describe('OutboundOrderLifecycleService', () => {
         ctx,
       ),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('blocks outbound document mutations after active pick release exists', async () => {
+    const pickReleases = new MemoryPickReleaseRepository();
+    const { service } = buildService({ pickReleases });
+    const created = await service.Import(validImport(), ctx);
+    pickReleases.active = activePickRelease(created.Id);
+
+    await expect(service.Validate(created.Id, ctx)).rejects.toBeInstanceOf(BusinessRuleException);
+    await expect(
+      service.Hold(
+        {
+          Id: created.Id,
+          ReasonCode: 'RC-V1-DISCREPANCY',
+          ReasonNote: 'Không được hold sau release',
+          EvidenceRefs: ['release-active:1'],
+          IdempotencyKey: 'hold-after-release',
+        },
+        ctx,
+      ),
+    ).rejects.toBeInstanceOf(BusinessRuleException);
+    await expect(
+      service.Cancel(
+        {
+          Id: created.Id,
+          ReasonCode: 'RC-V1-DISCREPANCY',
+          ReasonNote: 'Không được cancel sau release',
+          EvidenceRefs: ['release-active:1'],
+          IdempotencyKey: 'cancel-after-release',
+        },
+        ctx,
+      ),
+    ).rejects.toBeInstanceOf(BusinessRuleException);
+    await expect(
+      service.Reject(
+        {
+          Id: created.Id,
+          ReasonCode: 'RC-V1-DISCREPANCY',
+          ReasonNote: 'Không được reject sau release',
+          EvidenceRefs: ['release-active:1'],
+          IdempotencyKey: 'reject-after-release',
+        },
+        ctx,
+      ),
+    ).rejects.toBeInstanceOf(BusinessRuleException);
   });
 
   it('enforces PageSize max 100 and filters list by read permission', async () => {

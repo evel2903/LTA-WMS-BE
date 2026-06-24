@@ -34,6 +34,7 @@ import {
   IOutboundOrderRepository,
   OutboundOrderAggregate,
 } from '@modules/Outbound/Application/Interfaces/IOutboundOrderRepository';
+import { IPickReleaseRepository } from '@modules/Outbound/Application/Interfaces/IPickReleaseRepository';
 import { OutboundOrderDtoMapper } from '@modules/Outbound/Application/Mappers/OutboundOrderDtoMapper';
 import {
   AssertOutboundOrderPermission,
@@ -93,6 +94,7 @@ export class OutboundOrderLifecycleService {
     private readonly reasonCatalog: IReasonCodeCatalog,
     private readonly audited: AuditedTransaction,
     private readonly permissionChecker?: IPermissionChecker,
+    private readonly pickReleases?: IPickReleaseRepository,
   ) {}
 
   public async Import(request: ImportOutboundOrderDto, context: AuditContext): Promise<OutboundOrderDto> {
@@ -366,6 +368,7 @@ export class OutboundOrderLifecycleService {
       return await this.audited.Run(async (manager) => {
         const current = await this.outboundOrders.FindByIdForUpdate(aggregate.Order.Id, manager);
         if (!current) throw new NotFoundException('Outbound order not found');
+        await this.AssertNoActivePickRelease(current.Order.Id, manager);
         this.AssertTransitionAllowed(current.Order.DocumentStatus, OutboundOrderStatus.Validated);
         const resolution = await this.ResolveMasterData(this.ImportDtoFromAggregate(current));
         const hasValidationErrors = resolution.ValidationErrors.length > 0;
@@ -491,6 +494,7 @@ export class OutboundOrderLifecycleService {
           });
         }
         if (existingAction) throw new OutboundOrderNoopResult(current, true);
+        await this.AssertNoActivePickRelease(current.Order.Id, manager);
         this.AssertTransitionAllowed(current.Order.DocumentStatus, status);
         if (!idempotencyKey && !reason && current.Order.DocumentStatus === status) {
           throw new OutboundOrderNoopResult(current, false);
@@ -778,6 +782,20 @@ export class OutboundOrderLifecycleService {
     if (current === OutboundOrderStatus.Rejected && next !== OutboundOrderStatus.Rejected) {
       throw new BusinessRuleException('Rejected outbound order cannot be reopened by V1-18');
     }
+  }
+
+  private async AssertNoActivePickRelease(
+    outboundOrderId: string,
+    manager: Parameters<IPickReleaseRepository['FindActiveByOutboundOrderId']>[1],
+  ): Promise<void> {
+    if (!this.pickReleases) return;
+    const active = await this.pickReleases.FindActiveByOutboundOrderId(outboundOrderId, manager);
+    if (!active) return;
+    throw new BusinessRuleException('Outbound order cannot be mutated after active pick release exists', {
+      OutboundOrderId: outboundOrderId,
+      PickReleaseId: active.Release.Id,
+      PickReleaseStatus: active.Release.Status,
+    });
   }
 
   private ImportDtoFromAggregate(aggregate: OutboundOrderAggregate): ImportOutboundOrderDto {
