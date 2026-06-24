@@ -4,6 +4,8 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, UpdateDateColum
 @Index('UQ_shipping_package_staging_stage_idempotency', ['StageIdempotencyKey'], { unique: true })
 @Index('UQ_shipping_package_staging_loading_idempotency', ['LoadingIdempotencyKey'], { unique: true })
 @Index('UQ_shipping_package_staging_confirm_idempotency', ['ShipmentConfirmIdempotencyKey'], { unique: true })
+@Index('UQ_shipping_package_staging_gate_out_idempotency', ['GateOutIdempotencyKey'], { unique: true })
+@Index('UQ_shipping_package_staging_gi_trigger_idempotency', ['GoodsIssueTriggerIdempotencyKey'], { unique: true })
 @Index('IDX_shipping_package_staging_order_status', ['OutboundOrderId', 'Status'])
 @Index('IDX_shipping_package_staging_shipment_status', ['ShipmentReference', 'Status'])
 @Index('IDX_shipping_package_staging_owner_warehouse', ['OwnerId', 'WarehouseId'])
@@ -111,6 +113,18 @@ export class ShipmentPackageStagingOrmEntity {
   @Column({ name: 'shipment_confirm_payload_fingerprint', type: 'varchar', length: 64, nullable: true })
   public ShipmentConfirmPayloadFingerprint!: string | null;
 
+  @Column({ name: 'gate_out_idempotency_key', type: 'varchar', length: 180, nullable: true })
+  public GateOutIdempotencyKey!: string | null;
+
+  @Column({ name: 'gate_out_payload_fingerprint', type: 'varchar', length: 64, nullable: true })
+  public GateOutPayloadFingerprint!: string | null;
+
+  @Column({ name: 'goods_issue_trigger_idempotency_key', type: 'varchar', length: 180, nullable: true })
+  public GoodsIssueTriggerIdempotencyKey!: string | null;
+
+  @Column({ name: 'goods_issue_trigger_payload_fingerprint', type: 'varchar', length: 64, nullable: true })
+  public GoodsIssueTriggerPayloadFingerprint!: string | null;
+
   @Column({ name: 'reason_code', type: 'varchar', length: 80, nullable: true })
   public ReasonCode!: string | null;
 
@@ -156,11 +170,38 @@ export class ShipmentPackageStagingOrmEntity {
   @Column({ name: 'shipment_confirmed_by', type: 'char', length: 36, nullable: true })
   public ShipmentConfirmedBy!: string | null;
 
+  @Column({ name: 'gate_out_reference', type: 'varchar', length: 120, nullable: true })
+  public GateOutReference!: string | null;
+
+  @Column({ name: 'gate_out_at', type: 'timestamptz', nullable: true })
+  public GateOutAt!: Date | null;
+
+  @Column({ name: 'gate_out_by', type: 'char', length: 36, nullable: true })
+  public GateOutBy!: string | null;
+
+  @Column({ name: 'goods_issue_trigger', type: 'varchar', length: 40, nullable: true })
+  public GoodsIssueTrigger!: string | null;
+
+  @Column({ name: 'goods_issue_trigger_status', type: 'varchar', length: 40, nullable: true })
+  public GoodsIssueTriggerStatus!: string | null;
+
+  @Column({ name: 'goods_issue_triggered_at', type: 'timestamptz', nullable: true })
+  public GoodsIssueTriggeredAt!: Date | null;
+
+  @Column({ name: 'goods_issue_triggered_by', type: 'char', length: 36, nullable: true })
+  public GoodsIssueTriggeredBy!: string | null;
+
   @Column({ name: 'loading_outbox_message_id', type: 'char', length: 36, nullable: true })
   public LoadingOutboxMessageId!: string | null;
 
   @Column({ name: 'shipment_confirm_outbox_message_id', type: 'char', length: 36, nullable: true })
   public ShipmentConfirmOutboxMessageId!: string | null;
+
+  @Column({ name: 'gate_out_outbox_message_id', type: 'char', length: 36, nullable: true })
+  public GateOutOutboxMessageId!: string | null;
+
+  @Column({ name: 'goods_issue_trigger_outbox_message_id', type: 'char', length: 36, nullable: true })
+  public GoodsIssueTriggerOutboxMessageId!: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   public CreatedAt!: Date;

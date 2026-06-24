@@ -1,4 +1,6 @@
 import { ShipmentPackageStagingStatus } from '@modules/Shipping/Domain/Enums/ShipmentPackageStagingStatus';
+import { GoodsIssueTrigger } from '@modules/Shipping/Domain/Enums/GoodsIssueTrigger';
+import { GoodsIssueTriggerStatus } from '@modules/Shipping/Domain/Enums/GoodsIssueTriggerStatus';
 
 export interface ShipmentPackageStagingDto {
   Id: string;
@@ -36,8 +38,17 @@ export interface ShipmentPackageStagingDto {
   LoadedBy: string | null;
   ShipmentConfirmedAt: string | null;
   ShipmentConfirmedBy: string | null;
+  GateOutReference: string | null;
+  GateOutAt: string | null;
+  GateOutBy: string | null;
+  GoodsIssueTrigger: GoodsIssueTrigger | null;
+  GoodsIssueTriggerStatus: GoodsIssueTriggerStatus | null;
+  GoodsIssueTriggeredAt: string | null;
+  GoodsIssueTriggeredBy: string | null;
   LoadingOutboxMessageId: string | null;
   ShipmentConfirmOutboxMessageId: string | null;
+  GateOutOutboxMessageId: string | null;
+  GoodsIssueTriggerOutboxMessageId: string | null;
   CreatedAt: string;
   UpdatedAt: string;
 }
@@ -102,6 +113,26 @@ export interface ScanLoadingDto {
 export interface ConfirmShipmentDto {
   ShipmentReference?: string | null;
   RequireFullLoad?: boolean | null;
+  ReasonCode?: string | null;
+  ReasonNote?: string | null;
+  EvidenceRefs?: string[] | null;
+  IdempotencyKey: string;
+}
+
+export interface RecordGateOutDto {
+  GateOutReference?: string | null;
+  TruckReference?: string | null;
+  VehicleNumber?: string | null;
+  InventoryStatusCode?: string | null;
+  ReasonCode?: string | null;
+  ReasonNote?: string | null;
+  EvidenceRefs?: string[] | null;
+  IdempotencyKey: string;
+}
+
+export interface EvaluateGoodsIssueTriggerDto {
+  GoodsIssueTrigger?: GoodsIssueTrigger | null;
+  InventoryStatusCode?: string | null;
   ReasonCode?: string | null;
   ReasonNote?: string | null;
   EvidenceRefs?: string[] | null;

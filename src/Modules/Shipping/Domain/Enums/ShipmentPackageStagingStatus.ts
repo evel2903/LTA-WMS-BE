@@ -5,5 +5,6 @@ export enum ShipmentPackageStagingStatus {
   ReadyForLoading = 'ReadyForLoading',
   Loaded = 'Loaded',
   ShipmentConfirmed = 'ShipmentConfirmed',
+  GateOutRecorded = 'GateOutRecorded',
   Blocked = 'Blocked',
 }

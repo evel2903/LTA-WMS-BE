@@ -23,6 +23,11 @@ import { IntegrationModule } from '@modules/Integration/IntegrationModule';
 import { IPackingRepository, PACKING_REPOSITORY } from '@modules/Outbound/Application/Interfaces/IPackingRepository';
 import { OutboundModule } from '@modules/Outbound/OutboundModule';
 import {
+  IWarehouseProfileRepository,
+  WAREHOUSE_PROFILE_REPOSITORY,
+} from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
+import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfileModule';
+import {
   IShippingStagingRepository,
   SHIPPING_STAGING_REPOSITORY,
 } from '@modules/Shipping/Application/Interfaces/IShippingStagingRepository';
@@ -31,8 +36,10 @@ import {
   AssignDockUseCase,
   AssignTruckUseCase,
   ConfirmShipmentUseCase,
+  EvaluateGoodsIssueTriggerUseCase,
   GetShippingStagingUseCase,
   ListShippingStagingUseCase,
+  RecordGateOutUseCase,
   ScanLoadingUseCase,
   StagePackageUseCase,
 } from '@modules/Shipping/Application/UseCases/ShippingStagingUseCases';
@@ -47,6 +54,7 @@ import { ShippingStagingController } from '@modules/Shipping/Presentation/Contro
     CoreFlowModule,
     IntegrationModule,
     OutboundModule,
+    WarehouseProfileModule,
   ],
   controllers: [ShippingStagingController],
   providers: [
@@ -61,6 +69,7 @@ import { ShippingStagingController } from '@modules/Shipping/Presentation/Contro
         reasonCatalog: IReasonCodeCatalog,
         audited: AuditedTransaction,
         permissionChecker: IPermissionChecker,
+        warehouseProfiles: IWarehouseProfileRepository,
       ) =>
         new ShippingStagingLifecycleService(
           stagings,
@@ -70,6 +79,7 @@ import { ShippingStagingController } from '@modules/Shipping/Presentation/Contro
           reasonCatalog,
           audited,
           permissionChecker,
+          warehouseProfiles,
         ),
       inject: [
         SHIPPING_STAGING_REPOSITORY,
@@ -79,6 +89,7 @@ import { ShippingStagingController } from '@modules/Shipping/Presentation/Contro
         REASON_CODE_CATALOG,
         AuditedTransaction,
         PERMISSION_CHECKER,
+        WAREHOUSE_PROFILE_REPOSITORY,
       ],
     },
     {
@@ -114,6 +125,16 @@ import { ShippingStagingController } from '@modules/Shipping/Presentation/Contro
     {
       provide: ConfirmShipmentUseCase,
       useFactory: (lifecycle: ShippingStagingLifecycleService) => new ConfirmShipmentUseCase(lifecycle),
+      inject: [ShippingStagingLifecycleService],
+    },
+    {
+      provide: RecordGateOutUseCase,
+      useFactory: (lifecycle: ShippingStagingLifecycleService) => new RecordGateOutUseCase(lifecycle),
+      inject: [ShippingStagingLifecycleService],
+    },
+    {
+      provide: EvaluateGoodsIssueTriggerUseCase,
+      useFactory: (lifecycle: ShippingStagingLifecycleService) => new EvaluateGoodsIssueTriggerUseCase(lifecycle),
       inject: [ShippingStagingLifecycleService],
     },
   ],

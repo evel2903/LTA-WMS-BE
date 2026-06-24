@@ -10,8 +10,10 @@ import {
   AssignDockUseCase,
   AssignTruckUseCase,
   ConfirmShipmentUseCase,
+  EvaluateGoodsIssueTriggerUseCase,
   GetShippingStagingUseCase,
   ListShippingStagingUseCase,
+  RecordGateOutUseCase,
   ScanLoadingUseCase,
   StagePackageUseCase,
 } from '@modules/Shipping/Application/UseCases/ShippingStagingUseCases';
@@ -19,7 +21,9 @@ import {
   AssignDockRequest,
   AssignTruckRequest,
   ConfirmShipmentRequest,
+  EvaluateGoodsIssueTriggerRequest,
   ListShippingStagingQuery,
+  RecordGateOutRequest,
   ScanLoadingRequest,
   StagePackageRequest,
 } from '@modules/Shipping/Presentation/Requests/ShippingStagingRequests';
@@ -35,6 +39,8 @@ export class ShippingStagingController {
     private readonly assignTruckUseCase: AssignTruckUseCase,
     private readonly scanLoadingUseCase: ScanLoadingUseCase,
     private readonly confirmShipmentUseCase: ConfirmShipmentUseCase,
+    private readonly recordGateOutUseCase: RecordGateOutUseCase,
+    private readonly evaluateGoodsIssueTriggerUseCase: EvaluateGoodsIssueTriggerUseCase,
   ) {}
 
   @Get('packages')
@@ -96,5 +102,25 @@ export class ShippingStagingController {
     @CurrentAuditContext() context: AuditContext,
   ) {
     return this.confirmShipmentUseCase.Execute(id, request, context);
+  }
+
+  @Post('packages/:id/gate-out')
+  @RequirePermission(ActionCode.Update, ObjectType.Shipment)
+  public async RecordGateOut(
+    @Param('id') id: string,
+    @Body() request: RecordGateOutRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return this.recordGateOutUseCase.Execute(id, request, context);
+  }
+
+  @Post('packages/:id/goods-issue-trigger')
+  @RequirePermission(ActionCode.Adjust, ObjectType.GoodsIssue)
+  public async EvaluateGoodsIssueTrigger(
+    @Param('id') id: string,
+    @Body() request: EvaluateGoodsIssueTriggerRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return this.evaluateGoodsIssueTriggerUseCase.Execute(id, request, context);
   }
 }
