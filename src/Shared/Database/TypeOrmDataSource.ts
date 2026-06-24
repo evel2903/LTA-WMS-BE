@@ -71,6 +71,9 @@ import { AllocationLineOrmEntity } from '@modules/Outbound/Infrastructure/Persis
 import { AllocationOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/AllocationOrmEntity';
 import { OutboundOrderOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/OutboundOrderOrmEntity';
 import { OutboundOrderLineOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/OutboundOrderLineOrmEntity';
+import { PackageContentOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PackageContentOrmEntity';
+import { PackageOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PackageOrmEntity';
+import { PackSessionOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PackSessionOrmEntity';
 import { PickReleaseOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PickReleaseOrmEntity';
 import { PickTaskOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/PickTaskOrmEntity';
 
@@ -156,6 +159,9 @@ export default new DataSource({
     AllocationLineOrmEntity,
     PickReleaseOrmEntity,
     PickTaskOrmEntity,
+    PackSessionOrmEntity,
+    PackageOrmEntity,
+    PackageContentOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

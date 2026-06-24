@@ -186,6 +186,19 @@ export const ControlExceptionCatalogEntries: ReadonlyArray<ControlExceptionCatal
     OwnerRoles: ['WAREHOUSE_SUPERVISOR', 'CUSTOMER_SERVICE'],
     ImplementationStatus: CatalogImplementationStatus.Implemented,
   },
+  {
+    Code: 'CTRL-V1-PACK-CHECK-MISMATCH',
+    Scenario: 'Pack checking phát hiện mismatch trước khi close package',
+    Category: ControlExceptionCategory.ManualDataFix,
+    Severity: ControlExceptionSeverity.High,
+    DefaultState: ControlExceptionDefaultState.Detected,
+    ActionAllowed: ControlExceptionAction.RequireSpecialApproval,
+    ReasonRequired: true,
+    EvidenceRequired: true,
+    ApprovalRequired: false,
+    OwnerRoles: ['WAREHOUSE_SUPERVISOR', 'PACKER'],
+    ImplementationStatus: CatalogImplementationStatus.Implemented,
+  },
 ];
 
 /** Idempotent: upsert by Code, so re-running never duplicates and keeps fields in sync. */

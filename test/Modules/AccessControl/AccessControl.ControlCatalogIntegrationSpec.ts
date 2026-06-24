@@ -7,7 +7,7 @@ import { ControlExceptionCatalogOrmEntity } from '@modules/AccessControl/Infrast
 import { ValidationRuleCatalogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/ValidationRuleCatalogOrmEntity';
 
 /**
- * Live Postgres integration (C8): after running both seeders the catalogs hold 12 + 10 rows
+ * Live Postgres integration (C8): after running both seeders the catalogs hold 13 + 10 rows
  * with the right fields, and re-running keeps the counts (idempotent upsert). Skips
  * gracefully when no DB is reachable so `yarn test` stays green in DB-less environments.
  */
@@ -30,13 +30,13 @@ describe('Control & validation catalog seed (live Postgres)', () => {
     if (dataSource.isInitialized) await dataSource.destroy();
   });
 
-  it('seeds 12 control-exception rows with correct fields', async () => {
+  it('seeds 13 control-exception rows with correct fields', async () => {
     if (!available) return;
     const repo = new ControlExceptionCatalogRepository(dataSource.getRepository(ControlExceptionCatalogOrmEntity));
     await SeedControlExceptionCatalog(repo);
 
     const items = await repo.List();
-    expect(items).toHaveLength(12);
+    expect(items).toHaveLength(13);
 
     const ex01 = await repo.FindByCode('CTRL-EX-01');
     expect(ex01).not.toBeNull();
@@ -61,7 +61,7 @@ describe('Control & validation catalog seed (live Postgres)', () => {
     expect(val01!.ControlExceptionCode).toBe('CTRL-EX-01');
   });
 
-  it('is idempotent: re-running both seeders keeps counts at 12 + 10', async () => {
+  it('is idempotent: re-running both seeders keeps counts at 13 + 10', async () => {
     if (!available) return;
     const exRepo = new ControlExceptionCatalogRepository(dataSource.getRepository(ControlExceptionCatalogOrmEntity));
     const valRepo = new ValidationRuleCatalogRepository(dataSource.getRepository(ValidationRuleCatalogOrmEntity));
@@ -71,7 +71,7 @@ describe('Control & validation catalog seed (live Postgres)', () => {
     await SeedControlExceptionCatalog(exRepo);
     await SeedValidationRuleCatalog(valRepo);
 
-    expect(await exRepo.List()).toHaveLength(12);
+    expect(await exRepo.List()).toHaveLength(13);
     expect(await valRepo.List()).toHaveLength(10);
   });
 });
