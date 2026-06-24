@@ -132,6 +132,7 @@ describe('InventoryExecution schema registration', () => {
       'StatusChange',
       'InternalMove',
       'CycleCountAdjustment',
+      'GoodsIssue',
     ]);
     expect(Object.values(InventoryTransactionStatus)).toEqual(['Posted', 'Failed']);
     expect(Object.values(InventoryMovementStatus)).toEqual(['Posted']);

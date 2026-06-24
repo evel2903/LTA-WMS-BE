@@ -21,6 +21,7 @@ export interface IShippingStagingRepository {
     key: string,
     manager?: EntityManager,
   ): Promise<ShipmentPackageStagingEntity | null>;
+  FindByGoodsIssueIdempotencyKey(key: string, manager?: EntityManager): Promise<ShipmentPackageStagingEntity | null>;
   ListByShipmentReference(
     shipmentReference: string,
     scope?: {

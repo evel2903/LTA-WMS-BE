@@ -5,6 +5,7 @@ import {
   ConfirmShipmentDto,
   EvaluateGoodsIssueTriggerDto,
   ListShipmentPackageStagingDto,
+  PostGoodsIssueDto,
   RecordGateOutDto,
   ScanLoadingDto,
   StagePackageDto,
@@ -80,5 +81,13 @@ export class EvaluateGoodsIssueTriggerUseCase {
 
   public async Execute(id: string, request: EvaluateGoodsIssueTriggerDto, context: AuditContext) {
     return this.lifecycle.EvaluateGoodsIssueTrigger(id, request, context);
+  }
+}
+
+export class PostGoodsIssueUseCase {
+  constructor(private readonly lifecycle: ShippingStagingLifecycleService) {}
+
+  public async Execute(id: string, request: PostGoodsIssueDto, context: AuditContext) {
+    return this.lifecycle.PostGoodsIssue(id, request, context);
   }
 }

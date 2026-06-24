@@ -189,6 +189,10 @@ class MemoryShippingStagingRepository implements IShippingStagingRepository {
     return this.items.find((item) => item.GoodsIssueTriggerIdempotencyKey === key) ?? null;
   }
 
+  async FindByGoodsIssueIdempotencyKey(key: string): Promise<ShipmentPackageStagingEntity | null> {
+    return this.items.find((item) => item.GoodsIssueIdempotencyKey === key) ?? null;
+  }
+
   async ListByShipmentReference(
     shipmentReference: string,
     scope: {

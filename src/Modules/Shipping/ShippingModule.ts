@@ -16,10 +16,32 @@ import {
 } from '@modules/CoreFlow/Application/Interfaces/ICoreFlowRepository';
 import { CoreFlowModule } from '@modules/CoreFlow/CoreFlowModule';
 import {
+  IInventoryTransactionRepository,
+  INVENTORY_TRANSACTION_REPOSITORY,
+} from '@modules/InventoryExecution/Application/Interfaces/IInventoryTransactionRepository';
+import { InventoryExecutionModule } from '@modules/InventoryExecution/InventoryExecutionModule';
+import {
   INTEGRATION_REPOSITORY,
   IIntegrationRepository,
 } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
 import { IntegrationModule } from '@modules/Integration/IntegrationModule';
+import {
+  IInventoryBalanceRepository,
+  INVENTORY_BALANCE_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IInventoryBalanceRepository';
+import {
+  IInventoryDimensionRepository,
+  INVENTORY_DIMENSION_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IInventoryDimensionRepository';
+import {
+  IInventoryStatusRepository,
+  INVENTORY_STATUS_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IInventoryStatusRepository';
+import {
+  ILocationRepository,
+  LOCATION_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/ILocationRepository';
+import { MasterDataModule } from '@modules/MasterData/MasterDataModule';
 import { IPackingRepository, PACKING_REPOSITORY } from '@modules/Outbound/Application/Interfaces/IPackingRepository';
 import { OutboundModule } from '@modules/Outbound/OutboundModule';
 import {
@@ -39,6 +61,7 @@ import {
   EvaluateGoodsIssueTriggerUseCase,
   GetShippingStagingUseCase,
   ListShippingStagingUseCase,
+  PostGoodsIssueUseCase,
   RecordGateOutUseCase,
   ScanLoadingUseCase,
   StagePackageUseCase,
@@ -52,7 +75,9 @@ import { ShippingStagingController } from '@modules/Shipping/Presentation/Contro
     TypeOrmModule.forFeature([ShipmentPackageStagingOrmEntity]),
     AccessControlModule,
     CoreFlowModule,
+    InventoryExecutionModule,
     IntegrationModule,
+    MasterDataModule,
     OutboundModule,
     WarehouseProfileModule,
   ],
@@ -70,6 +95,11 @@ import { ShippingStagingController } from '@modules/Shipping/Presentation/Contro
         audited: AuditedTransaction,
         permissionChecker: IPermissionChecker,
         warehouseProfiles: IWarehouseProfileRepository,
+        inventoryTransactions: IInventoryTransactionRepository,
+        inventoryBalances: IInventoryBalanceRepository,
+        inventoryDimensions: IInventoryDimensionRepository,
+        inventoryStatuses: IInventoryStatusRepository,
+        locations: ILocationRepository,
       ) =>
         new ShippingStagingLifecycleService(
           stagings,
@@ -80,6 +110,11 @@ import { ShippingStagingController } from '@modules/Shipping/Presentation/Contro
           audited,
           permissionChecker,
           warehouseProfiles,
+          inventoryTransactions,
+          inventoryBalances,
+          inventoryDimensions,
+          inventoryStatuses,
+          locations,
         ),
       inject: [
         SHIPPING_STAGING_REPOSITORY,
@@ -90,6 +125,11 @@ import { ShippingStagingController } from '@modules/Shipping/Presentation/Contro
         AuditedTransaction,
         PERMISSION_CHECKER,
         WAREHOUSE_PROFILE_REPOSITORY,
+        INVENTORY_TRANSACTION_REPOSITORY,
+        INVENTORY_BALANCE_REPOSITORY,
+        INVENTORY_DIMENSION_REPOSITORY,
+        INVENTORY_STATUS_REPOSITORY,
+        LOCATION_REPOSITORY,
       ],
     },
     {
@@ -135,6 +175,11 @@ import { ShippingStagingController } from '@modules/Shipping/Presentation/Contro
     {
       provide: EvaluateGoodsIssueTriggerUseCase,
       useFactory: (lifecycle: ShippingStagingLifecycleService) => new EvaluateGoodsIssueTriggerUseCase(lifecycle),
+      inject: [ShippingStagingLifecycleService],
+    },
+    {
+      provide: PostGoodsIssueUseCase,
+      useFactory: (lifecycle: ShippingStagingLifecycleService) => new PostGoodsIssueUseCase(lifecycle),
       inject: [ShippingStagingLifecycleService],
     },
   ],
