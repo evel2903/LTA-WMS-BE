@@ -160,6 +160,32 @@ export const ControlExceptionCatalogEntries: ReadonlyArray<ControlExceptionCatal
     OwnerRoles: ['IT_WMS_ADMIN', 'INVENTORY_ACCOUNTANT'],
     ImplementationStatus: CatalogImplementationStatus.Implemented,
   },
+  {
+    Code: 'CTRL-V1-PICK-EXCEPTION',
+    Scenario: 'Pick task phát sinh short pick, no stock, damaged hoặc wrong item cần xử lý có audit',
+    Category: ControlExceptionCategory.ManualDataFix,
+    Severity: ControlExceptionSeverity.High,
+    DefaultState: ControlExceptionDefaultState.Detected,
+    ActionAllowed: ControlExceptionAction.RequireSpecialApproval,
+    ReasonRequired: true,
+    EvidenceRequired: true,
+    ApprovalRequired: false,
+    OwnerRoles: ['WAREHOUSE_SUPERVISOR', 'PICKER'],
+    ImplementationStatus: CatalogImplementationStatus.Implemented,
+  },
+  {
+    Code: 'CTRL-V1-PICK-SUBSTITUTION',
+    Scenario: 'Pick task yêu cầu substitution cần policy/approval trước khi xử lý tiếp',
+    Category: ControlExceptionCategory.ManualDataFix,
+    Severity: ControlExceptionSeverity.High,
+    DefaultState: ControlExceptionDefaultState.Detected,
+    ActionAllowed: ControlExceptionAction.RequireSpecialApproval,
+    ReasonRequired: true,
+    EvidenceRequired: true,
+    ApprovalRequired: true,
+    OwnerRoles: ['WAREHOUSE_SUPERVISOR', 'CUSTOMER_SERVICE'],
+    ImplementationStatus: CatalogImplementationStatus.Implemented,
+  },
 ];
 
 /** Idempotent: upsert by Code, so re-running never duplicates and keeps fields in sync. */

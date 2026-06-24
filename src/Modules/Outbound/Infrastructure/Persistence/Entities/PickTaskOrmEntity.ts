@@ -99,6 +99,78 @@ export class PickTaskOrmEntity {
   @Column({ name: 'confirm_result_json', type: 'jsonb', nullable: true })
   public ConfirmResultJson!: Record<string, unknown> | null;
 
+  @Column({ name: 'exception_type', type: 'varchar', length: 40, nullable: true })
+  public ExceptionType!: string | null;
+
+  @Column({ name: 'exception_case_id', type: 'char', length: 36, nullable: true })
+  public ExceptionCaseId!: string | null;
+
+  @Column({ name: 'exception_reason_code', type: 'varchar', length: 80, nullable: true })
+  public ExceptionReasonCode!: string | null;
+
+  @Column({ name: 'exception_reason_code_id', type: 'char', length: 36, nullable: true })
+  public ExceptionReasonCodeId!: string | null;
+
+  @Column({ name: 'exception_reason_note', type: 'text', nullable: true })
+  public ExceptionReasonNote!: string | null;
+
+  @Column({ name: 'exception_evidence_json', type: 'jsonb', nullable: true })
+  public ExceptionEvidenceJson!: Record<string, unknown> | null;
+
+  @Column({ name: 'exception_idempotency_key', type: 'varchar', length: 180, nullable: true })
+  public ExceptionIdempotencyKey!: string | null;
+
+  @Column({ name: 'exception_payload_fingerprint', type: 'varchar', length: 64, nullable: true })
+  public ExceptionPayloadFingerprint!: string | null;
+
+  @Column({ name: 'exception_reported_at', type: 'timestamptz', nullable: true })
+  public ExceptionReportedAt!: Date | null;
+
+  @Column({ name: 'exception_reported_by', type: 'char', length: 36, nullable: true })
+  public ExceptionReportedBy!: string | null;
+
+  @Column({ name: 'replenishment_required', type: 'boolean', default: false })
+  public ReplenishmentRequired!: boolean;
+
+  @Column({ name: 'replenishment_task_id', type: 'char', length: 36, nullable: true })
+  public ReplenishmentTaskId!: string | null;
+
+  @Column({ name: 'substitution_status', type: 'varchar', length: 40, nullable: true })
+  public SubstitutionStatus!: string | null;
+
+  @Column({ name: 'substitution_sku_id', type: 'char', length: 36, nullable: true })
+  public SubstitutionSkuId!: string | null;
+
+  @Column({ name: 'substitution_sku_code', type: 'varchar', length: 80, nullable: true })
+  public SubstitutionSkuCode!: string | null;
+
+  @Column({ name: 'substitution_uom_id', type: 'char', length: 36, nullable: true })
+  public SubstitutionUomId!: string | null;
+
+  @Column({ name: 'substitution_uom_code', type: 'varchar', length: 40, nullable: true })
+  public SubstitutionUomCode!: string | null;
+
+  @Column({ name: 'substitution_quantity', type: 'numeric', precision: 18, scale: 4, nullable: true })
+  public SubstitutionQuantity!: number | null;
+
+  @Column({ name: 'substitution_approval_request_id', type: 'char', length: 36, nullable: true })
+  public SubstitutionApprovalRequestId!: string | null;
+
+  @Column({ name: 'substitution_policy_json', type: 'jsonb', nullable: true })
+  public SubstitutionPolicyJson!: Record<string, unknown> | null;
+
+  @Column({ name: 'substitution_idempotency_key', type: 'varchar', length: 180, nullable: true })
+  public SubstitutionIdempotencyKey!: string | null;
+
+  @Column({ name: 'substitution_payload_fingerprint', type: 'varchar', length: 64, nullable: true })
+  public SubstitutionPayloadFingerprint!: string | null;
+
+  @Column({ name: 'substitution_requested_at', type: 'timestamptz', nullable: true })
+  public SubstitutionRequestedAt!: Date | null;
+
+  @Column({ name: 'substitution_requested_by', type: 'char', length: 36, nullable: true })
+  public SubstitutionRequestedBy!: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   public CreatedAt!: Date;
 
