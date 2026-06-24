@@ -1,0 +1,81 @@
+import { AllocationPolicy } from '@modules/Outbound/Domain/Enums/AllocationPolicy';
+import { AllocationStatus } from '@modules/Outbound/Domain/Enums/AllocationStatus';
+
+export class AllocationEntity {
+  public readonly Id: string;
+  public AllocationNumber: string;
+  public OutboundOrderId: string;
+  public WarehouseId: string;
+  public WarehouseCode: string | null;
+  public OwnerId: string;
+  public OwnerCode: string | null;
+  public Policy: AllocationPolicy;
+  public Status: AllocationStatus;
+  public TotalOrderedQuantity: number;
+  public TotalAllocatedQuantity: number;
+  public TotalBackorderedQuantity: number;
+  public ShortageReason: string | null;
+  public OutboxMessageId: string | null;
+  public IdempotencyKey: string;
+  public PayloadFingerprint: string;
+  public ReasonCode: string | null;
+  public ReasonCodeId: string | null;
+  public ReasonNote: string | null;
+  public EvidenceRefs: string[];
+  public readonly CreatedAt: Date;
+  public UpdatedAt: Date;
+  public CreatedBy: string | null;
+  public UpdatedBy: string | null;
+
+  constructor(params: {
+    Id: string;
+    AllocationNumber: string;
+    OutboundOrderId: string;
+    WarehouseId: string;
+    WarehouseCode?: string | null;
+    OwnerId: string;
+    OwnerCode?: string | null;
+    Policy: AllocationPolicy;
+    Status: AllocationStatus;
+    TotalOrderedQuantity: number;
+    TotalAllocatedQuantity: number;
+    TotalBackorderedQuantity: number;
+    ShortageReason?: string | null;
+    OutboxMessageId?: string | null;
+    IdempotencyKey: string;
+    PayloadFingerprint: string;
+    ReasonCode?: string | null;
+    ReasonCodeId?: string | null;
+    ReasonNote?: string | null;
+    EvidenceRefs?: string[];
+    CreatedAt: Date;
+    UpdatedAt: Date;
+    CreatedBy?: string | null;
+    UpdatedBy?: string | null;
+  }) {
+    this.Id = params.Id;
+    this.AllocationNumber = params.AllocationNumber;
+    this.OutboundOrderId = params.OutboundOrderId;
+    this.WarehouseId = params.WarehouseId;
+    this.WarehouseCode = params.WarehouseCode ?? null;
+    this.OwnerId = params.OwnerId;
+    this.OwnerCode = params.OwnerCode ?? null;
+    this.Policy = params.Policy;
+    this.Status = params.Status;
+    this.TotalOrderedQuantity = params.TotalOrderedQuantity;
+    this.TotalAllocatedQuantity = params.TotalAllocatedQuantity;
+    this.TotalBackorderedQuantity = params.TotalBackorderedQuantity;
+    this.ShortageReason = params.ShortageReason ?? null;
+    this.OutboxMessageId = params.OutboxMessageId ?? null;
+    this.IdempotencyKey = params.IdempotencyKey;
+    this.PayloadFingerprint = params.PayloadFingerprint;
+    this.ReasonCode = params.ReasonCode ?? null;
+    this.ReasonCodeId = params.ReasonCodeId ?? null;
+    this.ReasonNote = params.ReasonNote ?? null;
+    this.EvidenceRefs = params.EvidenceRefs ?? [];
+    this.CreatedAt = params.CreatedAt;
+    this.UpdatedAt = params.UpdatedAt;
+    this.CreatedBy = params.CreatedBy ?? null;
+    this.UpdatedBy = params.UpdatedBy ?? null;
+  }
+}
