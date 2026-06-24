@@ -24,6 +24,10 @@ import {
   IItemCoverageRepository,
   ITEM_COVERAGE_REPOSITORY,
 } from '@modules/MasterData/Application/Interfaces/IItemCoverageRepository';
+import {
+  IInventoryBalanceRepository,
+  INVENTORY_BALANCE_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IInventoryBalanceRepository';
 import { IOwnerRepository, OWNER_REPOSITORY } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { ISkuRepository, SKU_REPOSITORY } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { IUomRepository, UOM_REPOSITORY } from '@modules/MasterData/Application/Interfaces/IUomRepository';
@@ -31,12 +35,27 @@ import {
   IWarehouseRepository,
   WAREHOUSE_REPOSITORY,
 } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
+import { InventoryBalanceOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/InventoryBalanceOrmEntity';
 import { MasterDataModule } from '@modules/MasterData/MasterDataModule';
+import {
+  ALLOCATION_INVENTORY_REPOSITORY,
+  IAllocationInventoryRepository,
+} from '@modules/Outbound/Application/Interfaces/IAllocationInventoryRepository';
+import {
+  ALLOCATION_REPOSITORY,
+  IAllocationRepository,
+} from '@modules/Outbound/Application/Interfaces/IAllocationRepository';
 import {
   IOutboundOrderRepository,
   OUTBOUND_ORDER_REPOSITORY,
 } from '@modules/Outbound/Application/Interfaces/IOutboundOrderRepository';
+import { AllocationLifecycleService } from '@modules/Outbound/Application/Services/AllocationLifecycleService';
 import { OutboundOrderLifecycleService } from '@modules/Outbound/Application/Services/OutboundOrderLifecycleService';
+import {
+  AllocateOutboundOrderUseCase,
+  GetAllocationUseCase,
+  ListAllocationsUseCase,
+} from '@modules/Outbound/Application/UseCases/AllocationUseCases';
 import {
   CancelOutboundOrderUseCase,
   GetOutboundOrderUseCase,
@@ -46,8 +65,12 @@ import {
   RejectOutboundOrderUseCase,
   ValidateOutboundOrderUseCase,
 } from '@modules/Outbound/Application/UseCases/OutboundOrderUseCases';
+import { AllocationLineOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/AllocationLineOrmEntity';
+import { AllocationOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/AllocationOrmEntity';
 import { OutboundOrderLineOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/OutboundOrderLineOrmEntity';
 import { OutboundOrderOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/OutboundOrderOrmEntity';
+import { AllocationInventoryRepository } from '@modules/Outbound/Infrastructure/Persistence/Repositories/AllocationInventoryRepository';
+import { AllocationRepository } from '@modules/Outbound/Infrastructure/Persistence/Repositories/AllocationRepository';
 import { OutboundOrderRepository } from '@modules/Outbound/Infrastructure/Persistence/Repositories/OutboundOrderRepository';
 import { OutboundOrderController } from '@modules/Outbound/Presentation/Controllers/OutboundOrderController';
 import {
@@ -58,7 +81,13 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([OutboundOrderOrmEntity, OutboundOrderLineOrmEntity]),
+    TypeOrmModule.forFeature([
+      OutboundOrderOrmEntity,
+      OutboundOrderLineOrmEntity,
+      AllocationOrmEntity,
+      AllocationLineOrmEntity,
+      InventoryBalanceOrmEntity,
+    ]),
     AccessControlModule,
     MasterDataModule,
     PartnerMasterModule,
@@ -68,6 +97,8 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
   controllers: [OutboundOrderController],
   providers: [
     { provide: OUTBOUND_ORDER_REPOSITORY, useClass: OutboundOrderRepository },
+    { provide: ALLOCATION_REPOSITORY, useClass: AllocationRepository },
+    { provide: ALLOCATION_INVENTORY_REPOSITORY, useClass: AllocationInventoryRepository },
     {
       provide: OutboundOrderLifecycleService,
       useFactory: (
@@ -148,7 +179,58 @@ import { PartnerMasterModule } from '@modules/PartnerMaster/PartnerMasterModule'
       useFactory: (lifecycle: OutboundOrderLifecycleService) => new CancelOutboundOrderUseCase(lifecycle),
       inject: [OutboundOrderLifecycleService],
     },
+    {
+      provide: AllocationLifecycleService,
+      useFactory: (
+        allocations: IAllocationRepository,
+        allocationInventory: IAllocationInventoryRepository,
+        outboundOrders: IOutboundOrderRepository,
+        inventoryBalances: IInventoryBalanceRepository,
+        coreFlows: ICoreFlowRepository,
+        integrations: IIntegrationRepository,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) =>
+        new AllocationLifecycleService(
+          allocations,
+          allocationInventory,
+          outboundOrders,
+          inventoryBalances,
+          coreFlows,
+          integrations,
+          reasonCatalog,
+          audited,
+          permissionChecker,
+        ),
+      inject: [
+        ALLOCATION_REPOSITORY,
+        ALLOCATION_INVENTORY_REPOSITORY,
+        OUTBOUND_ORDER_REPOSITORY,
+        INVENTORY_BALANCE_REPOSITORY,
+        CORE_FLOW_REPOSITORY,
+        INTEGRATION_REPOSITORY,
+        REASON_CODE_CATALOG,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
+    {
+      provide: AllocateOutboundOrderUseCase,
+      useFactory: (lifecycle: AllocationLifecycleService) => new AllocateOutboundOrderUseCase(lifecycle),
+      inject: [AllocationLifecycleService],
+    },
+    {
+      provide: ListAllocationsUseCase,
+      useFactory: (lifecycle: AllocationLifecycleService) => new ListAllocationsUseCase(lifecycle),
+      inject: [AllocationLifecycleService],
+    },
+    {
+      provide: GetAllocationUseCase,
+      useFactory: (lifecycle: AllocationLifecycleService) => new GetAllocationUseCase(lifecycle),
+      inject: [AllocationLifecycleService],
+    },
   ],
-  exports: [OUTBOUND_ORDER_REPOSITORY],
+  exports: [OUTBOUND_ORDER_REPOSITORY, ALLOCATION_REPOSITORY],
 })
 export class OutboundModule {}

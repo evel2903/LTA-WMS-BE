@@ -67,6 +67,8 @@ import { InventoryTransactionOrmEntity } from '@modules/InventoryExecution/Infra
 import { PutawayTaskOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/PutawayTaskOrmEntity';
 import { CycleCountWorkOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/CycleCountWorkOrmEntity';
 import { ReplenishmentTaskOrmEntity } from '@modules/InventoryExecution/Infrastructure/Persistence/Entities/ReplenishmentTaskOrmEntity';
+import { AllocationLineOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/AllocationLineOrmEntity';
+import { AllocationOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/AllocationOrmEntity';
 import { OutboundOrderOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/OutboundOrderOrmEntity';
 import { OutboundOrderLineOrmEntity } from '@modules/Outbound/Infrastructure/Persistence/Entities/OutboundOrderLineOrmEntity';
 
@@ -148,6 +150,8 @@ export default new DataSource({
     ReplenishmentTaskOrmEntity,
     OutboundOrderOrmEntity,
     OutboundOrderLineOrmEntity,
+    AllocationOrmEntity,
+    AllocationLineOrmEntity,
   ],
   migrations: [__dirname + '/Migrations/*{.ts,.js}'],
   migrationsTableName: 'migrations',

@@ -7,6 +7,11 @@ import { RequirePermission } from '@modules/AccessControl/Presentation/Decorator
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
 import {
+  AllocateOutboundOrderUseCase,
+  GetAllocationUseCase,
+  ListAllocationsUseCase,
+} from '@modules/Outbound/Application/UseCases/AllocationUseCases';
+import {
   CancelOutboundOrderUseCase,
   GetOutboundOrderUseCase,
   HoldOutboundOrderUseCase,
@@ -15,7 +20,9 @@ import {
   RejectOutboundOrderUseCase,
   ValidateOutboundOrderUseCase,
 } from '@modules/Outbound/Application/UseCases/OutboundOrderUseCases';
+import { AllocateOutboundOrderRequest } from '@modules/Outbound/Presentation/Requests/AllocateOutboundOrderRequest';
 import { ImportOutboundOrderRequest } from '@modules/Outbound/Presentation/Requests/ImportOutboundOrderRequest';
+import { ListAllocationsQuery } from '@modules/Outbound/Presentation/Requests/ListAllocationsQuery';
 import { ListOutboundOrdersQuery } from '@modules/Outbound/Presentation/Requests/ListOutboundOrdersQuery';
 import { ReasonOutboundOrderRequest } from '@modules/Outbound/Presentation/Requests/ReasonOutboundOrderRequest';
 
@@ -30,6 +37,9 @@ export class OutboundOrderController {
     private readonly holdOutboundOrderUseCase: HoldOutboundOrderUseCase,
     private readonly rejectOutboundOrderUseCase: RejectOutboundOrderUseCase,
     private readonly cancelOutboundOrderUseCase: CancelOutboundOrderUseCase,
+    private readonly allocateOutboundOrderUseCase: AllocateOutboundOrderUseCase,
+    private readonly listAllocationsUseCase: ListAllocationsUseCase,
+    private readonly getAllocationUseCase: GetAllocationUseCase,
   ) {}
 
   @Post()
@@ -90,5 +100,34 @@ export class OutboundOrderController {
     @CurrentAuditContext() context: AuditContext,
   ) {
     return this.cancelOutboundOrderUseCase.Execute({ Id: id, ...request }, context);
+  }
+
+  @Post(':id/allocate')
+  @RequirePermission(ActionCode.Create, ObjectType.Allocation)
+  public async Allocate(
+    @Param('id') id: string,
+    @Body() request: AllocateOutboundOrderRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return this.allocateOutboundOrderUseCase.Execute({ OutboundOrderId: id, ...request }, context);
+  }
+
+  @Get(':id/allocations')
+  @RequirePermission(ActionCode.Read, ObjectType.Allocation)
+  public async ListAllocations(
+    @Param('id') id: string,
+    @Query() query: ListAllocationsQuery,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return this.listAllocationsUseCase.Execute({ OutboundOrderId: id, ...query }, context.ActorUserId);
+  }
+
+  @Get('allocations/:allocationId')
+  @RequirePermission(ActionCode.Read, ObjectType.Allocation)
+  public async GetAllocation(
+    @Param('allocationId') allocationId: string,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return this.getAllocationUseCase.Execute(allocationId, context.ActorUserId);
   }
 }
