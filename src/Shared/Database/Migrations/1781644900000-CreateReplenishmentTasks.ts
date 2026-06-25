@@ -5,7 +5,7 @@ export class CreateReplenishmentTasks1781644900000 implements MigrationInterface
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "replenishment_tasks" (
+      CREATE TABLE IF NOT EXISTS "replenishment_tasks" (
         "id" char(36) NOT NULL,
         "task_code" varchar(80) NOT NULL,
         "task_status" varchar(40) NOT NULL,
@@ -62,19 +62,19 @@ export class CreateReplenishmentTasks1781644900000 implements MigrationInterface
       )
     `);
     await queryRunner.query(
-      `CREATE INDEX "IDX_replenishment_tasks_scope_status" ON "replenishment_tasks" ("warehouse_id", "owner_id", "task_status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_replenishment_tasks_scope_status" ON "replenishment_tasks" ("warehouse_id", "owner_id", "task_status")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_replenishment_tasks_source_balance" ON "replenishment_tasks" ("source_balance_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_replenishment_tasks_source_balance" ON "replenishment_tasks" ("source_balance_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_replenishment_tasks_target_location" ON "replenishment_tasks" ("target_location_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_replenishment_tasks_target_location" ON "replenishment_tasks" ("target_location_id")`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_replenishment_tasks_confirm_idempotency" ON "replenishment_tasks" ("confirm_idempotency_key") WHERE "confirm_idempotency_key" IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_replenishment_tasks_confirm_idempotency" ON "replenishment_tasks" ("confirm_idempotency_key") WHERE "confirm_idempotency_key" IS NOT NULL`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_replenishment_tasks_cancel_idempotency" ON "replenishment_tasks" ("cancel_idempotency_key") WHERE "cancel_idempotency_key" IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_replenishment_tasks_cancel_idempotency" ON "replenishment_tasks" ("cancel_idempotency_key") WHERE "cancel_idempotency_key" IS NOT NULL`,
     );
     await queryRunner.query(
       `ALTER TABLE "replenishment_tasks" ADD CONSTRAINT "FK_replenishment_tasks_source_balance" FOREIGN KEY ("source_balance_id") REFERENCES "inventory_balances"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
@@ -95,25 +95,25 @@ export class CreateReplenishmentTasks1781644900000 implements MigrationInterface
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "replenishment_tasks" DROP CONSTRAINT "FK_replenishment_tasks_confirm_transaction"`,
+      `ALTER TABLE "replenishment_tasks" DROP CONSTRAINT IF EXISTS "FK_replenishment_tasks_confirm_transaction"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "replenishment_tasks" DROP CONSTRAINT "FK_replenishment_tasks_target_location"`,
+      `ALTER TABLE "replenishment_tasks" DROP CONSTRAINT IF EXISTS "FK_replenishment_tasks_target_location"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "replenishment_tasks" DROP CONSTRAINT "FK_replenishment_tasks_source_location"`,
+      `ALTER TABLE "replenishment_tasks" DROP CONSTRAINT IF EXISTS "FK_replenishment_tasks_source_location"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "replenishment_tasks" DROP CONSTRAINT "FK_replenishment_tasks_source_dimension"`,
+      `ALTER TABLE "replenishment_tasks" DROP CONSTRAINT IF EXISTS "FK_replenishment_tasks_source_dimension"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "replenishment_tasks" DROP CONSTRAINT "FK_replenishment_tasks_source_balance"`,
+      `ALTER TABLE "replenishment_tasks" DROP CONSTRAINT IF EXISTS "FK_replenishment_tasks_source_balance"`,
     );
-    await queryRunner.query(`DROP INDEX "public"."UQ_replenishment_tasks_cancel_idempotency"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_replenishment_tasks_confirm_idempotency"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_replenishment_tasks_target_location"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_replenishment_tasks_source_balance"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_replenishment_tasks_scope_status"`);
-    await queryRunner.query(`DROP TABLE "replenishment_tasks"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_replenishment_tasks_cancel_idempotency"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_replenishment_tasks_confirm_idempotency"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_replenishment_tasks_target_location"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_replenishment_tasks_source_balance"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_replenishment_tasks_scope_status"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "replenishment_tasks"`);
   }
 }

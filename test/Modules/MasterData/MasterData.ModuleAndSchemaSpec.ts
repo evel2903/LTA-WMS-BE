@@ -225,8 +225,9 @@ describe('MasterData module and schema registration', () => {
     await migration.up(queryRunner as never);
 
     const sql = queries.join('\n').toLowerCase();
-    expect(sql).toContain('alter table "sku_barcodes" add "effective_from"');
-    expect(sql).toContain('alter table "sku_barcodes" add "effective_to"');
+    expect(sql).toContain('alter table "sku_barcodes" add column if not exists "effective_from"');
+    expect(sql).toContain('alter table "sku_barcodes" add column if not exists "effective_to"');
+    expect(sql).toContain("where conname = 'ck_sku_barcodes_effective_window'");
     expect(sql).toContain(
       'check ("effective_to" is null or "effective_from" is null or "effective_to" >= "effective_from")',
     );

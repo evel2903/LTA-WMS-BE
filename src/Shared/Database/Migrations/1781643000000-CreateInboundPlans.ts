@@ -5,7 +5,7 @@ export class CreateInboundPlans1781643000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "inbound_plans" (
+      CREATE TABLE IF NOT EXISTS "inbound_plans" (
         "id" char(36) NOT NULL,
         "source_system" varchar(100) NOT NULL,
         "source_document_type" varchar(40) NOT NULL,
@@ -35,7 +35,7 @@ export class CreateInboundPlans1781643000000 implements MigrationInterface {
       )
     `);
     await queryRunner.query(`
-      CREATE TABLE "inbound_plan_lines" (
+      CREATE TABLE IF NOT EXISTS "inbound_plan_lines" (
         "id" char(36) NOT NULL,
         "inbound_plan_id" char(36) NOT NULL,
         "line_number" integer NOT NULL,
@@ -52,27 +52,29 @@ export class CreateInboundPlans1781643000000 implements MigrationInterface {
       )
     `);
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_inbound_plans_business_key" ON "inbound_plans" ("source_system", "source_document_type", "source_document_number", "owner_id", "warehouse_id")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_inbound_plans_business_key" ON "inbound_plans" ("source_system", "source_document_type", "source_document_number", "owner_id", "warehouse_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_inbound_plans_source_status" ON "inbound_plans" ("source_system", "status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_inbound_plans_source_status" ON "inbound_plans" ("source_system", "status")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_inbound_plans_owner_warehouse" ON "inbound_plans" ("owner_id", "warehouse_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_inbound_plans_owner_warehouse" ON "inbound_plans" ("owner_id", "warehouse_id")`,
     );
-    await queryRunner.query(`CREATE INDEX "IDX_inbound_plan_lines_plan" ON "inbound_plan_lines" ("inbound_plan_id")`);
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_inbound_plan_lines_plan_line" ON "inbound_plan_lines" ("inbound_plan_id", "line_number")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_inbound_plan_lines_plan" ON "inbound_plan_lines" ("inbound_plan_id")`,
+    );
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_inbound_plan_lines_plan_line" ON "inbound_plan_lines" ("inbound_plan_id", "line_number")`,
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX "public"."UQ_inbound_plan_lines_plan_line"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inbound_plan_lines_plan"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inbound_plans_owner_warehouse"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inbound_plans_source_status"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_inbound_plans_business_key"`);
-    await queryRunner.query(`DROP TABLE "inbound_plan_lines"`);
-    await queryRunner.query(`DROP TABLE "inbound_plans"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_inbound_plan_lines_plan_line"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inbound_plan_lines_plan"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inbound_plans_owner_warehouse"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inbound_plans_source_status"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_inbound_plans_business_key"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "inbound_plan_lines"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "inbound_plans"`);
   }
 }

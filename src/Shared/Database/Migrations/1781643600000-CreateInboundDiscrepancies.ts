@@ -5,7 +5,7 @@ export class CreateInboundDiscrepancies1781643600000 implements MigrationInterfa
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "inbound_discrepancies" (
+      CREATE TABLE IF NOT EXISTS "inbound_discrepancies" (
         "id" char(36) NOT NULL,
         "receipt_id" char(36) NOT NULL,
         "receipt_line_id" char(36) NOT NULL,
@@ -48,28 +48,28 @@ export class CreateInboundDiscrepancies1781643600000 implements MigrationInterfa
       )
     `);
     await queryRunner.query(
-      `CREATE INDEX "IDX_inbound_discrepancies_receipt" ON "inbound_discrepancies" ("receipt_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_inbound_discrepancies_receipt" ON "inbound_discrepancies" ("receipt_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_inbound_discrepancies_line" ON "inbound_discrepancies" ("receipt_line_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_inbound_discrepancies_line" ON "inbound_discrepancies" ("receipt_line_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_inbound_discrepancies_exception" ON "inbound_discrepancies" ("exception_case_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_inbound_discrepancies_exception" ON "inbound_discrepancies" ("exception_case_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_inbound_discrepancies_owner_warehouse" ON "inbound_discrepancies" ("owner_id", "warehouse_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_inbound_discrepancies_owner_warehouse" ON "inbound_discrepancies" ("owner_id", "warehouse_id")`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_inbound_discrepancies_idempotency" ON "inbound_discrepancies" ("receipt_id", "idempotency_key")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_inbound_discrepancies_idempotency" ON "inbound_discrepancies" ("receipt_id", "idempotency_key")`,
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX "public"."UQ_inbound_discrepancies_idempotency"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inbound_discrepancies_owner_warehouse"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inbound_discrepancies_exception"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inbound_discrepancies_line"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inbound_discrepancies_receipt"`);
-    await queryRunner.query(`DROP TABLE "inbound_discrepancies"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_inbound_discrepancies_idempotency"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inbound_discrepancies_owner_warehouse"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inbound_discrepancies_exception"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inbound_discrepancies_line"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inbound_discrepancies_receipt"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "inbound_discrepancies"`);
   }
 }

@@ -27,9 +27,11 @@ export class HealthService implements IHealthService {
         }
       },
       memory_heap: async () => {
-        const limit = 300 * 1024 * 1024;
+        const limit = this.ResolveMemoryHeapLimit();
         const used = process.memoryUsage().heapUsed;
-        return used <= limit ? { Status: 'up', Details: { Used: used, Limit: limit } } : { Status: 'down' };
+        return used <= limit
+          ? { Status: 'up', Details: { Used: used, Limit: limit } }
+          : { Status: 'down', Details: { Used: used, Limit: limit } };
       },
       redis: async () => {
         const url = this.configService.get<string>('Redis.Url');
@@ -64,5 +66,25 @@ export class HealthService implements IHealthService {
 
     const status: ReadyReport['Status'] = Object.keys(error).length > 0 ? 'error' : 'ok';
     return { Status: status, Info: info, Error: error, Details: details };
+  }
+
+  private ResolveMemoryHeapLimit(): number {
+    const configuredBytes = this.ParsePositiveNumber(
+      this.configService.get<string | number>('HEALTH_MEMORY_HEAP_LIMIT_BYTES'),
+    );
+    if (configuredBytes) return configuredBytes;
+
+    const configuredMb = this.ParsePositiveNumber(
+      this.configService.get<string | number>('HEALTH_MEMORY_HEAP_LIMIT_MB'),
+    );
+    if (configuredMb) return configuredMb * 1024 * 1024;
+
+    return 768 * 1024 * 1024;
+  }
+
+  private ParsePositiveNumber(raw: string | number | undefined): number | null {
+    if (raw === undefined || raw === null || raw === '') return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }
 }

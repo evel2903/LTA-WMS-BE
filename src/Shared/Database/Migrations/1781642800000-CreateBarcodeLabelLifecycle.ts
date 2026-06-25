@@ -5,7 +5,7 @@ export class CreateBarcodeLabelLifecycle1781642800000 implements MigrationInterf
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "label_templates" (
+      CREATE TABLE IF NOT EXISTS "label_templates" (
         "id" char(36) NOT NULL,
         "template_code" varchar(80) NOT NULL,
         "template_name" varchar(160) NOT NULL,
@@ -23,7 +23,7 @@ export class CreateBarcodeLabelLifecycle1781642800000 implements MigrationInterf
       )
     `);
     await queryRunner.query(`
-      CREATE TABLE "label_template_versions" (
+      CREATE TABLE IF NOT EXISTS "label_template_versions" (
         "id" char(36) NOT NULL,
         "template_id" char(36) NOT NULL,
         "version_no" integer NOT NULL,
@@ -39,7 +39,7 @@ export class CreateBarcodeLabelLifecycle1781642800000 implements MigrationInterf
       )
     `);
     await queryRunner.query(`
-      CREATE TABLE "print_jobs" (
+      CREATE TABLE IF NOT EXISTS "print_jobs" (
         "id" char(36) NOT NULL,
         "job_code" varchar(80) NOT NULL,
         "template_id" char(36) NOT NULL,
@@ -70,7 +70,7 @@ export class CreateBarcodeLabelLifecycle1781642800000 implements MigrationInterf
       )
     `);
     await queryRunner.query(`
-      CREATE TABLE "reprint_requests" (
+      CREATE TABLE IF NOT EXISTS "reprint_requests" (
         "id" char(36) NOT NULL,
         "original_print_job_id" char(36) NOT NULL,
         "reprint_sequence" integer NOT NULL,
@@ -88,29 +88,31 @@ export class CreateBarcodeLabelLifecycle1781642800000 implements MigrationInterf
       )
     `);
     await queryRunner.query(
-      `CREATE INDEX "IDX_label_templates_type_status" ON "label_templates" ("label_type", "status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_label_templates_type_status" ON "label_templates" ("label_type", "status")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_label_template_versions_template_status" ON "label_template_versions" ("template_id", "status")`,
-    );
-    await queryRunner.query(`CREATE INDEX "IDX_print_jobs_template_status" ON "print_jobs" ("template_id", "status")`);
-    await queryRunner.query(
-      `CREATE INDEX "IDX_print_jobs_business_object" ON "print_jobs" ("business_object_type", "business_object_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_label_template_versions_template_status" ON "label_template_versions" ("template_id", "status")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_print_jobs_scope_status" ON "print_jobs" ("warehouse_id", "owner_id", "status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_print_jobs_template_status" ON "print_jobs" ("template_id", "status")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_print_jobs_business_object" ON "print_jobs" ("business_object_type", "business_object_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_print_jobs_scope_status" ON "print_jobs" ("warehouse_id", "owner_id", "status")`,
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX "public"."IDX_print_jobs_scope_status"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_print_jobs_business_object"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_print_jobs_template_status"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_label_template_versions_template_status"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_label_templates_type_status"`);
-    await queryRunner.query(`DROP TABLE "reprint_requests"`);
-    await queryRunner.query(`DROP TABLE "print_jobs"`);
-    await queryRunner.query(`DROP TABLE "label_template_versions"`);
-    await queryRunner.query(`DROP TABLE "label_templates"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_print_jobs_scope_status"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_print_jobs_business_object"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_print_jobs_template_status"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_label_template_versions_template_status"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_label_templates_type_status"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "reprint_requests"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "print_jobs"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "label_template_versions"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "label_templates"`);
   }
 }

@@ -5,7 +5,7 @@ export class CreatePutawayTasks1781644500000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "putaway_tasks" (
+      CREATE TABLE IF NOT EXISTS "putaway_tasks" (
         "id" char(36) NOT NULL,
         "task_code" varchar(80) NOT NULL,
         "task_status" varchar(40) NOT NULL,
@@ -51,31 +51,33 @@ export class CreatePutawayTasks1781644500000 implements MigrationInterface {
         CONSTRAINT "PK_putaway_tasks" PRIMARY KEY ("id")
       )
     `);
-    await queryRunner.query(`CREATE UNIQUE INDEX "UQ_putaway_tasks_task_code" ON "putaway_tasks" ("task_code")`);
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_putaway_tasks_task_code" ON "putaway_tasks" ("task_code")`,
+    );
     await queryRunner.query(`
-      CREATE UNIQUE INDEX "UQ_putaway_tasks_inbound_release"
+      CREATE UNIQUE INDEX IF NOT EXISTS "UQ_putaway_tasks_inbound_release"
       ON "putaway_tasks" ("inbound_putaway_release_id")
     `);
     await queryRunner.query(`
-      CREATE UNIQUE INDEX "UQ_putaway_tasks_idempotency"
+      CREATE UNIQUE INDEX IF NOT EXISTS "UQ_putaway_tasks_idempotency"
       ON "putaway_tasks" ("inbound_putaway_release_id", "idempotency_key")
     `);
     await queryRunner.query(`
-      CREATE INDEX "IDX_putaway_tasks_scope_status"
+      CREATE INDEX IF NOT EXISTS "IDX_putaway_tasks_scope_status"
       ON "putaway_tasks" ("warehouse_id", "owner_id", "task_status")
     `);
     await queryRunner.query(`
-      CREATE INDEX "IDX_putaway_tasks_target_location"
+      CREATE INDEX IF NOT EXISTS "IDX_putaway_tasks_target_location"
       ON "putaway_tasks" ("target_location_id")
     `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX "public"."IDX_putaway_tasks_target_location"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_putaway_tasks_scope_status"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_putaway_tasks_idempotency"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_putaway_tasks_inbound_release"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_putaway_tasks_task_code"`);
-    await queryRunner.query(`DROP TABLE "putaway_tasks"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_putaway_tasks_target_location"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_putaway_tasks_scope_status"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_putaway_tasks_idempotency"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_putaway_tasks_inbound_release"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_putaway_tasks_task_code"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "putaway_tasks"`);
   }
 }

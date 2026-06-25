@@ -5,7 +5,7 @@ export class CreateOutboundOrders1781645000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "outbound_orders" (
+      CREATE TABLE IF NOT EXISTS "outbound_orders" (
         "id" char(36) NOT NULL,
         "order_number" varchar(80) NOT NULL,
         "source_system" varchar(100) NOT NULL,
@@ -41,7 +41,7 @@ export class CreateOutboundOrders1781645000000 implements MigrationInterface {
       )
     `);
     await queryRunner.query(`
-      CREATE TABLE "outbound_order_lines" (
+      CREATE TABLE IF NOT EXISTS "outbound_order_lines" (
         "id" char(36) NOT NULL,
         "outbound_order_id" char(36) NOT NULL,
         "line_number" integer NOT NULL,
@@ -59,31 +59,33 @@ export class CreateOutboundOrders1781645000000 implements MigrationInterface {
       )
     `);
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_outbound_orders_business_key" ON "outbound_orders" ("source_system", "source_reference", "owner_id", "warehouse_id")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_outbound_orders_business_key" ON "outbound_orders" ("source_system", "source_reference", "owner_id", "warehouse_id")`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_outbound_orders_import_idempotency" ON "outbound_orders" ("import_idempotency_key")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_outbound_orders_import_idempotency" ON "outbound_orders" ("import_idempotency_key")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_outbound_orders_scope_status" ON "outbound_orders" ("warehouse_id", "owner_id", "document_status")`,
-    );
-    await queryRunner.query(`CREATE INDEX "IDX_outbound_orders_customer" ON "outbound_orders" ("customer_id")`);
-    await queryRunner.query(
-      `CREATE INDEX "IDX_outbound_order_lines_order" ON "outbound_order_lines" ("outbound_order_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_outbound_orders_scope_status" ON "outbound_orders" ("warehouse_id", "owner_id", "document_status")`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_outbound_order_lines_order_line" ON "outbound_order_lines" ("outbound_order_id", "line_number")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_outbound_orders_customer" ON "outbound_orders" ("customer_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_outbound_order_lines_order" ON "outbound_order_lines" ("outbound_order_id")`,
+    );
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_outbound_order_lines_order_line" ON "outbound_order_lines" ("outbound_order_id", "line_number")`,
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX "public"."UQ_outbound_order_lines_order_line"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_outbound_order_lines_order"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_outbound_orders_customer"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_outbound_orders_scope_status"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_outbound_orders_import_idempotency"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_outbound_orders_business_key"`);
-    await queryRunner.query(`DROP TABLE "outbound_order_lines"`);
-    await queryRunner.query(`DROP TABLE "outbound_orders"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_outbound_order_lines_order_line"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_outbound_order_lines_order"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_outbound_orders_customer"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_outbound_orders_scope_status"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_outbound_orders_import_idempotency"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_outbound_orders_business_key"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "outbound_order_lines"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "outbound_orders"`);
   }
 }
