@@ -33,6 +33,16 @@ const ExpectedStatusCodes = [
   'RETURNED_TO_VENDOR',
 ];
 
+const ForbiddenNonInventoryStatusCodes = [
+  'SHIPPED',
+  'GATE_OUT',
+  'GOODS_ISSUE_POSTED',
+  'RECONCILED',
+  'INTEGRATION_SYNC_FAILED',
+  'QC_PASSED',
+  'QC_REJECTED',
+];
+
 describe('Inventory status catalog seed', () => {
   it('defines InventoryStatus ORM metadata with a globally unique status code', () => {
     const columns = getMetadataArgsStorage()
@@ -73,11 +83,9 @@ describe('Inventory status catalog seed', () => {
     for (const statusCode of ExpectedStatusCodes) {
       expect(sql).toContain(statusCode);
     }
-    expect(sql).not.toContain('SHIPPED');
-    expect(sql).not.toContain('GATE_OUT');
-    expect(sql).not.toContain('GOODS_ISSUE_POSTED');
-    expect(sql).not.toContain('QC_PASSED');
-    expect(sql).not.toContain('QC_REJECTED');
+    for (const statusCode of ForbiddenNonInventoryStatusCodes) {
+      expect(sql).not.toContain(statusCode);
+    }
     expect(sql).toContain("'AVAILABLE', 'Available', 'StorageControl', true");
     expect(sql).toContain("'HOLD', 'Hold', 'StorageControl', false");
     expect(sql).toContain("'QUARANTINE', 'Quarantine', 'StorageControl', false");
