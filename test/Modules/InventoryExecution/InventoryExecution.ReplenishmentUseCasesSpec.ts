@@ -17,6 +17,8 @@ import { ReplenishmentTaskEntity } from '@modules/InventoryExecution/Domain/Enti
 import { ReplenishmentTaskStatus } from '@modules/InventoryExecution/Domain/Enums/ReplenishmentTaskStatus';
 import { ReplenishmentTriggerType } from '@modules/InventoryExecution/Domain/Enums/ReplenishmentTriggerType';
 import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/OutboxMessageEntity';
+import { IntegrationReconciliationItemEntity } from '@modules/Integration/Domain/Entities/IntegrationReconciliationItemEntity';
+import { IntegrationReconciliationRunEntity } from '@modules/Integration/Domain/Entities/IntegrationReconciliationRunEntity';
 import { IIntegrationRepository } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
 import { IInventoryBalanceRepository } from '@modules/MasterData/Application/Interfaces/IInventoryBalanceRepository';
 import { IInventoryDimensionRepository } from '@modules/MasterData/Application/Interfaces/IInventoryDimensionRepository';
@@ -381,6 +383,9 @@ class MemoryIntegrationRepository implements IIntegrationRepository {
   async FindOutboxMessageByMessageId(messageId: string) {
     return this.outbox.find((item) => item.MessageId === messageId) ?? null;
   }
+  async FindOutboxMessageById(id: string) {
+    return this.outbox.find((item) => item.Id === id) ?? null;
+  }
   async CreateImport(importBatch: never, interfaceMessages: never[], outboxMessages: OutboxMessageEntity[]) {
     return { ImportBatch: importBatch, InterfaceMessages: interfaceMessages, OutboxMessages: outboxMessages };
   }
@@ -388,11 +393,44 @@ class MemoryIntegrationRepository implements IIntegrationRepository {
     this.outbox.push(message);
     return message;
   }
+  async UpdateOutboxMessage(message: OutboxMessageEntity) {
+    const index = this.outbox.findIndex((item) => item.Id === message.Id);
+    if (index >= 0) this.outbox[index] = message;
+    else this.outbox.push(message);
+    return message;
+  }
   async ListImportBatches() {
+    return { Items: [], TotalItems: 0 };
+  }
+  async ListInterfaceMessages() {
     return { Items: [], TotalItems: 0 };
   }
   async ListOutboxMessages() {
     return { Items: this.outbox, TotalItems: this.outbox.length };
+  }
+  async FindReconciliationRunById(): Promise<IntegrationReconciliationRunEntity | null> {
+    return null;
+  }
+  async FindReconciliationRunByIdempotencyKey(): Promise<IntegrationReconciliationRunEntity | null> {
+    return null;
+  }
+  async CreateReconciliationRun(run: IntegrationReconciliationRunEntity, items: IntegrationReconciliationItemEntity[]) {
+    return { Run: run, Items: items };
+  }
+  async UpdateReconciliationRun(run: IntegrationReconciliationRunEntity) {
+    return run;
+  }
+  async ListReconciliationRuns() {
+    return { Items: [] as IntegrationReconciliationRunEntity[], TotalItems: 0 };
+  }
+  async FindReconciliationItemById(): Promise<IntegrationReconciliationItemEntity | null> {
+    return null;
+  }
+  async UpdateReconciliationItem(item: IntegrationReconciliationItemEntity) {
+    return item;
+  }
+  async ListReconciliationItems() {
+    return { Items: [] as IntegrationReconciliationItemEntity[], TotalItems: 0 };
   }
 }
 

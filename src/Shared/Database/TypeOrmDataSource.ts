@@ -44,6 +44,8 @@ import { CoreFlowInstanceOrmEntity } from '@modules/CoreFlow/Infrastructure/Pers
 import { WorkflowMilestoneOrmEntity } from '@modules/CoreFlow/Infrastructure/Persistence/Entities/WorkflowMilestoneOrmEntity';
 import { WorkflowHandoffOrmEntity } from '@modules/CoreFlow/Infrastructure/Persistence/Entities/WorkflowHandoffOrmEntity';
 import { ImportBatchOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/ImportBatchOrmEntity';
+import { IntegrationReconciliationItemOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/IntegrationReconciliationItemOrmEntity';
+import { IntegrationReconciliationRunOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/IntegrationReconciliationRunOrmEntity';
 import { InterfaceMessageOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/InterfaceMessageOrmEntity';
 import { OutboxMessageOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/OutboxMessageOrmEntity';
 import { MobileTaskOrmEntity } from '@modules/TaskExecution/Infrastructure/Persistence/Entities/MobileTaskOrmEntity';
@@ -133,6 +135,8 @@ export default new DataSource({
     ImportBatchOrmEntity,
     InterfaceMessageOrmEntity,
     OutboxMessageOrmEntity,
+    IntegrationReconciliationRunOrmEntity,
+    IntegrationReconciliationItemOrmEntity,
     MobileTaskOrmEntity,
     MobileScanEventOrmEntity,
     LabelTemplateOrmEntity,

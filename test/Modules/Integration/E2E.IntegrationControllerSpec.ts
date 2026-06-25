@@ -14,6 +14,13 @@ import { RecordOutboxEventUseCase } from '@modules/Integration/Application/UseCa
 import { GetOutboxMessageUseCase } from '@modules/Integration/Application/UseCases/GetOutboxMessageUseCase';
 import { RecordOutboxFailureUseCase } from '@modules/Integration/Application/UseCases/RecordOutboxFailureUseCase';
 import { ResolveDeadLetterUseCase } from '@modules/Integration/Application/UseCases/ResolveDeadLetterUseCase';
+import {
+  CreateReconciliationRunUseCase,
+  GetReconciliationRunUseCase,
+  ListReconciliationItemsUseCase,
+  ListReconciliationRunsUseCase,
+  ResolveReconciliationItemUseCase,
+} from '@modules/Integration/Application/UseCases/ReconciliationUseCases';
 import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 
 describe('E2E IntegrationController (no DB)', () => {
@@ -26,6 +33,11 @@ describe('E2E IntegrationController (no DB)', () => {
   const getEventExecute = jest.fn();
   const recordFailureExecute = jest.fn();
   const resolveDeadLetterExecute = jest.fn();
+  const createReconciliationRunExecute = jest.fn();
+  const listReconciliationRunsExecute = jest.fn();
+  const getReconciliationRunExecute = jest.fn();
+  const listReconciliationItemsExecute = jest.fn();
+  const resolveReconciliationItemExecute = jest.fn();
 
   const buildModule = () =>
     Test.createTestingModule({
@@ -39,6 +51,11 @@ describe('E2E IntegrationController (no DB)', () => {
         { provide: GetOutboxMessageUseCase, useValue: { Execute: getEventExecute } },
         { provide: RecordOutboxFailureUseCase, useValue: { Execute: recordFailureExecute } },
         { provide: ResolveDeadLetterUseCase, useValue: { Execute: resolveDeadLetterExecute } },
+        { provide: CreateReconciliationRunUseCase, useValue: { Execute: createReconciliationRunExecute } },
+        { provide: ListReconciliationRunsUseCase, useValue: { Execute: listReconciliationRunsExecute } },
+        { provide: GetReconciliationRunUseCase, useValue: { Execute: getReconciliationRunExecute } },
+        { provide: ListReconciliationItemsUseCase, useValue: { Execute: listReconciliationItemsExecute } },
+        { provide: ResolveReconciliationItemUseCase, useValue: { Execute: resolveReconciliationItemExecute } },
       ],
     });
 
@@ -62,6 +79,11 @@ describe('E2E IntegrationController (no DB)', () => {
     getEventExecute.mockReset();
     recordFailureExecute.mockReset();
     resolveDeadLetterExecute.mockReset();
+    createReconciliationRunExecute.mockReset();
+    listReconciliationRunsExecute.mockReset();
+    getReconciliationRunExecute.mockReset();
+    listReconciliationItemsExecute.mockReset();
+    resolveReconciliationItemExecute.mockReset();
   });
 
   it('declares IntegrationMessage permissions on read and mutation endpoints', () => {
@@ -96,6 +118,24 @@ describe('E2E IntegrationController (no DB)', () => {
     expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, IntegrationController.prototype.RetryDeadLetter)).toMatchObject({
       Action: ActionCode.Update,
       ObjectType: ObjectType.DeadLetterMessage,
+    });
+    expect(
+      Reflect.getMetadata(REQUIRE_PERMISSION_KEY, IntegrationController.prototype.CreateReconciliationRun),
+    ).toMatchObject({
+      Action: ActionCode.Create,
+      ObjectType: ObjectType.ReconciliationRun,
+    });
+    expect(
+      Reflect.getMetadata(REQUIRE_PERMISSION_KEY, IntegrationController.prototype.ListReconciliationRuns),
+    ).toMatchObject({
+      Action: ActionCode.Read,
+      ObjectType: ObjectType.ReconciliationRun,
+    });
+    expect(
+      Reflect.getMetadata(REQUIRE_PERMISSION_KEY, IntegrationController.prototype.ResolveReconciliationItem),
+    ).toMatchObject({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.ReconciliationRun,
     });
   });
 
@@ -226,5 +266,88 @@ describe('E2E IntegrationController (no DB)', () => {
       expect.objectContaining({ ReasonCode: 'RC-V1-DEAD-LETTER-FIX', EvidenceRefs: ['ticket:INT-1'] }),
       expect.objectContaining({ ActorUserId: 'test-admin' }),
     );
+  });
+
+  it('reconciliation endpoints pass scoped filters and reason payload with ReconciliationRun permissions', async () => {
+    createReconciliationRunExecute.mockResolvedValue({ Run: { Id: 'run-1' }, Items: [] });
+    listReconciliationRunsExecute.mockResolvedValue({
+      Items: [],
+      Meta: { Page: 1, PageSize: 100, TotalItems: 0, TotalPages: 1 },
+    });
+    getReconciliationRunExecute.mockResolvedValue({ Id: 'run-1' });
+    listReconciliationItemsExecute.mockResolvedValue({
+      Items: [],
+      Meta: { Page: 1, PageSize: 50, TotalItems: 0, TotalPages: 1 },
+    });
+    resolveReconciliationItemExecute.mockResolvedValue({ Id: 'item-1', ItemStatus: 'Resolved' });
+
+    await request(app.getHttpServer())
+      .post('/integration/reconciliation/runs')
+      .send({
+        BusinessReference: 'IB-2026-0001',
+        WarehouseId: 'WT-05-A',
+        OwnerId: 'OWNER-A',
+        ReasonCode: 'RC-V1-DEAD-LETTER-FIX',
+        EvidenceRefs: ['ticket:RECON-1'],
+        IdempotencyKey: 'recon-1',
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .get(
+        '/integration/reconciliation/runs?BusinessReference=IB-2026-0001&WarehouseId=WT-05-A&OwnerId=OWNER-A&PageSize=500',
+      )
+      .expect(200);
+    await request(app.getHttpServer()).get('/integration/reconciliation/runs/run-1').expect(200);
+    await request(app.getHttpServer()).get('/integration/reconciliation/runs/run-1/items?PageSize=500').expect(200);
+    await request(app.getHttpServer())
+      .post('/integration/reconciliation/items/item-1/resolve')
+      .send({
+        ReasonCode: 'RC-V1-DEAD-LETTER-FIX',
+        EvidenceRefs: ['ticket:RECON-1'],
+        IdempotencyKey: 'resolve-1',
+        ResolutionNote: 'External correction confirmed',
+      })
+      .expect(201);
+
+    expect(createReconciliationRunExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        BusinessReference: 'IB-2026-0001',
+        WarehouseId: 'WT-05-A',
+        OwnerId: 'OWNER-A',
+      }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(listReconciliationRunsExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ BusinessReference: 'IB-2026-0001', WarehouseId: 'WT-05-A', PageSize: 500 }),
+    );
+    expect(getReconciliationRunExecute).toHaveBeenCalledWith(
+      'run-1',
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(listReconciliationItemsExecute).toHaveBeenCalledWith(
+      'run-1',
+      expect.objectContaining({ PageSize: 500 }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(resolveReconciliationItemExecute).toHaveBeenCalledWith(
+      'item-1',
+      expect.objectContaining({ IdempotencyKey: 'resolve-1' }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+
+    createReconciliationRunExecute.mockClear();
+    await request(app.getHttpServer())
+      .post('/integration/reconciliation/runs')
+      .send({
+        BusinessReference: 'IB-2026-0001',
+        WarehouseId: 'WT-05-A',
+        OwnerId: 'OWNER-A',
+        ReasonCode: 'RC-V1-DEAD-LETTER-FIX',
+        EvidenceRefs: ['ticket:RECON-1'],
+        IdempotencyKey: 'recon-1',
+        UnknownField: true,
+      })
+      .expect(400);
+    expect(createReconciliationRunExecute).not.toHaveBeenCalled();
   });
 });
