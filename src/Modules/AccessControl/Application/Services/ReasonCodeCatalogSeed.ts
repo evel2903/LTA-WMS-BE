@@ -170,7 +170,7 @@ export const ReasonCodeCatalogEntries: ReadonlyArray<ReasonCodeCatalogEntry> = [
     ReasonCode: 'RC-V1-HOLD-RELEASE',
     ReasonGroup: ReasonGroup.HoldRelease,
     Description: 'Place or release an operational hold during V1 execution.',
-    AppliesToActions: [ActionCode.Update],
+    AppliesToActions: [ActionCode.Create, ActionCode.Update],
     AppliesToObjects: [ObjectType.InventoryMovement, ObjectType.CycleCount, ObjectType.Package, ObjectType.Shipment],
   },
   {
@@ -241,12 +241,37 @@ export const ReasonCodeCatalogEntries: ReadonlyArray<ReasonCodeCatalogEntry> = [
   },
 ];
 
-/** Idempotent: existing codes (matched by ReasonCode) are skipped, so re-runs never duplicate. */
+/** Idempotent: existing codes (matched by ReasonCode) are reconciled to the curated catalog. */
 export async function SeedReasonCodeCatalog(reasonCodeRepository: IReasonCodeRepository): Promise<void> {
   for (const entry of ReasonCodeCatalogEntries) {
     const existing = await reasonCodeRepository.FindByCode(entry.ReasonCode);
-    if (existing) continue;
     const now = new Date();
+    if (existing) {
+      const nextActions = entry.AppliesToActions;
+      const nextObjects = entry.AppliesToObjects;
+      const nextEvidenceRequired = entry.EvidenceRequired ?? false;
+      const nextApprovalRequired = entry.ApprovalRequired ?? false;
+      if (
+        existing.ReasonGroup !== entry.ReasonGroup ||
+        existing.Description !== entry.Description ||
+        !sameSet(existing.AppliesToActions, nextActions) ||
+        !sameSet(existing.AppliesToObjects, nextObjects) ||
+        existing.EvidenceRequired !== nextEvidenceRequired ||
+        existing.ApprovalRequired !== nextApprovalRequired
+      ) {
+        existing.ReasonGroup = entry.ReasonGroup;
+        existing.Description = entry.Description;
+        existing.AppliesToActions = nextActions;
+        existing.AppliesToObjects = nextObjects;
+        existing.EvidenceRequired = nextEvidenceRequired;
+        existing.ApprovalRequired = nextApprovalRequired;
+        existing.Version += 1;
+        existing.UpdatedAt = now;
+        existing.UpdatedBy = 'seed';
+        await reasonCodeRepository.Update(existing);
+      }
+      continue;
+    }
     await reasonCodeRepository.Create(
       new ReasonCodeEntity({
         Id: randomUUID(),
@@ -267,4 +292,12 @@ export async function SeedReasonCodeCatalog(reasonCodeRepository: IReasonCodeRep
       }),
     );
   }
+}
+
+function sameSet<T extends string>(left: T[], right: T[]): boolean {
+  const normalize = (values: T[]) => [...new Set(values)].sort();
+  const normalizedLeft = normalize(left);
+  const normalizedRight = normalize(right);
+  if (normalizedLeft.length !== normalizedRight.length) return false;
+  return normalizedLeft.every((value, index) => value === normalizedRight[index]);
 }
