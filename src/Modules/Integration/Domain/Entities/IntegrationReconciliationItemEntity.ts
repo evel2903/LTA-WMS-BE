@@ -1,0 +1,81 @@
+import { IntegrationReconciliationItemStatus } from '@modules/Integration/Domain/Enums/IntegrationReconciliationItemStatus';
+import { IntegrationReconciliationSeverity } from '@modules/Integration/Domain/Enums/IntegrationReconciliationSeverity';
+
+export class IntegrationReconciliationItemEntity {
+  public readonly Id: string;
+  public RunId: string;
+  public ItemStatus: IntegrationReconciliationItemStatus;
+  public Severity: IntegrationReconciliationSeverity;
+  public MismatchType: string;
+  public SourceType: string;
+  public SourceId: string | null;
+  public ExpectedSummary: Record<string, unknown> | null;
+  public ActualSummary: Record<string, unknown> | null;
+  public ExceptionCaseId: string | null;
+  public OutboxMessageId: string | null;
+  public DeadLetterMessageId: string | null;
+  public ResolutionNote: string | null;
+  public ResolutionIdempotencyKey: string | null;
+  public ResolutionPayloadHash: string | null;
+  public ApprovalRequestId: string | null;
+  public ReasonCode: string | null;
+  public ReasonCodeId: string | null;
+  public ReasonNote: string | null;
+  public EvidenceRefs: string[];
+  public ResolvedAt: Date | null;
+  public ResolvedBy: string | null;
+  public readonly CreatedAt: Date;
+  public UpdatedAt: Date;
+
+  constructor(params: {
+    Id: string;
+    RunId: string;
+    ItemStatus?: IntegrationReconciliationItemStatus;
+    Severity: IntegrationReconciliationSeverity;
+    MismatchType: string;
+    SourceType: string;
+    SourceId?: string | null;
+    ExpectedSummary?: Record<string, unknown> | null;
+    ActualSummary?: Record<string, unknown> | null;
+    ExceptionCaseId?: string | null;
+    OutboxMessageId?: string | null;
+    DeadLetterMessageId?: string | null;
+    ResolutionNote?: string | null;
+    ResolutionIdempotencyKey?: string | null;
+    ResolutionPayloadHash?: string | null;
+    ApprovalRequestId?: string | null;
+    ReasonCode?: string | null;
+    ReasonCodeId?: string | null;
+    ReasonNote?: string | null;
+    EvidenceRefs?: string[];
+    ResolvedAt?: Date | null;
+    ResolvedBy?: string | null;
+    CreatedAt: Date;
+    UpdatedAt: Date;
+  }) {
+    this.Id = params.Id;
+    this.RunId = params.RunId;
+    this.ItemStatus = params.ItemStatus ?? IntegrationReconciliationItemStatus.Open;
+    this.Severity = params.Severity;
+    this.MismatchType = params.MismatchType;
+    this.SourceType = params.SourceType;
+    this.SourceId = params.SourceId ?? null;
+    this.ExpectedSummary = params.ExpectedSummary ?? null;
+    this.ActualSummary = params.ActualSummary ?? null;
+    this.ExceptionCaseId = params.ExceptionCaseId ?? null;
+    this.OutboxMessageId = params.OutboxMessageId ?? null;
+    this.DeadLetterMessageId = params.DeadLetterMessageId ?? null;
+    this.ResolutionNote = params.ResolutionNote ?? null;
+    this.ResolutionIdempotencyKey = params.ResolutionIdempotencyKey ?? null;
+    this.ResolutionPayloadHash = params.ResolutionPayloadHash ?? null;
+    this.ApprovalRequestId = params.ApprovalRequestId ?? null;
+    this.ReasonCode = params.ReasonCode ?? null;
+    this.ReasonCodeId = params.ReasonCodeId ?? null;
+    this.ReasonNote = params.ReasonNote ?? null;
+    this.EvidenceRefs = params.EvidenceRefs ?? [];
+    this.ResolvedAt = params.ResolvedAt ?? null;
+    this.ResolvedBy = params.ResolvedBy ?? null;
+    this.CreatedAt = params.CreatedAt;
+    this.UpdatedAt = params.UpdatedAt;
+  }
+}

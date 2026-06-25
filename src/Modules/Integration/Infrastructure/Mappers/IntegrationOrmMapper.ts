@@ -1,12 +1,19 @@
 import { ImportBatchEntity } from '@modules/Integration/Domain/Entities/ImportBatchEntity';
+import { IntegrationReconciliationItemEntity } from '@modules/Integration/Domain/Entities/IntegrationReconciliationItemEntity';
+import { IntegrationReconciliationRunEntity } from '@modules/Integration/Domain/Entities/IntegrationReconciliationRunEntity';
 import { InterfaceMessageEntity } from '@modules/Integration/Domain/Entities/InterfaceMessageEntity';
 import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/OutboxMessageEntity';
+import { IntegrationReconciliationItemStatus } from '@modules/Integration/Domain/Enums/IntegrationReconciliationItemStatus';
+import { IntegrationReconciliationRunStatus } from '@modules/Integration/Domain/Enums/IntegrationReconciliationRunStatus';
+import { IntegrationReconciliationSeverity } from '@modules/Integration/Domain/Enums/IntegrationReconciliationSeverity';
 import { ImportBatchStatus } from '@modules/Integration/Domain/Enums/ImportBatchStatus';
 import { InterfaceMessageStatus } from '@modules/Integration/Domain/Enums/InterfaceMessageStatus';
 import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
 import { IntegrationFailureCategory } from '@modules/Integration/Domain/Enums/IntegrationFailureCategory';
 import { DeadLetterActionType } from '@modules/Integration/Domain/Enums/DeadLetterActionType';
 import { ImportBatchOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/ImportBatchOrmEntity';
+import { IntegrationReconciliationItemOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/IntegrationReconciliationItemOrmEntity';
+import { IntegrationReconciliationRunOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/IntegrationReconciliationRunOrmEntity';
 import { InterfaceMessageOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/InterfaceMessageOrmEntity';
 import { OutboxMessageOrmEntity } from '@modules/Integration/Infrastructure/Persistence/Entities/OutboxMessageOrmEntity';
 
@@ -162,6 +169,122 @@ export class IntegrationOrmMapper {
       CreatedAt: orm.CreatedAt,
       CreatedBy: orm.CreatedBy,
       UpdatedAt: orm.UpdatedAt ?? orm.CreatedAt,
+    });
+  }
+
+  public static ToReconciliationRunOrm(
+    entity: IntegrationReconciliationRunEntity,
+  ): IntegrationReconciliationRunOrmEntity {
+    const orm = new IntegrationReconciliationRunOrmEntity();
+    orm.Id = entity.Id;
+    orm.BusinessReference = entity.BusinessReference;
+    orm.WarehouseId = entity.WarehouseId;
+    orm.OwnerId = entity.OwnerId ?? '';
+    orm.RunStatus = entity.RunStatus;
+    orm.SourceCounts = entity.SourceCounts;
+    orm.ItemCount = entity.ItemCount;
+    orm.MismatchCount = entity.MismatchCount;
+    orm.ExceptionCount = entity.ExceptionCount;
+    orm.IdempotencyKey = entity.IdempotencyKey;
+    orm.RequestPayloadHash = entity.RequestPayloadHash;
+    orm.ReasonCode = entity.ReasonCode;
+    orm.ReasonCodeId = entity.ReasonCodeId;
+    orm.ReasonNote = entity.ReasonNote;
+    orm.EvidenceRefs = entity.EvidenceRefs;
+    orm.ResolvedAt = entity.ResolvedAt;
+    orm.ResolvedBy = entity.ResolvedBy;
+    orm.CreatedAt = entity.CreatedAt;
+    orm.CreatedBy = entity.CreatedBy;
+    orm.UpdatedAt = entity.UpdatedAt;
+    return orm;
+  }
+
+  public static ToReconciliationRunDomain(
+    orm: IntegrationReconciliationRunOrmEntity,
+  ): IntegrationReconciliationRunEntity {
+    return new IntegrationReconciliationRunEntity({
+      Id: orm.Id,
+      BusinessReference: orm.BusinessReference,
+      WarehouseId: orm.WarehouseId,
+      OwnerId: orm.OwnerId || null,
+      RunStatus: orm.RunStatus as IntegrationReconciliationRunStatus,
+      SourceCounts: orm.SourceCounts ?? {},
+      ItemCount: orm.ItemCount ?? 0,
+      MismatchCount: orm.MismatchCount ?? 0,
+      ExceptionCount: orm.ExceptionCount ?? 0,
+      IdempotencyKey: orm.IdempotencyKey,
+      RequestPayloadHash: orm.RequestPayloadHash,
+      ReasonCode: orm.ReasonCode,
+      ReasonCodeId: orm.ReasonCodeId,
+      ReasonNote: orm.ReasonNote,
+      EvidenceRefs: orm.EvidenceRefs ?? [],
+      ResolvedAt: orm.ResolvedAt,
+      ResolvedBy: orm.ResolvedBy,
+      CreatedAt: orm.CreatedAt,
+      CreatedBy: orm.CreatedBy,
+      UpdatedAt: orm.UpdatedAt,
+    });
+  }
+
+  public static ToReconciliationItemOrm(
+    entity: IntegrationReconciliationItemEntity,
+  ): IntegrationReconciliationItemOrmEntity {
+    const orm = new IntegrationReconciliationItemOrmEntity();
+    orm.Id = entity.Id;
+    orm.RunId = entity.RunId;
+    orm.ItemStatus = entity.ItemStatus;
+    orm.Severity = entity.Severity;
+    orm.MismatchType = entity.MismatchType;
+    orm.SourceType = entity.SourceType;
+    orm.SourceId = entity.SourceId;
+    orm.ExpectedSummary = entity.ExpectedSummary;
+    orm.ActualSummary = entity.ActualSummary;
+    orm.ExceptionCaseId = entity.ExceptionCaseId;
+    orm.OutboxMessageId = entity.OutboxMessageId;
+    orm.DeadLetterMessageId = entity.DeadLetterMessageId;
+    orm.ResolutionNote = entity.ResolutionNote;
+    orm.ResolutionIdempotencyKey = entity.ResolutionIdempotencyKey;
+    orm.ResolutionPayloadHash = entity.ResolutionPayloadHash;
+    orm.ApprovalRequestId = entity.ApprovalRequestId;
+    orm.ReasonCode = entity.ReasonCode;
+    orm.ReasonCodeId = entity.ReasonCodeId;
+    orm.ReasonNote = entity.ReasonNote;
+    orm.EvidenceRefs = entity.EvidenceRefs;
+    orm.ResolvedAt = entity.ResolvedAt;
+    orm.ResolvedBy = entity.ResolvedBy;
+    orm.CreatedAt = entity.CreatedAt;
+    orm.UpdatedAt = entity.UpdatedAt;
+    return orm;
+  }
+
+  public static ToReconciliationItemDomain(
+    orm: IntegrationReconciliationItemOrmEntity,
+  ): IntegrationReconciliationItemEntity {
+    return new IntegrationReconciliationItemEntity({
+      Id: orm.Id,
+      RunId: orm.RunId,
+      ItemStatus: orm.ItemStatus as IntegrationReconciliationItemStatus,
+      Severity: orm.Severity as IntegrationReconciliationSeverity,
+      MismatchType: orm.MismatchType,
+      SourceType: orm.SourceType,
+      SourceId: orm.SourceId,
+      ExpectedSummary: orm.ExpectedSummary,
+      ActualSummary: orm.ActualSummary,
+      ExceptionCaseId: orm.ExceptionCaseId,
+      OutboxMessageId: orm.OutboxMessageId,
+      DeadLetterMessageId: orm.DeadLetterMessageId,
+      ResolutionNote: orm.ResolutionNote,
+      ResolutionIdempotencyKey: orm.ResolutionIdempotencyKey,
+      ResolutionPayloadHash: orm.ResolutionPayloadHash,
+      ApprovalRequestId: orm.ApprovalRequestId,
+      ReasonCode: orm.ReasonCode,
+      ReasonCodeId: orm.ReasonCodeId,
+      ReasonNote: orm.ReasonNote,
+      EvidenceRefs: orm.EvidenceRefs ?? [],
+      ResolvedAt: orm.ResolvedAt,
+      ResolvedBy: orm.ResolvedBy,
+      CreatedAt: orm.CreatedAt,
+      UpdatedAt: orm.UpdatedAt,
     });
   }
 }

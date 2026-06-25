@@ -3,6 +3,9 @@ import { InterfaceMessageStatus } from '@modules/Integration/Domain/Enums/Interf
 import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
 import { IntegrationFailureCategory } from '@modules/Integration/Domain/Enums/IntegrationFailureCategory';
 import { DeadLetterActionType } from '@modules/Integration/Domain/Enums/DeadLetterActionType';
+import { IntegrationReconciliationRunStatus } from '@modules/Integration/Domain/Enums/IntegrationReconciliationRunStatus';
+import { IntegrationReconciliationItemStatus } from '@modules/Integration/Domain/Enums/IntegrationReconciliationItemStatus';
+import { IntegrationReconciliationSeverity } from '@modules/Integration/Domain/Enums/IntegrationReconciliationSeverity';
 
 export interface IntegrationEnvelopeDto {
   MessageId: string;
@@ -108,6 +111,86 @@ export interface DeadLetterActionDto {
   EvidenceRefs: string[];
   IdempotencyKey?: string | null;
   ManualFixPayload?: Record<string, unknown> | null;
+}
+
+export interface CreateReconciliationRunDto {
+  BusinessReference: string;
+  WarehouseId: string;
+  OwnerId?: string | null;
+  ReasonCode: string;
+  ReasonNote?: string | null;
+  EvidenceRefs: string[];
+  IdempotencyKey: string;
+}
+
+export interface ResolveReconciliationItemDto {
+  ReasonCode: string;
+  ReasonNote?: string | null;
+  EvidenceRefs: string[];
+  IdempotencyKey: string;
+  ResolutionNote: string;
+  ApprovalRequestId?: string | null;
+  ImpactsInventory?: boolean;
+  ImpactsFinance?: boolean;
+}
+
+export interface IntegrationReconciliationRunDto {
+  Id: string;
+  BusinessReference: string;
+  WarehouseId: string;
+  OwnerId: string | null;
+  RunStatus: IntegrationReconciliationRunStatus;
+  SourceCounts: Record<string, number>;
+  ItemCount: number;
+  MismatchCount: number;
+  ExceptionCount: number;
+  IdempotencyKey: string;
+  ReasonCode: string;
+  ReasonCodeId: string | null;
+  ReasonNote: string | null;
+  EvidenceRefs: string[];
+  ResolvedAt: Date | null;
+  ResolvedBy: string | null;
+  CreatedAt: Date;
+  CreatedBy: string | null;
+  UpdatedAt: Date;
+  IsDuplicate: boolean;
+}
+
+export interface IntegrationReconciliationItemDto {
+  Id: string;
+  RunId: string;
+  ItemStatus: IntegrationReconciliationItemStatus;
+  Severity: IntegrationReconciliationSeverity;
+  MismatchType: string;
+  SourceType: string;
+  SourceId: string | null;
+  ExpectedSummary: Record<string, unknown> | null;
+  ActualSummary: Record<string, unknown> | null;
+  ExceptionCaseId: string | null;
+  OutboxMessageId: string | null;
+  DeadLetterMessageId: string | null;
+  ResolutionNote: string | null;
+  ApprovalRequestId: string | null;
+  ReasonCode: string | null;
+  ReasonCodeId: string | null;
+  ReasonNote: string | null;
+  EvidenceRefs: string[];
+  ResolvedAt: Date | null;
+  ResolvedBy: string | null;
+  CreatedAt: Date;
+  UpdatedAt: Date;
+  IsDuplicate: boolean;
+}
+
+export interface ListReconciliationRunsResultDto {
+  Items: IntegrationReconciliationRunDto[];
+  Meta: { Page: number; PageSize: number; TotalItems: number; TotalPages: number };
+}
+
+export interface ListReconciliationItemsResultDto {
+  Items: IntegrationReconciliationItemDto[];
+  Meta: { Page: number; PageSize: number; TotalItems: number; TotalPages: number };
 }
 
 export interface ImportIntegrationBatchResultDto {

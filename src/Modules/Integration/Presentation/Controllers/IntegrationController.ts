@@ -14,11 +14,21 @@ import { RecordOutboxEventUseCase } from '@modules/Integration/Application/UseCa
 import { GetOutboxMessageUseCase } from '@modules/Integration/Application/UseCases/GetOutboxMessageUseCase';
 import { RecordOutboxFailureUseCase } from '@modules/Integration/Application/UseCases/RecordOutboxFailureUseCase';
 import { ResolveDeadLetterUseCase } from '@modules/Integration/Application/UseCases/ResolveDeadLetterUseCase';
+import {
+  CreateReconciliationRunUseCase,
+  GetReconciliationRunUseCase,
+  ListReconciliationItemsUseCase,
+  ListReconciliationRunsUseCase,
+  ResolveReconciliationItemUseCase,
+} from '@modules/Integration/Application/UseCases/ReconciliationUseCases';
 import { ImportIntegrationBatchRequest } from '@modules/Integration/Presentation/Requests/ImportIntegrationBatchRequest';
 import { IntegrationEnvelopeRequest } from '@modules/Integration/Presentation/Requests/IntegrationEnvelopeRequest';
 import { ListIntegrationQuery } from '@modules/Integration/Presentation/Requests/ListIntegrationQuery';
 import { DeadLetterActionRequest } from '@modules/Integration/Presentation/Requests/DeadLetterActionRequest';
 import { RecordOutboxFailureRequest } from '@modules/Integration/Presentation/Requests/RecordOutboxFailureRequest';
+import { CreateReconciliationRunRequest } from '@modules/Integration/Presentation/Requests/CreateReconciliationRunRequest';
+import { ListReconciliationQuery } from '@modules/Integration/Presentation/Requests/ListReconciliationQuery';
+import { ResolveReconciliationItemRequest } from '@modules/Integration/Presentation/Requests/ResolveReconciliationItemRequest';
 import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
 import { DeadLetterActionType } from '@modules/Integration/Domain/Enums/DeadLetterActionType';
 
@@ -40,6 +50,11 @@ export class IntegrationController {
     private readonly getOutboxMessageUseCase: GetOutboxMessageUseCase,
     private readonly recordOutboxFailureUseCase: RecordOutboxFailureUseCase,
     private readonly resolveDeadLetterUseCase: ResolveDeadLetterUseCase,
+    private readonly createReconciliationRunUseCase: CreateReconciliationRunUseCase,
+    private readonly listReconciliationRunsUseCase: ListReconciliationRunsUseCase,
+    private readonly getReconciliationRunUseCase: GetReconciliationRunUseCase,
+    private readonly listReconciliationItemsUseCase: ListReconciliationItemsUseCase,
+    private readonly resolveReconciliationItemUseCase: ResolveReconciliationItemUseCase,
   ) {}
 
   @Post('imports')
@@ -135,6 +150,56 @@ export class IntegrationController {
     @CurrentAuditContext() context: AuditContext,
   ) {
     return await this.resolveDeadLetterUseCase.Execute(id, DeadLetterActionType.Ignore, request, context);
+  }
+
+  @Post('reconciliation/runs')
+  @RequirePermission(ActionCode.Create, ObjectType.ReconciliationRun, {
+    WarehouseId: { In: 'body', Key: 'WarehouseId' },
+    OwnerId: { In: 'body', Key: 'OwnerId' },
+  })
+  public async CreateReconciliationRun(
+    @Body() request: CreateReconciliationRunRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.createReconciliationRunUseCase.Execute(request, context);
+  }
+
+  @Get('reconciliation/runs')
+  @RequirePermission(ActionCode.Read, ObjectType.ReconciliationRun, {
+    WarehouseId: { In: 'query', Key: 'WarehouseId' },
+    OwnerId: { In: 'query', Key: 'OwnerId' },
+  })
+  public async ListReconciliationRuns(@Query() query: ListReconciliationQuery) {
+    return await this.listReconciliationRunsUseCase.Execute(query);
+  }
+
+  @Get('reconciliation/runs/:id')
+  @RequirePermission(ActionCode.Read, ObjectType.ReconciliationRun)
+  public async GetReconciliationRun(@Param('id') id: string, @CurrentAuditContext() context: AuditContext) {
+    return await this.getReconciliationRunUseCase.Execute(id, context);
+  }
+
+  @Get('reconciliation/runs/:id/items')
+  @RequirePermission(ActionCode.Read, ObjectType.ReconciliationRun, {
+    WarehouseId: { In: 'query', Key: 'WarehouseId' },
+    OwnerId: { In: 'query', Key: 'OwnerId' },
+  })
+  public async ListReconciliationItems(
+    @Param('id') id: string,
+    @Query() query: ListReconciliationQuery,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.listReconciliationItemsUseCase.Execute(id, query, context);
+  }
+
+  @Post('reconciliation/items/:id/resolve')
+  @RequirePermission(ActionCode.Update, ObjectType.ReconciliationRun)
+  public async ResolveReconciliationItem(
+    @Param('id') id: string,
+    @Body() request: ResolveReconciliationItemRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.resolveReconciliationItemUseCase.Execute(id, request, context);
   }
 
   private ResolveDeadLetterReadableStatus(status?: string): OutboxMessageStatus {

@@ -1,9 +1,13 @@
 import {
   ImportBatchDto,
+  IntegrationReconciliationItemDto,
+  IntegrationReconciliationRunDto,
   InterfaceMessageDto,
   OutboxMessageDto,
 } from '@modules/Integration/Application/DTOs/IntegrationDtos';
 import { ImportBatchEntity } from '@modules/Integration/Domain/Entities/ImportBatchEntity';
+import { IntegrationReconciliationItemEntity } from '@modules/Integration/Domain/Entities/IntegrationReconciliationItemEntity';
+import { IntegrationReconciliationRunEntity } from '@modules/Integration/Domain/Entities/IntegrationReconciliationRunEntity';
 import { InterfaceMessageEntity } from '@modules/Integration/Domain/Entities/InterfaceMessageEntity';
 import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/OutboxMessageEntity';
 
@@ -82,6 +86,65 @@ export class IntegrationDtoMapper {
       EvidenceRefs: entity.EvidenceRefs,
       CreatedAt: entity.CreatedAt,
       CreatedBy: entity.CreatedBy,
+      UpdatedAt: entity.UpdatedAt,
+      IsDuplicate: isDuplicate,
+    };
+  }
+
+  public static ToReconciliationRunDto(
+    entity: IntegrationReconciliationRunEntity,
+    isDuplicate = false,
+  ): IntegrationReconciliationRunDto {
+    return {
+      Id: entity.Id,
+      BusinessReference: entity.BusinessReference,
+      WarehouseId: entity.WarehouseId,
+      OwnerId: entity.OwnerId,
+      RunStatus: entity.RunStatus,
+      SourceCounts: entity.SourceCounts,
+      ItemCount: entity.ItemCount,
+      MismatchCount: entity.MismatchCount,
+      ExceptionCount: entity.ExceptionCount,
+      IdempotencyKey: entity.IdempotencyKey,
+      ReasonCode: entity.ReasonCode,
+      ReasonCodeId: entity.ReasonCodeId,
+      ReasonNote: entity.ReasonNote,
+      EvidenceRefs: entity.EvidenceRefs,
+      ResolvedAt: entity.ResolvedAt,
+      ResolvedBy: entity.ResolvedBy,
+      CreatedAt: entity.CreatedAt,
+      CreatedBy: entity.CreatedBy,
+      UpdatedAt: entity.UpdatedAt,
+      IsDuplicate: isDuplicate,
+    };
+  }
+
+  public static ToReconciliationItemDto(
+    entity: IntegrationReconciliationItemEntity,
+    isDuplicate = false,
+  ): IntegrationReconciliationItemDto {
+    return {
+      Id: entity.Id,
+      RunId: entity.RunId,
+      ItemStatus: entity.ItemStatus,
+      Severity: entity.Severity,
+      MismatchType: entity.MismatchType,
+      SourceType: entity.SourceType,
+      SourceId: entity.SourceId,
+      ExpectedSummary: entity.ExpectedSummary,
+      ActualSummary: entity.ActualSummary,
+      ExceptionCaseId: entity.ExceptionCaseId,
+      OutboxMessageId: entity.OutboxMessageId,
+      DeadLetterMessageId: entity.DeadLetterMessageId,
+      ResolutionNote: entity.ResolutionNote,
+      ApprovalRequestId: entity.ApprovalRequestId,
+      ReasonCode: entity.ReasonCode,
+      ReasonCodeId: entity.ReasonCodeId,
+      ReasonNote: entity.ReasonNote,
+      EvidenceRefs: entity.EvidenceRefs,
+      ResolvedAt: entity.ResolvedAt,
+      ResolvedBy: entity.ResolvedBy,
+      CreatedAt: entity.CreatedAt,
       UpdatedAt: entity.UpdatedAt,
       IsDuplicate: isDuplicate,
     };
