@@ -64,13 +64,13 @@ describe('TaskExecution schema registration', () => {
     const { runner, queries } = fakeRunner();
     await new CreateTaskExecutionMobileScanEvents1781642700000().up(runner);
     const sql = queries.join('\n');
-    expect(sql).toContain('CREATE TABLE "mobile_scan_events"');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS "mobile_scan_events"');
     expect(sql).toContain('"task_id" char(36) NOT NULL');
     expect(sql).toContain('"scan_type" varchar(30) NOT NULL');
     expect(sql).toContain('"result" varchar(40) NOT NULL');
     expect(sql).toContain('"parsed_value_json" jsonb NOT NULL DEFAULT');
-    expect(sql).toContain('CREATE INDEX "IDX_mobile_scan_events_task_time"');
-    expect(sql).toContain('CREATE INDEX "IDX_mobile_scan_events_raw_value"');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS "IDX_mobile_scan_events_task_time"');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS "IDX_mobile_scan_events_raw_value"');
     expect(sql).not.toContain('inventory_status');
   });
 });

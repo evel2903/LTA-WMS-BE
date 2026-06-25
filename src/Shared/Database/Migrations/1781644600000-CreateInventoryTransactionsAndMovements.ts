@@ -5,7 +5,7 @@ export class CreateInventoryTransactionsAndMovements1781644600000 implements Mig
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "inventory_transactions" (
+      CREATE TABLE IF NOT EXISTS "inventory_transactions" (
         "id" char(36) NOT NULL,
         "transaction_code" varchar(80) NOT NULL,
         "transaction_type" varchar(40) NOT NULL,
@@ -44,7 +44,7 @@ export class CreateInventoryTransactionsAndMovements1781644600000 implements Mig
       )
     `);
     await queryRunner.query(`
-      CREATE TABLE "inventory_movements" (
+      CREATE TABLE IF NOT EXISTS "inventory_movements" (
         "id" char(36) NOT NULL,
         "movement_code" varchar(80) NOT NULL,
         "movement_status" varchar(40) NOT NULL,
@@ -79,37 +79,37 @@ export class CreateInventoryTransactionsAndMovements1781644600000 implements Mig
       )
     `);
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_inventory_transactions_code" ON "inventory_transactions" ("transaction_code")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_inventory_transactions_code" ON "inventory_transactions" ("transaction_code")`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_inventory_movements_code" ON "inventory_movements" ("movement_code")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_inventory_movements_code" ON "inventory_movements" ("movement_code")`,
     );
     await queryRunner.query(`
-      CREATE UNIQUE INDEX "UQ_inventory_transactions_idempotency"
+      CREATE UNIQUE INDEX IF NOT EXISTS "UQ_inventory_transactions_idempotency"
       ON "inventory_transactions" ("putaway_task_id", "idempotency_key")
     `);
     await queryRunner.query(`
-      CREATE INDEX "IDX_inventory_transactions_scope_status"
+      CREATE INDEX IF NOT EXISTS "IDX_inventory_transactions_scope_status"
       ON "inventory_transactions" ("warehouse_id", "owner_id", "transaction_status")
     `);
     await queryRunner.query(`
-      CREATE INDEX "IDX_inventory_transactions_putaway_task"
+      CREATE INDEX IF NOT EXISTS "IDX_inventory_transactions_putaway_task"
       ON "inventory_transactions" ("putaway_task_id")
     `);
     await queryRunner.query(`
-      CREATE INDEX "IDX_inventory_movements_transaction"
+      CREATE INDEX IF NOT EXISTS "IDX_inventory_movements_transaction"
       ON "inventory_movements" ("inventory_transaction_id")
     `);
     await queryRunner.query(`
-      CREATE INDEX "IDX_inventory_movements_putaway_task"
+      CREATE INDEX IF NOT EXISTS "IDX_inventory_movements_putaway_task"
       ON "inventory_movements" ("putaway_task_id")
     `);
     await queryRunner.query(`
-      CREATE INDEX "IDX_inventory_movements_from_dimension"
+      CREATE INDEX IF NOT EXISTS "IDX_inventory_movements_from_dimension"
       ON "inventory_movements" ("from_dimension_id")
     `);
     await queryRunner.query(`
-      CREATE INDEX "IDX_inventory_movements_to_dimension"
+      CREATE INDEX IF NOT EXISTS "IDX_inventory_movements_to_dimension"
       ON "inventory_movements" ("to_dimension_id")
     `);
     await queryRunner.query(`
@@ -157,27 +157,37 @@ export class CreateInventoryTransactionsAndMovements1781644600000 implements Mig
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "inventory_movements" DROP CONSTRAINT "FK_inventory_movements_to_balance"`);
-    await queryRunner.query(`ALTER TABLE "inventory_movements" DROP CONSTRAINT "FK_inventory_movements_from_balance"`);
-    await queryRunner.query(`ALTER TABLE "inventory_movements" DROP CONSTRAINT "FK_inventory_movements_to_dimension"`);
     await queryRunner.query(
-      `ALTER TABLE "inventory_movements" DROP CONSTRAINT "FK_inventory_movements_from_dimension"`,
+      `ALTER TABLE "inventory_movements" DROP CONSTRAINT IF EXISTS "FK_inventory_movements_to_balance"`,
     );
-    await queryRunner.query(`ALTER TABLE "inventory_movements" DROP CONSTRAINT "FK_inventory_movements_putaway_task"`);
-    await queryRunner.query(`ALTER TABLE "inventory_movements" DROP CONSTRAINT "FK_inventory_movements_transaction"`);
     await queryRunner.query(
-      `ALTER TABLE "inventory_transactions" DROP CONSTRAINT "FK_inventory_transactions_putaway_task"`,
+      `ALTER TABLE "inventory_movements" DROP CONSTRAINT IF EXISTS "FK_inventory_movements_from_balance"`,
     );
-    await queryRunner.query(`DROP INDEX "public"."IDX_inventory_movements_to_dimension"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inventory_movements_from_dimension"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inventory_movements_putaway_task"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inventory_movements_transaction"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inventory_transactions_putaway_task"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inventory_transactions_scope_status"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_inventory_transactions_idempotency"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_inventory_movements_code"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_inventory_transactions_code"`);
-    await queryRunner.query(`DROP TABLE "inventory_movements"`);
-    await queryRunner.query(`DROP TABLE "inventory_transactions"`);
+    await queryRunner.query(
+      `ALTER TABLE "inventory_movements" DROP CONSTRAINT IF EXISTS "FK_inventory_movements_to_dimension"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "inventory_movements" DROP CONSTRAINT IF EXISTS "FK_inventory_movements_from_dimension"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "inventory_movements" DROP CONSTRAINT IF EXISTS "FK_inventory_movements_putaway_task"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "inventory_movements" DROP CONSTRAINT IF EXISTS "FK_inventory_movements_transaction"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "inventory_transactions" DROP CONSTRAINT IF EXISTS "FK_inventory_transactions_putaway_task"`,
+    );
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inventory_movements_to_dimension"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inventory_movements_from_dimension"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inventory_movements_putaway_task"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inventory_movements_transaction"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inventory_transactions_putaway_task"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inventory_transactions_scope_status"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_inventory_transactions_idempotency"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_inventory_movements_code"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_inventory_transactions_code"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "inventory_movements"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "inventory_transactions"`);
   }
 }

@@ -5,7 +5,7 @@ export class CreateTaskExecutionMobileScanEvents1781642700000 implements Migrati
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "mobile_scan_events" (
+      CREATE TABLE IF NOT EXISTS "mobile_scan_events" (
         "id" char(36) NOT NULL,
         "task_id" char(36) NOT NULL,
         "task_code" varchar(60) NOT NULL,
@@ -30,14 +30,16 @@ export class CreateTaskExecutionMobileScanEvents1781642700000 implements Migrati
       )
     `);
     await queryRunner.query(
-      `CREATE INDEX "IDX_mobile_scan_events_task_time" ON "mobile_scan_events" ("task_id", "created_at")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_mobile_scan_events_task_time" ON "mobile_scan_events" ("task_id", "created_at")`,
     );
-    await queryRunner.query(`CREATE INDEX "IDX_mobile_scan_events_raw_value" ON "mobile_scan_events" ("raw_value")`);
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_mobile_scan_events_raw_value" ON "mobile_scan_events" ("raw_value")`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX "public"."IDX_mobile_scan_events_raw_value"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_mobile_scan_events_task_time"`);
-    await queryRunner.query(`DROP TABLE "mobile_scan_events"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_mobile_scan_events_raw_value"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_mobile_scan_events_task_time"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "mobile_scan_events"`);
   }
 }

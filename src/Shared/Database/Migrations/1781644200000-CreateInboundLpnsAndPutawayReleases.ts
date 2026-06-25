@@ -5,7 +5,7 @@ export class CreateInboundLpnsAndPutawayReleases1781644200000 implements Migrati
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "inbound_lpns" (
+      CREATE TABLE IF NOT EXISTS "inbound_lpns" (
         "id" char(36) NOT NULL,
         "receipt_id" char(36) NOT NULL,
         "receipt_line_id" char(36) NOT NULL,
@@ -42,20 +42,20 @@ export class CreateInboundLpnsAndPutawayReleases1781644200000 implements Migrati
           REFERENCES "inbound_plan_lines"("id") ON DELETE CASCADE
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_inbound_lpns_receipt" ON "inbound_lpns" ("receipt_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_inbound_lpns_line" ON "inbound_lpns" ("receipt_line_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_inbound_lpns_receipt" ON "inbound_lpns" ("receipt_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_inbound_lpns_line" ON "inbound_lpns" ("receipt_line_id")`);
     await queryRunner.query(
-      `CREATE INDEX "IDX_inbound_lpns_owner_warehouse" ON "inbound_lpns" ("owner_id", "warehouse_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_inbound_lpns_owner_warehouse" ON "inbound_lpns" ("owner_id", "warehouse_id")`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_inbound_lpns_scope_lpn" ON "inbound_lpns" ("warehouse_id", "owner_id", "lpn_code")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_inbound_lpns_scope_lpn" ON "inbound_lpns" ("warehouse_id", "owner_id", "lpn_code")`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_inbound_lpns_idempotency" ON "inbound_lpns" ("receipt_line_id", "idempotency_key")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_inbound_lpns_idempotency" ON "inbound_lpns" ("receipt_line_id", "idempotency_key")`,
     );
 
     await queryRunner.query(`
-      CREATE TABLE "inbound_putaway_releases" (
+      CREATE TABLE IF NOT EXISTS "inbound_putaway_releases" (
         "id" char(36) NOT NULL,
         "inbound_lpn_id" char(36),
         "receipt_id" char(36) NOT NULL,
@@ -106,30 +106,30 @@ export class CreateInboundLpnsAndPutawayReleases1781644200000 implements Migrati
       )
     `);
     await queryRunner.query(
-      `CREATE INDEX "IDX_inbound_putaway_releases_receipt" ON "inbound_putaway_releases" ("receipt_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_inbound_putaway_releases_receipt" ON "inbound_putaway_releases" ("receipt_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_inbound_putaway_releases_line" ON "inbound_putaway_releases" ("receipt_line_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_inbound_putaway_releases_line" ON "inbound_putaway_releases" ("receipt_line_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_inbound_putaway_releases_owner_warehouse" ON "inbound_putaway_releases" ("owner_id", "warehouse_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_inbound_putaway_releases_owner_warehouse" ON "inbound_putaway_releases" ("owner_id", "warehouse_id")`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_inbound_putaway_releases_idempotency" ON "inbound_putaway_releases" ("receipt_line_id", "idempotency_key")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_inbound_putaway_releases_idempotency" ON "inbound_putaway_releases" ("receipt_line_id", "idempotency_key")`,
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX "public"."UQ_inbound_putaway_releases_idempotency"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inbound_putaway_releases_owner_warehouse"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inbound_putaway_releases_line"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inbound_putaway_releases_receipt"`);
-    await queryRunner.query(`DROP TABLE "inbound_putaway_releases"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_inbound_lpns_idempotency"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_inbound_lpns_scope_lpn"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inbound_lpns_owner_warehouse"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inbound_lpns_line"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_inbound_lpns_receipt"`);
-    await queryRunner.query(`DROP TABLE "inbound_lpns"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_inbound_putaway_releases_idempotency"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inbound_putaway_releases_owner_warehouse"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inbound_putaway_releases_line"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inbound_putaway_releases_receipt"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "inbound_putaway_releases"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_inbound_lpns_idempotency"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_inbound_lpns_scope_lpn"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inbound_lpns_owner_warehouse"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inbound_lpns_line"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_inbound_lpns_receipt"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "inbound_lpns"`);
   }
 }

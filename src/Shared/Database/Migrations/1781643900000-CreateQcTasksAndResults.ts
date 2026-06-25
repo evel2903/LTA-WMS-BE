@@ -5,7 +5,7 @@ export class CreateQcTasksAndResults1781643900000 implements MigrationInterface 
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "qc_tasks" (
+      CREATE TABLE IF NOT EXISTS "qc_tasks" (
         "id" char(36) NOT NULL,
         "receipt_id" char(36) NOT NULL,
         "receipt_line_id" char(36) NOT NULL,
@@ -46,15 +46,17 @@ export class CreateQcTasksAndResults1781643900000 implements MigrationInterface 
           REFERENCES "inbound_plan_lines"("id") ON DELETE CASCADE
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_qc_tasks_receipt" ON "qc_tasks" ("receipt_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_qc_tasks_line" ON "qc_tasks" ("receipt_line_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_qc_tasks_owner_warehouse" ON "qc_tasks" ("owner_id", "warehouse_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_qc_tasks_receipt" ON "qc_tasks" ("receipt_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_qc_tasks_line" ON "qc_tasks" ("receipt_line_id")`);
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_qc_tasks_idempotency" ON "qc_tasks" ("receipt_id", "idempotency_key")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_qc_tasks_owner_warehouse" ON "qc_tasks" ("owner_id", "warehouse_id")`,
+    );
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_qc_tasks_idempotency" ON "qc_tasks" ("receipt_id", "idempotency_key")`,
     );
 
     await queryRunner.query(`
-      CREATE TABLE "qc_results" (
+      CREATE TABLE IF NOT EXISTS "qc_results" (
         "id" char(36) NOT NULL,
         "qc_task_id" char(36) NOT NULL,
         "receipt_id" char(36) NOT NULL,
@@ -96,28 +98,28 @@ export class CreateQcTasksAndResults1781643900000 implements MigrationInterface 
           REFERENCES "inbound_plan_lines"("id") ON DELETE CASCADE
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_qc_results_task" ON "qc_results" ("qc_task_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_qc_results_receipt" ON "qc_results" ("receipt_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_qc_results_line" ON "qc_results" ("receipt_line_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_qc_results_task" ON "qc_results" ("qc_task_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_qc_results_receipt" ON "qc_results" ("receipt_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_qc_results_line" ON "qc_results" ("receipt_line_id")`);
     await queryRunner.query(
-      `CREATE INDEX "IDX_qc_results_owner_warehouse" ON "qc_results" ("owner_id", "warehouse_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_qc_results_owner_warehouse" ON "qc_results" ("owner_id", "warehouse_id")`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_qc_results_idempotency" ON "qc_results" ("qc_task_id", "idempotency_key")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_qc_results_idempotency" ON "qc_results" ("qc_task_id", "idempotency_key")`,
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX "public"."UQ_qc_results_idempotency"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_qc_results_owner_warehouse"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_qc_results_line"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_qc_results_receipt"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_qc_results_task"`);
-    await queryRunner.query(`DROP TABLE "qc_results"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_qc_tasks_idempotency"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_qc_tasks_owner_warehouse"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_qc_tasks_line"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_qc_tasks_receipt"`);
-    await queryRunner.query(`DROP TABLE "qc_tasks"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_qc_results_idempotency"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_qc_results_owner_warehouse"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_qc_results_line"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_qc_results_receipt"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_qc_results_task"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "qc_results"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_qc_tasks_idempotency"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_qc_tasks_owner_warehouse"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_qc_tasks_line"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_qc_tasks_receipt"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "qc_tasks"`);
   }
 }

@@ -5,7 +5,7 @@ export class CreateOutboundAllocations1781645100000 implements MigrationInterfac
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "outbound_allocations" (
+      CREATE TABLE IF NOT EXISTS "outbound_allocations" (
         "id" char(36) NOT NULL,
         "allocation_number" varchar(80) NOT NULL,
         "outbound_order_id" char(36) NOT NULL,
@@ -41,7 +41,7 @@ export class CreateOutboundAllocations1781645100000 implements MigrationInterfac
       )
     `);
     await queryRunner.query(`
-      CREATE TABLE "outbound_allocation_lines" (
+      CREATE TABLE IF NOT EXISTS "outbound_allocation_lines" (
         "id" char(36) NOT NULL,
         "allocation_id" char(36) NOT NULL,
         "outbound_order_line_id" char(36) NOT NULL,
@@ -80,33 +80,33 @@ export class CreateOutboundAllocations1781645100000 implements MigrationInterfac
       )
     `);
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_outbound_allocations_idempotency" ON "outbound_allocations" ("idempotency_key")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_outbound_allocations_idempotency" ON "outbound_allocations" ("idempotency_key")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_outbound_allocations_order_status" ON "outbound_allocations" ("outbound_order_id", "status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_outbound_allocations_order_status" ON "outbound_allocations" ("outbound_order_id", "status")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_outbound_allocations_scope_status" ON "outbound_allocations" ("warehouse_id", "owner_id", "status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_outbound_allocations_scope_status" ON "outbound_allocations" ("warehouse_id", "owner_id", "status")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_outbound_allocation_lines_allocation" ON "outbound_allocation_lines" ("allocation_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_outbound_allocation_lines_allocation" ON "outbound_allocation_lines" ("allocation_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_outbound_allocation_lines_order_line" ON "outbound_allocation_lines" ("outbound_order_line_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_outbound_allocation_lines_order_line" ON "outbound_allocation_lines" ("outbound_order_line_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_outbound_allocation_lines_source_balance" ON "outbound_allocation_lines" ("source_balance_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_outbound_allocation_lines_source_balance" ON "outbound_allocation_lines" ("source_balance_id")`,
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX "public"."IDX_outbound_allocation_lines_source_balance"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_outbound_allocation_lines_order_line"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_outbound_allocation_lines_allocation"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_outbound_allocations_scope_status"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_outbound_allocations_order_status"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_outbound_allocations_idempotency"`);
-    await queryRunner.query(`DROP TABLE "outbound_allocation_lines"`);
-    await queryRunner.query(`DROP TABLE "outbound_allocations"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_outbound_allocation_lines_source_balance"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_outbound_allocation_lines_order_line"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_outbound_allocation_lines_allocation"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_outbound_allocations_scope_status"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_outbound_allocations_order_status"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_outbound_allocations_idempotency"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "outbound_allocation_lines"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "outbound_allocations"`);
   }
 }

@@ -11,14 +11,14 @@ export class RelaxInventoryControlLedgerForNonPutaway1781644700000 implements Mi
     await queryRunner.query(`ALTER TABLE "inventory_movements" ALTER COLUMN "putaway_task_code" DROP NOT NULL`);
     await queryRunner.query(`ALTER TABLE "inventory_movements" ALTER COLUMN "uom_id" DROP NOT NULL`);
     await queryRunner.query(`
-      CREATE UNIQUE INDEX "UQ_inventory_transactions_operation_idempotency_no_task"
+      CREATE UNIQUE INDEX IF NOT EXISTS "UQ_inventory_transactions_operation_idempotency_no_task"
       ON "inventory_transactions" ("transaction_type", "idempotency_key")
       WHERE "putaway_task_id" IS NULL
     `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX "public"."UQ_inventory_transactions_operation_idempotency_no_task"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_inventory_transactions_operation_idempotency_no_task"`);
     await queryRunner.query(`DELETE FROM "inventory_movements" WHERE "putaway_task_id" IS NULL`);
     await queryRunner.query(`DELETE FROM "inventory_transactions" WHERE "putaway_task_id" IS NULL`);
     await queryRunner.query(`ALTER TABLE "inventory_movements" ALTER COLUMN "uom_id" SET NOT NULL`);

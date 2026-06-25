@@ -5,7 +5,7 @@ export class CreateCycleCountWorks1781644800000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "cycle_count_works" (
+      CREATE TABLE IF NOT EXISTS "cycle_count_works" (
         "id" char(36) NOT NULL,
         "count_code" varchar(80) NOT NULL,
         "work_status" varchar(40) NOT NULL,
@@ -53,22 +53,22 @@ export class CreateCycleCountWorks1781644800000 implements MigrationInterface {
       )
     `);
     await queryRunner.query(
-      `CREATE INDEX "IDX_cycle_count_works_scope_status" ON "cycle_count_works" ("warehouse_id", "owner_id", "work_status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_cycle_count_works_scope_status" ON "cycle_count_works" ("warehouse_id", "owner_id", "work_status")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_cycle_count_works_source_balance" ON "cycle_count_works" ("source_balance_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_cycle_count_works_source_balance" ON "cycle_count_works" ("source_balance_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_cycle_count_works_locked_balance" ON "cycle_count_works" ("locked_balance_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_cycle_count_works_locked_balance" ON "cycle_count_works" ("locked_balance_id")`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_cycle_count_works_submit_idempotency" ON "cycle_count_works" ("submit_idempotency_key") WHERE "submit_idempotency_key" IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_cycle_count_works_submit_idempotency" ON "cycle_count_works" ("submit_idempotency_key") WHERE "submit_idempotency_key" IS NOT NULL`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_cycle_count_works_adjustment_idempotency" ON "cycle_count_works" ("adjustment_idempotency_key") WHERE "adjustment_idempotency_key" IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_cycle_count_works_adjustment_idempotency" ON "cycle_count_works" ("adjustment_idempotency_key") WHERE "adjustment_idempotency_key" IS NOT NULL`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_cycle_count_works_unlock_idempotency" ON "cycle_count_works" ("unlock_idempotency_key") WHERE "unlock_idempotency_key" IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_cycle_count_works_unlock_idempotency" ON "cycle_count_works" ("unlock_idempotency_key") WHERE "unlock_idempotency_key" IS NOT NULL`,
     );
     await queryRunner.query(
       `ALTER TABLE "cycle_count_works" ADD CONSTRAINT "FK_cycle_count_works_source_balance" FOREIGN KEY ("source_balance_id") REFERENCES "inventory_balances"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
@@ -91,22 +91,30 @@ export class CreateCycleCountWorks1781644800000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "cycle_count_works" DROP CONSTRAINT "FK_cycle_count_works_approval_request"`);
     await queryRunner.query(
-      `ALTER TABLE "cycle_count_works" DROP CONSTRAINT "FK_cycle_count_works_unlock_transaction"`,
+      `ALTER TABLE "cycle_count_works" DROP CONSTRAINT IF EXISTS "FK_cycle_count_works_approval_request"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "cycle_count_works" DROP CONSTRAINT "FK_cycle_count_works_adjustment_transaction"`,
+      `ALTER TABLE "cycle_count_works" DROP CONSTRAINT IF EXISTS "FK_cycle_count_works_unlock_transaction"`,
     );
-    await queryRunner.query(`ALTER TABLE "cycle_count_works" DROP CONSTRAINT "FK_cycle_count_works_lock_transaction"`);
-    await queryRunner.query(`ALTER TABLE "cycle_count_works" DROP CONSTRAINT "FK_cycle_count_works_locked_balance"`);
-    await queryRunner.query(`ALTER TABLE "cycle_count_works" DROP CONSTRAINT "FK_cycle_count_works_source_balance"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_cycle_count_works_unlock_idempotency"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_cycle_count_works_adjustment_idempotency"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_cycle_count_works_submit_idempotency"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_cycle_count_works_locked_balance"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_cycle_count_works_source_balance"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_cycle_count_works_scope_status"`);
-    await queryRunner.query(`DROP TABLE "cycle_count_works"`);
+    await queryRunner.query(
+      `ALTER TABLE "cycle_count_works" DROP CONSTRAINT IF EXISTS "FK_cycle_count_works_adjustment_transaction"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "cycle_count_works" DROP CONSTRAINT IF EXISTS "FK_cycle_count_works_lock_transaction"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "cycle_count_works" DROP CONSTRAINT IF EXISTS "FK_cycle_count_works_locked_balance"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "cycle_count_works" DROP CONSTRAINT IF EXISTS "FK_cycle_count_works_source_balance"`,
+    );
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_cycle_count_works_unlock_idempotency"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_cycle_count_works_adjustment_idempotency"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_cycle_count_works_submit_idempotency"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_cycle_count_works_locked_balance"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_cycle_count_works_source_balance"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_cycle_count_works_scope_status"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "cycle_count_works"`);
   }
 }

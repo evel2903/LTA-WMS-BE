@@ -5,7 +5,7 @@ export class CreateOutboundPickReleases1781645200000 implements MigrationInterfa
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "outbound_pick_releases" (
+      CREATE TABLE IF NOT EXISTS "outbound_pick_releases" (
         "id" char(36) NOT NULL,
         "release_number" varchar(80) NOT NULL,
         "outbound_order_id" char(36) NOT NULL,
@@ -43,7 +43,7 @@ export class CreateOutboundPickReleases1781645200000 implements MigrationInterfa
       )
     `);
     await queryRunner.query(`
-      CREATE TABLE "outbound_pick_tasks" (
+      CREATE TABLE IF NOT EXISTS "outbound_pick_tasks" (
         "id" char(36) NOT NULL,
         "pick_release_id" char(36) NOT NULL,
         "outbound_order_id" char(36) NOT NULL,
@@ -89,33 +89,33 @@ export class CreateOutboundPickReleases1781645200000 implements MigrationInterfa
       )
     `);
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_outbound_pick_releases_idempotency" ON "outbound_pick_releases" ("idempotency_key")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_outbound_pick_releases_idempotency" ON "outbound_pick_releases" ("idempotency_key")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_outbound_pick_releases_order_status" ON "outbound_pick_releases" ("outbound_order_id", "status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_outbound_pick_releases_order_status" ON "outbound_pick_releases" ("outbound_order_id", "status")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_outbound_pick_releases_scope_status" ON "outbound_pick_releases" ("warehouse_id", "owner_id", "status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_outbound_pick_releases_scope_status" ON "outbound_pick_releases" ("warehouse_id", "owner_id", "status")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_outbound_pick_tasks_release" ON "outbound_pick_tasks" ("pick_release_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_outbound_pick_tasks_release" ON "outbound_pick_tasks" ("pick_release_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_outbound_pick_tasks_order_status" ON "outbound_pick_tasks" ("outbound_order_id", "status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_outbound_pick_tasks_order_status" ON "outbound_pick_tasks" ("outbound_order_id", "status")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_outbound_pick_tasks_source_location" ON "outbound_pick_tasks" ("source_location_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_outbound_pick_tasks_source_location" ON "outbound_pick_tasks" ("source_location_id")`,
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX "public"."IDX_outbound_pick_tasks_source_location"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_outbound_pick_tasks_order_status"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_outbound_pick_tasks_release"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_outbound_pick_releases_scope_status"`);
-    await queryRunner.query(`DROP INDEX "public"."IDX_outbound_pick_releases_order_status"`);
-    await queryRunner.query(`DROP INDEX "public"."UQ_outbound_pick_releases_idempotency"`);
-    await queryRunner.query(`DROP TABLE "outbound_pick_tasks"`);
-    await queryRunner.query(`DROP TABLE "outbound_pick_releases"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_outbound_pick_tasks_source_location"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_outbound_pick_tasks_order_status"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_outbound_pick_tasks_release"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_outbound_pick_releases_scope_status"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_outbound_pick_releases_order_status"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_outbound_pick_releases_idempotency"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "outbound_pick_tasks"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "outbound_pick_releases"`);
   }
 }
