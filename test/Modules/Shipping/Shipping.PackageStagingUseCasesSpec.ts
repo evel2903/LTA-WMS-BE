@@ -19,8 +19,15 @@ import { WorkflowMilestoneEntity } from '@modules/CoreFlow/Domain/Entities/Workf
 import { CoreFlowStageCode } from '@modules/CoreFlow/Domain/Enums/CoreFlowStageCode';
 import { CoreFlowStepCode } from '@modules/CoreFlow/Domain/Enums/CoreFlowStepCode';
 import { CoreFlowInstanceStatus } from '@modules/CoreFlow/Domain/Enums/CoreFlowInstanceStatus';
-import { IIntegrationRepository } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
+import {
+  IIntegrationRepository,
+  IntegrationListFilter,
+  ReconciliationItemListFilter,
+  ReconciliationRunListFilter,
+} from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
 import { ImportBatchEntity } from '@modules/Integration/Domain/Entities/ImportBatchEntity';
+import { IntegrationReconciliationItemEntity } from '@modules/Integration/Domain/Entities/IntegrationReconciliationItemEntity';
+import { IntegrationReconciliationRunEntity } from '@modules/Integration/Domain/Entities/IntegrationReconciliationRunEntity';
 import { InterfaceMessageEntity } from '@modules/Integration/Domain/Entities/InterfaceMessageEntity';
 import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/OutboxMessageEntity';
 import { IPackingRepository, PackageAggregate } from '@modules/Outbound/Application/Interfaces/IPackingRepository';
@@ -320,14 +327,21 @@ class MemoryCoreFlowRepository implements ICoreFlowRepository {
 }
 
 class MemoryIntegrationRepository implements IIntegrationRepository {
+  public InterfaceMessages: InterfaceMessageEntity[] = [];
   public Outbox: OutboxMessageEntity[] = [];
+  public ReconciliationRuns: IntegrationReconciliationRunEntity[] = [];
+  public ReconciliationItems: IntegrationReconciliationItemEntity[] = [];
 
-  async FindInterfaceMessageByMessageId(): Promise<InterfaceMessageEntity | null> {
-    return null;
+  async FindInterfaceMessageByMessageId(messageId: string): Promise<InterfaceMessageEntity | null> {
+    return this.InterfaceMessages.find((item) => item.MessageId === messageId) ?? null;
   }
 
   async FindOutboxMessageByMessageId(messageId: string): Promise<OutboxMessageEntity | null> {
     return this.Outbox.find((item) => item.MessageId === messageId) ?? null;
+  }
+
+  async FindOutboxMessageById(id: string): Promise<OutboxMessageEntity | null> {
+    return this.Outbox.find((item) => item.Id === id) ?? null;
   }
 
   async CreateImport(
@@ -339,6 +353,7 @@ class MemoryIntegrationRepository implements IIntegrationRepository {
     InterfaceMessages: InterfaceMessageEntity[];
     OutboxMessages: OutboxMessageEntity[];
   }> {
+    this.InterfaceMessages.push(...interfaceMessages);
     this.Outbox.push(...outboxMessages);
     return { ImportBatch: importBatch, InterfaceMessages: interfaceMessages, OutboxMessages: outboxMessages };
   }
@@ -348,12 +363,138 @@ class MemoryIntegrationRepository implements IIntegrationRepository {
     return outboxMessage;
   }
 
+  async UpdateOutboxMessage(outboxMessage: OutboxMessageEntity): Promise<OutboxMessageEntity> {
+    this.Outbox = this.Outbox.map((item) => (item.Id === outboxMessage.Id ? outboxMessage : item));
+    return outboxMessage;
+  }
+
   async ListImportBatches(): Promise<{ Items: ImportBatchEntity[]; TotalItems: number }> {
     return { Items: [], TotalItems: 0 };
   }
 
-  async ListOutboxMessages(): Promise<{ Items: OutboxMessageEntity[]; TotalItems: number }> {
-    return { Items: this.Outbox, TotalItems: this.Outbox.length };
+  async ListOutboxMessages(
+    skip = 0,
+    take = this.Outbox.length,
+    filter?: IntegrationListFilter,
+  ): Promise<{ Items: OutboxMessageEntity[]; TotalItems: number }> {
+    const items = this.Outbox.filter(
+      (item) =>
+        (!filter?.SourceSystem || item.SourceSystem === filter.SourceSystem) &&
+        (!filter?.Status || item.Status === filter.Status) &&
+        (!filter?.EventType || item.EventType === filter.EventType) &&
+        (!filter?.BusinessReference || item.BusinessReference === filter.BusinessReference) &&
+        (!filter?.WarehouseContext || item.WarehouseContext === filter.WarehouseContext) &&
+        (!filter?.OwnerContext || item.OwnerContext === filter.OwnerContext) &&
+        (!filter?.OwnerContextIsNull || item.OwnerContext === null) &&
+        (!filter?.CreatedFrom || item.CreatedAt >= filter.CreatedFrom) &&
+        (!filter?.CreatedTo || item.CreatedAt <= filter.CreatedTo) &&
+        (!filter?.UpdatedFrom || item.UpdatedAt >= filter.UpdatedFrom) &&
+        (!filter?.UpdatedTo || item.UpdatedAt <= filter.UpdatedTo),
+    );
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+
+  async ListInterfaceMessages(
+    skip = 0,
+    take = this.InterfaceMessages.length,
+    filter?: IntegrationListFilter,
+  ): Promise<{ Items: InterfaceMessageEntity[]; TotalItems: number }> {
+    const items = this.InterfaceMessages.filter(
+      (item) =>
+        (!filter?.SourceSystem || item.SourceSystem === filter.SourceSystem) &&
+        (!filter?.Status || item.MessageStatus === filter.Status) &&
+        (!filter?.BusinessReference || item.BusinessReference === filter.BusinessReference) &&
+        (!filter?.WarehouseContext || item.WarehouseContext === filter.WarehouseContext) &&
+        (!filter?.OwnerContext || item.OwnerContext === filter.OwnerContext) &&
+        (!filter?.OwnerContextIsNull || item.OwnerContext === null) &&
+        (!filter?.CreatedFrom || item.CreatedAt >= filter.CreatedFrom) &&
+        (!filter?.CreatedTo || item.CreatedAt <= filter.CreatedTo),
+    );
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+
+  async FindReconciliationRunById(id: string): Promise<IntegrationReconciliationRunEntity | null> {
+    return this.ReconciliationRuns.find((run) => run.Id === id) ?? null;
+  }
+
+  async FindReconciliationRunByIdempotencyKey(
+    idempotencyKey: string,
+    businessReference: string,
+    warehouseId: string,
+    ownerId?: string | null,
+  ): Promise<IntegrationReconciliationRunEntity | null> {
+    return (
+      this.ReconciliationRuns.find(
+        (run) =>
+          run.IdempotencyKey === idempotencyKey &&
+          run.BusinessReference === businessReference &&
+          run.WarehouseId === warehouseId &&
+          run.OwnerId === (ownerId ?? null),
+      ) ?? null
+    );
+  }
+
+  async CreateReconciliationRun(
+    run: IntegrationReconciliationRunEntity,
+    items: IntegrationReconciliationItemEntity[],
+  ): Promise<{ Run: IntegrationReconciliationRunEntity; Items: IntegrationReconciliationItemEntity[] }> {
+    this.ReconciliationRuns.push(run);
+    this.ReconciliationItems.push(...items);
+    return { Run: run, Items: items };
+  }
+
+  async UpdateReconciliationRun(run: IntegrationReconciliationRunEntity): Promise<IntegrationReconciliationRunEntity> {
+    this.ReconciliationRuns = this.ReconciliationRuns.map((item) => (item.Id === run.Id ? run : item));
+    return run;
+  }
+
+  async ListReconciliationRuns(
+    skip = 0,
+    take = this.ReconciliationRuns.length,
+    filter?: ReconciliationRunListFilter,
+  ): Promise<{ Items: IntegrationReconciliationRunEntity[]; TotalItems: number }> {
+    const items = this.ReconciliationRuns.filter(
+      (run) =>
+        (!filter?.BusinessReference || run.BusinessReference === filter.BusinessReference) &&
+        (!filter?.WarehouseId || run.WarehouseId === filter.WarehouseId) &&
+        (!filter?.OwnerId || run.OwnerId === filter.OwnerId) &&
+        (!filter?.RunStatus || run.RunStatus === filter.RunStatus) &&
+        (!filter?.CreatedFrom || run.CreatedAt >= filter.CreatedFrom) &&
+        (!filter?.CreatedTo || run.CreatedAt <= filter.CreatedTo) &&
+        (!filter?.UpdatedFrom || run.UpdatedAt >= filter.UpdatedFrom) &&
+        (!filter?.UpdatedTo || run.UpdatedAt <= filter.UpdatedTo),
+    );
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+
+  async FindReconciliationItemById(id: string): Promise<IntegrationReconciliationItemEntity | null> {
+    return this.ReconciliationItems.find((item) => item.Id === id) ?? null;
+  }
+
+  async UpdateReconciliationItem(
+    item: IntegrationReconciliationItemEntity,
+  ): Promise<IntegrationReconciliationItemEntity> {
+    this.ReconciliationItems = this.ReconciliationItems.map((existing) => (existing.Id === item.Id ? item : existing));
+    return item;
+  }
+
+  async ListReconciliationItems(
+    skip = 0,
+    take = this.ReconciliationItems.length,
+    filter?: ReconciliationItemListFilter,
+  ): Promise<{ Items: IntegrationReconciliationItemEntity[]; TotalItems: number }> {
+    const items = this.ReconciliationItems.filter(
+      (item) =>
+        (!filter?.RunId || item.RunId === filter.RunId) &&
+        (!filter?.ItemStatus || item.ItemStatus === filter.ItemStatus) &&
+        (!filter?.Severity || item.Severity === filter.Severity) &&
+        (!filter?.MismatchType || item.MismatchType === filter.MismatchType) &&
+        (!filter?.CreatedFrom || item.CreatedAt >= filter.CreatedFrom) &&
+        (!filter?.CreatedTo || item.CreatedAt <= filter.CreatedTo) &&
+        (!filter?.UpdatedFrom || item.UpdatedAt >= filter.UpdatedFrom) &&
+        (!filter?.UpdatedTo || item.UpdatedAt <= filter.UpdatedTo),
+    );
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
   }
 }
 
