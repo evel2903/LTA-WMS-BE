@@ -5,6 +5,7 @@ import { SeedDemoDataCcFlow } from '@shared/Database/Seed/DemoDataCcFlowSeed';
 import { SeedDemoDataCcFoundation } from '@shared/Database/Seed/DemoDataCcFoundationSeed';
 import { SeedDemoDataCcInventory } from '@shared/Database/Seed/DemoDataCcInventorySeed';
 import { SeedDemoDataCcLocationTree } from '@shared/Database/Seed/DemoDataCcLocationTreeSeed';
+import { SeedDemoDataCcScreenCoverage } from '@shared/Database/Seed/DemoDataCcScreenCoverageSeed';
 import {
   AssertDemoDataCcLocalTarget,
   FormatDemoDataCcTargetSummary,
@@ -20,7 +21,16 @@ const Run = async (): Promise<void> => {
     const locationTree = await SeedDemoDataCcLocationTree(dataSource);
     const inventory = await SeedDemoDataCcInventory(dataSource);
     const flow = await SeedDemoDataCcFlow(dataSource);
-    console.log(`[DEMO-DATA-CC] Demo seed complete: ${JSON.stringify({ foundation, locationTree, inventory, flow })}`);
+    const screenCoverage = await SeedDemoDataCcScreenCoverage(dataSource);
+    console.log(
+      `[DEMO-DATA-CC] Demo seed complete: ${JSON.stringify({
+        foundation,
+        locationTree,
+        inventory,
+        flow,
+        screenCoverage,
+      })}`,
+    );
   } finally {
     await dataSource.destroy();
   }
