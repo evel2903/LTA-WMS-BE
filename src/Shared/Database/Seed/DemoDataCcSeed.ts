@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { GetEnv } from '@shared/Config/Env/Env';
 import dataSource from '@shared/Database/TypeOrmDataSource';
 import { SeedDemoDataCcFoundation } from '@shared/Database/Seed/DemoDataCcFoundationSeed';
+import { SeedDemoDataCcInventory } from '@shared/Database/Seed/DemoDataCcInventorySeed';
 import { SeedDemoDataCcLocationTree } from '@shared/Database/Seed/DemoDataCcLocationTreeSeed';
 import {
   AssertDemoDataCcLocalTarget,
@@ -16,7 +17,8 @@ const Run = async (): Promise<void> => {
   try {
     const foundation = await SeedDemoDataCcFoundation(dataSource);
     const locationTree = await SeedDemoDataCcLocationTree(dataSource);
-    console.log(`[DEMO-DATA-CC] Demo seed complete: ${JSON.stringify({ foundation, locationTree })}`);
+    const inventory = await SeedDemoDataCcInventory(dataSource);
+    console.log(`[DEMO-DATA-CC] Demo seed complete: ${JSON.stringify({ foundation, locationTree, inventory })}`);
   } finally {
     await dataSource.destroy();
   }
