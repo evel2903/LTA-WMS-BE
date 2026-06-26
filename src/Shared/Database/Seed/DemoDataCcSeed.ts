@@ -1,17 +1,26 @@
 import 'dotenv/config';
 import { GetEnv } from '@shared/Config/Env/Env';
+import dataSource from '@shared/Database/TypeOrmDataSource';
+import { SeedDemoDataCcFoundation } from '@shared/Database/Seed/DemoDataCcFoundationSeed';
 import {
   AssertDemoDataCcLocalTarget,
   FormatDemoDataCcTargetSummary,
 } from '@shared/Database/Seed/DemoDataCcTargetGuard';
 
-const Run = (): void => {
+const Run = async (): Promise<void> => {
   const target = AssertDemoDataCcLocalTarget(GetEnv(), 'process.env + .env');
 
   console.log(`[DEMO-DATA-CC] Target verified: ${FormatDemoDataCcTargetSummary(target)}`);
-  console.log(
-    '[DEMO-DATA-CC] DEMO-DATA-00 only locks the seed command contract. Coca-Cola demo data is not seeded yet.',
-  );
+  await dataSource.initialize();
+  try {
+    const result = await SeedDemoDataCcFoundation(dataSource);
+    console.log(`[DEMO-DATA-CC] Foundation seed complete: ${JSON.stringify(result)}`);
+  } finally {
+    await dataSource.destroy();
+  }
 };
 
-Run();
+Run().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
