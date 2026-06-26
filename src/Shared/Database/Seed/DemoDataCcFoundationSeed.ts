@@ -11,7 +11,8 @@ import { WarehouseProfileAssignmentOrmEntity } from '@modules/WarehouseProfile/I
 import { ScopeKeyService } from '@modules/WarehouseProfile/Application/Services/ScopeKeyService';
 
 const DemoSourceSystem = 'DEMO-DATA-CC';
-const ActiveStatus = 'ACTIVE';
+const MasterDataActiveStatus = 'Active';
+const WarehouseProfileActiveStatus = 'ACTIVE';
 const WarehouseTypeCode = 'WT-01';
 
 export type DemoDataCcFoundationSeedResult = {
@@ -52,7 +53,7 @@ export const SeedDemoDataCcFoundation = async (dataSource: DataSource): Promise<
   }
   site.SiteCode = 'CC-SOUTH';
   site.SiteName = 'Site Miền Nam';
-  site.Status = ActiveStatus;
+  site.Status = MasterDataActiveStatus;
   site.SourceSystem = DemoSourceSystem;
   site.ReferenceId = 'CC-SOUTH';
   await sites.save(TouchAudit(site, actorId));
@@ -66,7 +67,7 @@ export const SeedDemoDataCcFoundation = async (dataSource: DataSource): Promise<
   warehouse.WarehouseCode = 'CC-HCM-01';
   warehouse.WarehouseName = 'Kho Coca-Cola HCM';
   warehouse.WarehouseTypeCode = WarehouseTypeCode;
-  warehouse.Status = ActiveStatus;
+  warehouse.Status = MasterDataActiveStatus;
   warehouse.Timezone = 'Asia/Ho_Chi_Minh';
   warehouse.SourceSystem = DemoSourceSystem;
   warehouse.ReferenceId = 'CC-HCM-01';
@@ -79,7 +80,7 @@ export const SeedDemoDataCcFoundation = async (dataSource: DataSource): Promise<
   }
   owner.OwnerCode = 'CCVN';
   owner.OwnerName = 'Coca-Cola Việt Nam';
-  owner.Status = ActiveStatus;
+  owner.Status = MasterDataActiveStatus;
   owner.BillingPolicy = { demo: true, currency: 'VND' };
   owner.VisibilityScope = { siteCode: site.SiteCode, warehouseCode: warehouse.WarehouseCode };
   owner.SourceSystem = DemoSourceSystem;
@@ -119,7 +120,7 @@ export const SeedDemoDataCcFoundation = async (dataSource: DataSource): Promise<
     partner.PartnerCode = input.PartnerCode;
     partner.PartnerName = input.PartnerName;
     partner.PartnerType = input.PartnerType;
-    partner.Status = ActiveStatus;
+    partner.Status = MasterDataActiveStatus;
     partner.SourceSystem = DemoSourceSystem;
     partner.ExternalReference = input.ExternalReference;
     partner.ReferenceText = input.ReferenceText;
@@ -140,7 +141,7 @@ export const SeedDemoDataCcFoundation = async (dataSource: DataSource): Promise<
   profile.ProfileName = 'Cấu hình demo Kho Coca-Cola HCM';
   profile.WarehouseTypeCode = WarehouseTypeCode;
   profile.Version = 1;
-  profile.Status = ActiveStatus;
+  profile.Status = WarehouseProfileActiveStatus;
   profile.WarehouseId = warehouse.Id;
   profile.ZoneId = null;
   profile.LocationType = null;

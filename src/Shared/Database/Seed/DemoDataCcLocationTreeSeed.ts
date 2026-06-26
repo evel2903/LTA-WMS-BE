@@ -7,8 +7,8 @@ import { WarehouseOrmEntity } from '@modules/MasterData/Infrastructure/Persisten
 import { ZoneOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ZoneOrmEntity';
 
 const DemoSourceSystem = 'DEMO-DATA-CC';
-const ActiveStatus = 'ACTIVE';
-const EnabledLocationStatus = 'ENABLED';
+const ActiveStatus = 'Active';
+const EnabledLocationStatus = 'Active';
 
 type LocationProfileSeed = {
   ProfileCode: string;
