@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { GetEnv } from '@shared/Config/Env/Env';
 import dataSource from '@shared/Database/TypeOrmDataSource';
+import { SeedDemoDataCcFlow } from '@shared/Database/Seed/DemoDataCcFlowSeed';
 import { SeedDemoDataCcFoundation } from '@shared/Database/Seed/DemoDataCcFoundationSeed';
 import { SeedDemoDataCcInventory } from '@shared/Database/Seed/DemoDataCcInventorySeed';
 import { SeedDemoDataCcLocationTree } from '@shared/Database/Seed/DemoDataCcLocationTreeSeed';
@@ -18,7 +19,8 @@ const Run = async (): Promise<void> => {
     const foundation = await SeedDemoDataCcFoundation(dataSource);
     const locationTree = await SeedDemoDataCcLocationTree(dataSource);
     const inventory = await SeedDemoDataCcInventory(dataSource);
-    console.log(`[DEMO-DATA-CC] Demo seed complete: ${JSON.stringify({ foundation, locationTree, inventory })}`);
+    const flow = await SeedDemoDataCcFlow(dataSource);
+    console.log(`[DEMO-DATA-CC] Demo seed complete: ${JSON.stringify({ foundation, locationTree, inventory, flow })}`);
   } finally {
     await dataSource.destroy();
   }
