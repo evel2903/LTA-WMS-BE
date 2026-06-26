@@ -22,7 +22,10 @@
     "migration:run": "typeorm-ts-node-commonjs -d src/Shared/Database/TypeOrmDataSource.ts migration:run",
     "migration:revert": "typeorm-ts-node-commonjs -d src/Shared/Database/TypeOrmDataSource.ts migration:revert",
     "seed:run": "ts-node src/Shared/Database/Seed/Seed.ts",
-    "db:prepare": "yarn migration:run && yarn seed:run"
+    "db:prepare": "yarn migration:run && yarn seed:run",
+    "demo-data:reset": "ts-node src/Shared/Database/Seed/DemoDataCcReset.ts",
+    "demo-data:seed": "ts-node src/Shared/Database/Seed/DemoDataCcSeed.ts",
+    "demo-data:prepare": "yarn migration:run && yarn demo-data:reset && yarn seed:run && yarn demo-data:seed"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",
