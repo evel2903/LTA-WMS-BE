@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, In, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import { IUomRepository, UomListFilter } from '@modules/MasterData/Application/Interfaces/IUomRepository';
 import { UomEntity } from '@modules/MasterData/Domain/Entities/UomEntity';
@@ -22,6 +22,12 @@ export class UomRepository implements IUomRepository {
   public async FindByCode(uomCode: string): Promise<UomEntity | null> {
     const entity = await this.uoms.findOne({ where: { UomCode: uomCode } });
     return entity ? UomOrmMapper.ToDomain(entity) : null;
+  }
+
+  public async FindByCodes(uomCodes: string[]): Promise<UomEntity[]> {
+    if (uomCodes.length === 0) return [];
+    const entities = await this.uoms.find({ where: { UomCode: In(uomCodes) } });
+    return entities.map(UomOrmMapper.ToDomain);
   }
 
   public async Create(uom: UomEntity, manager?: EntityManager): Promise<UomEntity> {

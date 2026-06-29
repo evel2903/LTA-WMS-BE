@@ -38,6 +38,16 @@ import { IWarehouseProfileRepository } from '@modules/WarehouseProfile/Applicati
 import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileEntity';
 import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/WarehouseProfileStatus';
 
+/**
+ * Một dòng đã resolve SKU/UOM (cả Id lẫn Code). Dùng cho cả luồng tạo JSON (resolve theo Id,
+ * per-line) lẫn luồng import Excel (resolve theo Code, batch — qua ExecuteWithResolvedLines).
+ */
+export interface ResolvedInboundLine {
+  Request: CreateInboundPlanLineDto;
+  SkuCode: string;
+  UomCode: string;
+}
+
 export class CreateInboundPlanUseCase {
   constructor(
     private readonly inboundPlans: IInboundPlanRepository,
@@ -58,6 +68,32 @@ export class CreateInboundPlanUseCase {
   ): Promise<InboundPlanDto> {
     this.AssertRequest(request);
 
+    const duplicate = await this.FindDuplicate(request, context);
+    if (duplicate) return duplicate;
+
+    const lineRefs = await this.ResolveLinesById(request.Lines);
+    return this.PersistPlan(request, lineRefs, context);
+  }
+
+  /**
+   * Tạo plan với các dòng đã resolve sẵn (SkuId/UomId/SkuCode/UomCode). Dùng cho luồng import
+   * Excel server-side: phần validate dòng đã batch ở use-case import nên KHÔNG resolve per-line
+   * lại (tránh N+1). Giữ duplicate-check + validate header + persist atomic như Execute.
+   */
+  public async ExecuteWithResolvedLines(
+    request: CreateInboundPlanDto,
+    lineRefs: ResolvedInboundLine[],
+    context: AuditContext = SystemAuditContext,
+  ): Promise<InboundPlanDto> {
+    this.AssertRequest(request);
+
+    const duplicate = await this.FindDuplicate(request, context);
+    if (duplicate) return duplicate;
+
+    return this.PersistPlan(request, lineRefs, context);
+  }
+
+  private async FindDuplicate(request: CreateInboundPlanDto, context: AuditContext): Promise<InboundPlanDto | null> {
     const existing = await this.inboundPlans.FindByBusinessKey(
       request.SourceSystem,
       request.SourceDocumentType,
@@ -65,10 +101,30 @@ export class CreateInboundPlanUseCase {
       request.OwnerId,
       request.WarehouseId,
     );
-    if (existing) {
-      return this.ReturnDuplicate(existing, context);
-    }
+    return existing ? this.ReturnDuplicate(existing, context) : null;
+  }
 
+  private async ResolveLinesById(lines: CreateInboundPlanLineDto[]): Promise<ResolvedInboundLine[]> {
+    const lineRefs: ResolvedInboundLine[] = [];
+    for (const line of lines) {
+      const sku = await this.skus.FindById(line.SkuId);
+      if (!sku || sku.ItemStatus !== SkuStatus.Active) {
+        throw new BusinessRuleException(`SKU not found or inactive at line ${line.LineNumber}`);
+      }
+      const uom = await this.uoms.FindById(line.UomId);
+      if (!uom || uom.Status !== MasterDataStatus.Active) {
+        throw new BusinessRuleException(`UOM not found or inactive at line ${line.LineNumber}`);
+      }
+      lineRefs.push({ Request: line, SkuCode: sku.SkuCode, UomCode: uom.UomCode });
+    }
+    return lineRefs;
+  }
+
+  private async PersistPlan(
+    request: CreateInboundPlanDto,
+    lineRefs: ResolvedInboundLine[],
+    context: AuditContext,
+  ): Promise<InboundPlanDto> {
     const supplier = await this.partners.FindById(request.SupplierId);
     if (!supplier || supplier.PartnerType !== PartnerType.Supplier || supplier.Status !== PartnerStatus.Active) {
       throw new BusinessRuleException('Supplier not found or inactive');
@@ -88,19 +144,6 @@ export class CreateInboundPlanUseCase {
     if (request.WarehouseProfileId) {
       const profile = await this.profiles.FindById(request.WarehouseProfileId);
       this.AssertWarehouseProfile(profile, request.OwnerId, request.WarehouseId, now);
-    }
-
-    const lineRefs: Array<{ Request: CreateInboundPlanLineDto; SkuCode: string; UomCode: string }> = [];
-    for (const line of request.Lines) {
-      const sku = await this.skus.FindById(line.SkuId);
-      if (!sku || sku.ItemStatus !== SkuStatus.Active) {
-        throw new BusinessRuleException(`SKU not found or inactive at line ${line.LineNumber}`);
-      }
-      const uom = await this.uoms.FindById(line.UomId);
-      if (!uom || uom.Status !== MasterDataStatus.Active) {
-        throw new BusinessRuleException(`UOM not found or inactive at line ${line.LineNumber}`);
-      }
-      lineRefs.push({ Request: line, SkuCode: sku.SkuCode, UomCode: uom.UomCode });
     }
 
     const planId = randomUUID();

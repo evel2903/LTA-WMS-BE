@@ -3,6 +3,8 @@ import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
+import { GlobalExceptionFilter } from '@common/Filters/GlobalExceptionFilter';
+import { LoggingService } from '@common/Logging/LoggingService';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { REQUIRE_PERMISSION_KEY } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
@@ -10,6 +12,7 @@ import { CaptureInboundDiscrepancyUseCase } from '@modules/Inbound/Application/U
 import { ConfirmInboundLpnUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundLpnUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
+import { ImportInboundPlanLinesUseCase } from '@modules/Inbound/Application/UseCases/ImportInboundPlanLinesUseCase';
 import { EvaluateQcTaskUseCase } from '@modules/Inbound/Application/UseCases/EvaluateQcTaskUseCase';
 import { GetInboundOperationalStateUseCase } from '@modules/Inbound/Application/UseCases/GetInboundOperationalStateUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
@@ -28,6 +31,9 @@ describe('E2E InboundPlanController (no DB)', () => {
   let app: INestApplication;
 
   const createExecute = jest.fn();
+  const importTemplateExecute = jest.fn();
+  const importPreviewExecute = jest.fn();
+  const importCommitExecute = jest.fn();
   const getExecute = jest.fn();
   const operationalStateExecute = jest.fn();
   const listExecute = jest.fn();
@@ -47,6 +53,14 @@ describe('E2E InboundPlanController (no DB)', () => {
       providers: [
         Reflector,
         { provide: CreateInboundPlanUseCase, useValue: { Execute: createExecute } },
+        {
+          provide: ImportInboundPlanLinesUseCase,
+          useValue: {
+            BuildTemplate: importTemplateExecute,
+            Preview: importPreviewExecute,
+            Commit: importCommitExecute,
+          },
+        },
         { provide: GetInboundPlanUseCase, useValue: { Execute: getExecute } },
         { provide: GetInboundOperationalStateUseCase, useValue: { Execute: operationalStateExecute } },
         { provide: ListInboundPlansUseCase, useValue: { Execute: listExecute } },
@@ -67,6 +81,8 @@ describe('E2E InboundPlanController (no DB)', () => {
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     app.useGlobalInterceptors(new ResponseInterceptor());
+    // Map AppException (vd BusinessRuleException 400) đúng status như production; stub logger.
+    app.useGlobalFilters(new GlobalExceptionFilter({ LogError: () => undefined } as unknown as LoggingService));
     await app.init();
   });
 
@@ -76,6 +92,9 @@ describe('E2E InboundPlanController (no DB)', () => {
 
   beforeEach(() => {
     createExecute.mockReset();
+    importTemplateExecute.mockReset();
+    importPreviewExecute.mockReset();
+    importCommitExecute.mockReset();
     getExecute.mockReset();
     operationalStateExecute.mockReset();
     listExecute.mockReset();
@@ -151,6 +170,55 @@ describe('E2E InboundPlanController (no DB)', () => {
       Action: ActionCode.Update,
       ObjectType: ObjectType.QcTask,
     });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, InboundPlanController.prototype.ImportLines)).toMatchObject({
+      Action: ActionCode.Create,
+      ObjectType: ObjectType.InboundPlan,
+    });
+    expect(
+      Reflect.getMetadata(REQUIRE_PERMISSION_KEY, InboundPlanController.prototype.LineImportTemplate),
+    ).toMatchObject({
+      Action: ActionCode.Read,
+      ObjectType: ObjectType.InboundPlan,
+    });
+  });
+
+  it('GET /inbound-plans/line-import-template streams an .xlsx attachment without the success envelope', async () => {
+    importTemplateExecute.mockResolvedValue(Buffer.from('PK-fake-xlsx-bytes'));
+
+    const response = await request(app.getHttpServer()).get('/inbound-plans/line-import-template').expect(200);
+
+    expect(importTemplateExecute).toHaveBeenCalled();
+    expect(response.headers['content-type']).toContain('spreadsheetml.sheet');
+    expect(response.headers['content-disposition']).toContain('inbound-line-template.xlsx');
+    expect(response.body).not.toHaveProperty('Success');
+  });
+
+  it('POST /inbound-plans/import?preview=true calls Preview without creating a plan', async () => {
+    importPreviewExecute.mockResolvedValue({
+      FileName: 'lines.xlsx',
+      Rows: [],
+      Summary: { Total: 0, Valid: 0, Invalid: 0 },
+      HeaderError: 'File không có dòng dữ liệu nào.',
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/inbound-plans/import?Preview=true&WarehouseId=warehouse-1&OwnerId=owner-1')
+      .attach('file', Buffer.from('fake-xlsx'), 'lines.xlsx')
+      .expect(201);
+
+    expect(importPreviewExecute).toHaveBeenCalled();
+    expect(importCommitExecute).not.toHaveBeenCalled();
+    expect(response.body.Success).toBe(true);
+  });
+
+  it('POST /inbound-plans/import rejects a non-xlsx file before any use case', async () => {
+    await request(app.getHttpServer())
+      .post('/inbound-plans/import?WarehouseId=warehouse-1&OwnerId=owner-1')
+      .attach('file', Buffer.from('plain text'), 'lines.txt')
+      .expect(400);
+
+    expect(importPreviewExecute).not.toHaveBeenCalled();
+    expect(importCommitExecute).not.toHaveBeenCalled();
   });
 
   it('POST /inbound-plans validates source document required fields and non-whitelisted fields', async () => {

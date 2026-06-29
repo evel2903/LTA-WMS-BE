@@ -30,7 +30,17 @@ import {
 import { IntegrationModule } from '@modules/Integration/IntegrationModule';
 import { BarcodeLabelModule } from '@modules/BarcodeLabel/BarcodeLabelModule';
 import { ValidateLabelBlockingUseCase } from '@modules/BarcodeLabel/Application/UseCases/ValidateLabelBlockingUseCase';
+import { SpreadsheetModule } from '@modules/Spreadsheet/SpreadsheetModule';
+import {
+  ISpreadsheetService,
+  SPREADSHEET_SERVICE,
+} from '@modules/Spreadsheet/Application/Interfaces/ISpreadsheetService';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
+import { ImportInboundPlanLinesUseCase } from '@modules/Inbound/Application/UseCases/ImportInboundPlanLinesUseCase';
+import {
+  ISkuCodeBatchLookup,
+  IUomCodeBatchLookup,
+} from '@modules/Inbound/Application/Interfaces/IMasterDataCodeLookup';
 import { CaptureInboundDiscrepancyUseCase } from '@modules/Inbound/Application/UseCases/CaptureInboundDiscrepancyUseCase';
 import { ConfirmInboundLpnUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundLpnUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
@@ -106,6 +116,7 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
     IntegrationModule,
     BarcodeLabelModule,
     WarehouseProfileModule,
+    SpreadsheetModule,
   ],
   controllers: [InboundPlanController, ReceiptController, QcTaskController],
   providers: [
@@ -149,6 +160,16 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
         WAREHOUSE_PROFILE_REPOSITORY,
         AuditedTransaction,
       ],
+    },
+    {
+      provide: ImportInboundPlanLinesUseCase,
+      useFactory: (
+        spreadsheet: ISpreadsheetService,
+        skus: ISkuCodeBatchLookup,
+        uoms: IUomCodeBatchLookup,
+        createInboundPlan: CreateInboundPlanUseCase,
+      ) => new ImportInboundPlanLinesUseCase(spreadsheet, skus, uoms, createInboundPlan),
+      inject: [SPREADSHEET_SERVICE, SKU_REPOSITORY, UOM_REPOSITORY, CreateInboundPlanUseCase],
     },
     {
       provide: GetInboundPlanUseCase,

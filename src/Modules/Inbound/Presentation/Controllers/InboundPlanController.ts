@@ -1,4 +1,18 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Res,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
+import { BusinessRuleException } from '@common/Exceptions/AppException';
 import { AuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
@@ -7,6 +21,7 @@ import { RequirePermission } from '@modules/AccessControl/Presentation/Decorator
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
+import { ImportInboundPlanLinesUseCase } from '@modules/Inbound/Application/UseCases/ImportInboundPlanLinesUseCase';
 import { GetInboundOperationalStateUseCase } from '@modules/Inbound/Application/UseCases/GetInboundOperationalStateUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
@@ -14,6 +29,7 @@ import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/Recor
 import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCases/StartReceivingSessionUseCase';
 import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
 import { CreateInboundPlanRequest } from '@modules/Inbound/Presentation/Requests/CreateInboundPlanRequest';
+import { ImportInboundPlanLinesQuery } from '@modules/Inbound/Presentation/Requests/ImportInboundPlanLinesQuery';
 import { ListInboundPlansQuery } from '@modules/Inbound/Presentation/Requests/ListInboundPlansQuery';
 import { RecordGateInRequest } from '@modules/Inbound/Presentation/Requests/RecordGateInRequest';
 import { StartReceivingSessionRequest } from '@modules/Inbound/Presentation/Requests/StartReceivingSessionRequest';
@@ -30,6 +46,7 @@ export class InboundPlanController {
     private readonly recordGateInUseCase: RecordGateInUseCase,
     private readonly validateReceivingReadinessUseCase: ValidateReceivingReadinessUseCase,
     private readonly startReceivingSessionUseCase: StartReceivingSessionUseCase,
+    private readonly importInboundPlanLinesUseCase: ImportInboundPlanLinesUseCase,
   ) {}
 
   @Post()
@@ -39,6 +56,61 @@ export class InboundPlanController {
   })
   public async Create(@Body() request: CreateInboundPlanRequest, @CurrentAuditContext() context: AuditContext) {
     return await this.createInboundPlanUseCase.Execute(request, context);
+  }
+
+  // Tải file .xlsx mẫu để điền dòng hàng. Khai báo TRƯỚC @Get(':id') để không bị bắt nhầm là :id.
+  // Trả nhị phân qua @Res (bypass ResponseInterceptor — không bọc envelope { Success, Data }).
+  @Get('line-import-template')
+  @RequirePermission(ActionCode.Read, ObjectType.InboundPlan)
+  public async LineImportTemplate(@Res() res: Response): Promise<void> {
+    const buffer = await this.importInboundPlanLinesUseCase.BuildTemplate();
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="inbound-line-template.xlsx"',
+      'Content-Length': String(buffer.length),
+    });
+    res.send(buffer);
+  }
+
+  // Import dòng từ file Excel (multipart 'file'). Scope WarehouseId/OwnerId qua QUERY vì guard
+  // chạy TRƯỚC FileInterceptor (req.body multipart rỗng khi PermissionGuard đọc scope).
+  // preview=true → chỉ validate (per-row errors), không tạo. Ngược lại → tạo plan atomic.
+  @Post('import')
+  @RequirePermission(ActionCode.Create, ObjectType.InboundPlan, {
+    WarehouseId: { In: 'query', Key: 'WarehouseId' },
+    OwnerId: { In: 'query', Key: 'OwnerId' },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  public async ImportLines(
+    @UploadedFile() file: Express.Multer.File,
+    @Query() query: ImportInboundPlanLinesQuery,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    if (!file) {
+      throw new BusinessRuleException('Thiếu file Excel để import.');
+    }
+    const fileName = file.originalname ?? 'import.xlsx';
+    if (!fileName.toLowerCase().endsWith('.xlsx')) {
+      throw new BusinessRuleException('Chỉ hỗ trợ file Excel (.xlsx).');
+    }
+    if (query.Preview === 'true') {
+      return await this.importInboundPlanLinesUseCase.Preview(file.buffer, fileName);
+    }
+    return await this.importInboundPlanLinesUseCase.Commit(
+      file.buffer,
+      fileName,
+      {
+        SourceSystem: query.SourceSystem ?? '',
+        SourceDocumentType: query.SourceDocumentType,
+        SourceDocumentNumber: query.SourceDocumentNumber ?? '',
+        SupplierId: query.SupplierId ?? '',
+        OwnerId: query.OwnerId ?? '',
+        WarehouseId: query.WarehouseId ?? '',
+        WarehouseProfileId: query.WarehouseProfileId ?? null,
+        ExpectedArrivalAt: query.ExpectedArrivalAt ?? null,
+      },
+      context,
+    );
   }
 
   @Get()
