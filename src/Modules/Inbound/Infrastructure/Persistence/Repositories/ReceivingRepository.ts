@@ -299,6 +299,39 @@ export class ReceivingRepository implements IReceivingRepository {
     return entity ? ReceivingOrmMapper.ToQcResultDomain(entity) : null;
   }
 
+  public async ListReceivingSessionsByInboundPlanId(inboundPlanId: string): Promise<ReceivingSessionEntity[]> {
+    const entities = await this.sessions.find({
+      where: { InboundPlanId: inboundPlanId },
+      order: { CreatedAt: 'ASC' },
+    });
+    return entities.map(ReceivingOrmMapper.ToSessionDomain);
+  }
+
+  public async ListReceiptLinesByReceiptId(receiptId: string): Promise<ReceiptLineEntity[]> {
+    const entities = await this.lines.find({ where: { ReceiptId: receiptId }, order: { LineNumber: 'ASC' } });
+    return entities.map(ReceivingOrmMapper.ToLineDomain);
+  }
+
+  public async ListQcTasksByReceiptId(receiptId: string): Promise<QcTaskEntity[]> {
+    const entities = await this.qcTasks.find({ where: { ReceiptId: receiptId }, order: { CreatedAt: 'ASC' } });
+    return entities.map(ReceivingOrmMapper.ToQcTaskDomain);
+  }
+
+  public async ListQcResultsByReceiptId(receiptId: string): Promise<QcResultEntity[]> {
+    const entities = await this.qcResults.find({ where: { ReceiptId: receiptId }, order: { RecordedAt: 'ASC' } });
+    return entities.map(ReceivingOrmMapper.ToQcResultDomain);
+  }
+
+  public async ListInboundLpnsByReceiptId(receiptId: string): Promise<InboundLpnEntity[]> {
+    const entities = await this.lpns.find({ where: { ReceiptId: receiptId }, order: { CreatedAt: 'ASC' } });
+    return entities.map(ReceivingOrmMapper.ToInboundLpnDomain);
+  }
+
+  public async ListInboundPutawayReleasesByReceiptId(receiptId: string): Promise<InboundPutawayReleaseEntity[]> {
+    const entities = await this.putawayReleases.find({ where: { ReceiptId: receiptId }, order: { CreatedAt: 'ASC' } });
+    return entities.map(ReceivingOrmMapper.ToInboundPutawayReleaseDomain);
+  }
+
   private HandleUniqueViolation(error: unknown, message: string): void {
     if ((error as { code?: string }).code === '23505') {
       throw new ConflictException(message);

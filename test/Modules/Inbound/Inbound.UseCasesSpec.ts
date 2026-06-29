@@ -20,6 +20,7 @@ import { IReceivingRepository } from '@modules/Inbound/Application/Interfaces/IR
 import { CaptureInboundDiscrepancyUseCase } from '@modules/Inbound/Application/UseCases/CaptureInboundDiscrepancyUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
+import { GetInboundOperationalStateUseCase } from '@modules/Inbound/Application/UseCases/GetInboundOperationalStateUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
@@ -388,6 +389,30 @@ class FakeReceivingRepository implements IReceivingRepository {
         .filter((item) => item.ReceiptLineId === receiptLineId)
         .sort((a, b) => b.RecordedAt.getTime() - a.RecordedAt.getTime())[0] ?? null
     );
+  }
+
+  public async ListReceivingSessionsByInboundPlanId(inboundPlanId: string): Promise<ReceivingSessionEntity[]> {
+    return this.Sessions.filter((item) => item.InboundPlanId === inboundPlanId);
+  }
+
+  public async ListReceiptLinesByReceiptId(receiptId: string): Promise<ReceiptLineEntity[]> {
+    return this.Lines.filter((item) => item.ReceiptId === receiptId);
+  }
+
+  public async ListQcTasksByReceiptId(receiptId: string): Promise<QcTaskEntity[]> {
+    return this.QcTasks.filter((item) => item.ReceiptId === receiptId);
+  }
+
+  public async ListQcResultsByReceiptId(receiptId: string): Promise<QcResultEntity[]> {
+    return this.QcResults.filter((item) => item.ReceiptId === receiptId);
+  }
+
+  public async ListInboundLpnsByReceiptId(receiptId: string): Promise<InboundLpnEntity[]> {
+    return this.Lpns.filter((item) => item.ReceiptId === receiptId);
+  }
+
+  public async ListInboundPutawayReleasesByReceiptId(receiptId: string): Promise<InboundPutawayReleaseEntity[]> {
+    return this.PutawayReleases.filter((item) => item.ReceiptId === receiptId);
   }
 }
 
@@ -2158,5 +2183,102 @@ describe('Inbound plan use cases', () => {
         (item) => (item as { EventType?: string }).EventType === 'InboundReleasedToPutaway',
       ),
     ).toHaveLength(0);
+  });
+});
+
+describe('GetInboundOperationalStateUseCase (IRM-01)', () => {
+  const operationalStateUseCase = (bundle: ReturnType<typeof repoBundle>) =>
+    new GetInboundOperationalStateUseCase(bundle.inbound, bundle.receiving, bundle.permissionChecker);
+
+  it('throws when the inbound plan does not exist', async () => {
+    const bundle = repoBundle();
+    await expect(operationalStateUseCase(bundle).Execute('missing-plan', 'user-1')).rejects.toThrow();
+  });
+
+  it('denies the read when the actor lacks permission', async () => {
+    const bundle = repoBundle();
+    const created = (await createUseCase(bundle).Execute(createRequest(), SystemAuditContext)) as InboundPlanDto;
+    bundle.permissionChecker.Check.mockResolvedValue({ Allowed: false } as never);
+    await expect(operationalStateUseCase(bundle).Execute(created.Id, 'user-1')).rejects.toThrow();
+  });
+
+  it('returns an empty aggregate when receiving has not started', async () => {
+    const bundle = repoBundle();
+    const created = (await createUseCase(bundle).Execute(createRequest(), SystemAuditContext)) as InboundPlanDto;
+    const state = await operationalStateUseCase(bundle).Execute(created.Id, 'user-1');
+    expect(state).toMatchObject({
+      InboundPlanId: created.Id,
+      ReceivingSessions: [],
+      ReceiptLines: [],
+      QcTasks: [],
+      QcResults: [],
+      Lpns: [],
+      Releases: [],
+    });
+  });
+
+  it('aggregates persisted operational progress keyed by inbound plan', async () => {
+    const bundle = repoBundle();
+    const created = (await createUseCase(bundle).Execute(createRequest(), SystemAuditContext)) as InboundPlanDto;
+    const planId = created.Id;
+    const receiptId = 'receipt-1';
+    bundle.receiving.Receipts.push({
+      Id: receiptId,
+      InboundPlanId: planId,
+      ReceiptNumber: 'RC-1',
+    } as unknown as ReceiptEntity);
+    bundle.receiving.Sessions.push({
+      Id: 'session-1',
+      InboundPlanId: planId,
+      ReceiptId: receiptId,
+      StartedAt: new Date(),
+    } as unknown as ReceivingSessionEntity);
+    bundle.receiving.Lines.push({
+      Id: 'line-1',
+      ReceiptId: receiptId,
+      InboundPlanId: planId,
+      InboundPlanLineId: 'plan-line-1',
+      Status: 'Received',
+      ActualQuantity: 5,
+      DiscrepancySignals: [],
+    } as unknown as ReceiptLineEntity);
+    bundle.receiving.QcTasks.push({
+      Id: 'qc-task-1',
+      ReceiptId: receiptId,
+      ReceiptLineId: 'line-1',
+      InboundPlanLineId: 'plan-line-1',
+      TaskStatus: 'Dispositioned',
+      Required: true,
+    } as unknown as QcTaskEntity);
+    bundle.receiving.QcResults.push({
+      Id: 'qc-result-1',
+      QcTaskId: 'qc-task-1',
+      ReceiptId: receiptId,
+      ReceiptLineId: 'line-1',
+    } as unknown as QcResultEntity);
+    bundle.receiving.Lpns.push({
+      Id: 'lpn-1',
+      ReceiptId: receiptId,
+      ReceiptLineId: 'line-1',
+      LpnCode: 'LPN-1',
+    } as unknown as InboundLpnEntity);
+    bundle.receiving.PutawayReleases.push({
+      Id: 'release-1',
+      ReceiptId: receiptId,
+      ReceiptLineId: 'line-1',
+      InventoryStatusCode: 'AVAILABLE',
+    } as unknown as InboundPutawayReleaseEntity);
+
+    const state = await operationalStateUseCase(bundle).Execute(planId, 'user-1');
+
+    expect(state.InboundPlanId).toBe(planId);
+    expect(state.ReceivingSessions).toHaveLength(1);
+    expect(state.ReceiptLines).toHaveLength(1);
+    expect(state.ReceiptLines[0].Id).toBe('line-1');
+    expect(state.QcTasks).toHaveLength(1);
+    expect(state.QcResults).toHaveLength(1);
+    expect(state.QcResults[0].TaskStatus).toBe('Dispositioned');
+    expect(state.Lpns[0].LpnCode).toBe('LPN-1');
+    expect(state.Releases[0].InventoryStatusCode).toBe('AVAILABLE');
   });
 });

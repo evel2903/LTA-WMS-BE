@@ -71,4 +71,11 @@ export interface IReceivingRepository {
   CreateQcResult(result: QcResultEntity, manager?: EntityManager): Promise<QcResultEntity>;
   FindQcResultByIdempotencyKey(qcTaskId: string, idempotencyKey: string): Promise<QcResultEntity | null>;
   FindLatestQcResultByReceiptLineId(receiptLineId: string): Promise<QcResultEntity | null>;
+  // Read-only finders for the operational-state aggregate (IRM-01).
+  ListReceivingSessionsByInboundPlanId(inboundPlanId: string): Promise<ReceivingSessionEntity[]>;
+  ListReceiptLinesByReceiptId(receiptId: string): Promise<ReceiptLineEntity[]>;
+  ListQcTasksByReceiptId(receiptId: string): Promise<QcTaskEntity[]>;
+  ListQcResultsByReceiptId(receiptId: string): Promise<QcResultEntity[]>;
+  ListInboundLpnsByReceiptId(receiptId: string): Promise<InboundLpnEntity[]>;
+  ListInboundPutawayReleasesByReceiptId(receiptId: string): Promise<InboundPutawayReleaseEntity[]>;
 }

@@ -11,6 +11,7 @@ import { ConfirmInboundLpnUseCase } from '@modules/Inbound/Application/UseCases/
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
 import { EvaluateQcTaskUseCase } from '@modules/Inbound/Application/UseCases/EvaluateQcTaskUseCase';
+import { GetInboundOperationalStateUseCase } from '@modules/Inbound/Application/UseCases/GetInboundOperationalStateUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
@@ -28,6 +29,7 @@ describe('E2E InboundPlanController (no DB)', () => {
 
   const createExecute = jest.fn();
   const getExecute = jest.fn();
+  const operationalStateExecute = jest.fn();
   const listExecute = jest.fn();
   const gateInExecute = jest.fn();
   const readinessExecute = jest.fn();
@@ -46,6 +48,7 @@ describe('E2E InboundPlanController (no DB)', () => {
         Reflector,
         { provide: CreateInboundPlanUseCase, useValue: { Execute: createExecute } },
         { provide: GetInboundPlanUseCase, useValue: { Execute: getExecute } },
+        { provide: GetInboundOperationalStateUseCase, useValue: { Execute: operationalStateExecute } },
         { provide: ListInboundPlansUseCase, useValue: { Execute: listExecute } },
         { provide: RecordGateInUseCase, useValue: { Execute: gateInExecute } },
         { provide: ValidateReceivingReadinessUseCase, useValue: { Execute: readinessExecute } },
@@ -74,6 +77,7 @@ describe('E2E InboundPlanController (no DB)', () => {
   beforeEach(() => {
     createExecute.mockReset();
     getExecute.mockReset();
+    operationalStateExecute.mockReset();
     listExecute.mockReset();
     gateInExecute.mockReset();
     readinessExecute.mockReset();
@@ -96,6 +100,12 @@ describe('E2E InboundPlanController (no DB)', () => {
       ObjectType: ObjectType.InboundPlan,
     });
     expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, InboundPlanController.prototype.GetById)).toMatchObject({
+      Action: ActionCode.Read,
+      ObjectType: ObjectType.InboundPlan,
+    });
+    expect(
+      Reflect.getMetadata(REQUIRE_PERMISSION_KEY, InboundPlanController.prototype.GetOperationalState),
+    ).toMatchObject({
       Action: ActionCode.Read,
       ObjectType: ObjectType.InboundPlan,
     });

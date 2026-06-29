@@ -35,6 +35,7 @@ import { CaptureInboundDiscrepancyUseCase } from '@modules/Inbound/Application/U
 import { ConfirmInboundLpnUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundLpnUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { EvaluateQcTaskUseCase } from '@modules/Inbound/Application/UseCases/EvaluateQcTaskUseCase';
+import { GetInboundOperationalStateUseCase } from '@modules/Inbound/Application/UseCases/GetInboundOperationalStateUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
@@ -154,6 +155,15 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
       useFactory: (inboundPlans: IInboundPlanRepository, permissionChecker: IPermissionChecker) =>
         new GetInboundPlanUseCase(inboundPlans, permissionChecker),
       inject: [INBOUND_PLAN_REPOSITORY, PERMISSION_CHECKER],
+    },
+    {
+      provide: GetInboundOperationalStateUseCase,
+      useFactory: (
+        inboundPlans: IInboundPlanRepository,
+        receiving: IReceivingRepository,
+        permissionChecker: IPermissionChecker,
+      ) => new GetInboundOperationalStateUseCase(inboundPlans, receiving, permissionChecker),
+      inject: [INBOUND_PLAN_REPOSITORY, RECEIVING_REPOSITORY, PERMISSION_CHECKER],
     },
     {
       provide: ListInboundPlansUseCase,

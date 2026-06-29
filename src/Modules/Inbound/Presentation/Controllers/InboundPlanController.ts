@@ -7,6 +7,7 @@ import { RequirePermission } from '@modules/AccessControl/Presentation/Decorator
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
+import { GetInboundOperationalStateUseCase } from '@modules/Inbound/Application/UseCases/GetInboundOperationalStateUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
@@ -24,6 +25,7 @@ export class InboundPlanController {
   constructor(
     private readonly createInboundPlanUseCase: CreateInboundPlanUseCase,
     private readonly getInboundPlanUseCase: GetInboundPlanUseCase,
+    private readonly getInboundOperationalStateUseCase: GetInboundOperationalStateUseCase,
     private readonly listInboundPlansUseCase: ListInboundPlansUseCase,
     private readonly recordGateInUseCase: RecordGateInUseCase,
     private readonly validateReceivingReadinessUseCase: ValidateReceivingReadinessUseCase,
@@ -52,6 +54,12 @@ export class InboundPlanController {
   @RequirePermission(ActionCode.Read, ObjectType.InboundPlan)
   public async GetById(@Param('id') id: string, @CurrentAuditContext() context: AuditContext) {
     return await this.getInboundPlanUseCase.Execute(id, context.ActorUserId);
+  }
+
+  @Get(':id/operational-state')
+  @RequirePermission(ActionCode.Read, ObjectType.InboundPlan)
+  public async GetOperationalState(@Param('id') id: string, @CurrentAuditContext() context: AuditContext) {
+    return await this.getInboundOperationalStateUseCase.Execute(id, context.ActorUserId);
   }
 
   @Post(':id/gate-in')
