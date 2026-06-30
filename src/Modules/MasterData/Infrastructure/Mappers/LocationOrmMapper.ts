@@ -17,6 +17,10 @@ export class LocationOrmMapper {
       CapacityQty: LocationOrmMapper.ToNumberOrNull(entity.CapacityQty),
       CapacityVolume: LocationOrmMapper.ToNumberOrNull(entity.CapacityVolume),
       CapacityWeight: LocationOrmMapper.ToNumberOrNull(entity.CapacityWeight),
+      AisleCode: entity.AisleCode,
+      RackCode: entity.RackCode,
+      LevelCode: entity.LevelCode,
+      BinCode: entity.BinCode,
       PalletSlot: entity.PalletSlot,
       TemperatureClass: entity.TemperatureClass,
       DgCompatibilityGroup: entity.DgCompatibilityGroup,
@@ -50,6 +54,10 @@ export class LocationOrmMapper {
     orm.CapacityQty = entity.CapacityQty;
     orm.CapacityVolume = entity.CapacityVolume;
     orm.CapacityWeight = entity.CapacityWeight;
+    orm.AisleCode = entity.AisleCode;
+    orm.RackCode = entity.RackCode;
+    orm.LevelCode = entity.LevelCode;
+    orm.BinCode = entity.BinCode;
     orm.PalletSlot = entity.PalletSlot;
     orm.TemperatureClass = entity.TemperatureClass;
     orm.DgCompatibilityGroup = entity.DgCompatibilityGroup;

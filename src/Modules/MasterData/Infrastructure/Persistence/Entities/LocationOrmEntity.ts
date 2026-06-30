@@ -14,6 +14,15 @@ import { WarehouseOrmEntity } from '@modules/MasterData/Infrastructure/Persisten
 import { ZoneOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ZoneOrmEntity';
 
 @Index('UQ_locations_warehouse_id_location_code', ['WarehouseId', 'LocationCode'], { unique: true })
+@Index(
+  'UQ_locations_physical_address_full',
+  ['WarehouseId', 'ZoneId', 'AisleCode', 'RackCode', 'LevelCode', 'BinCode'],
+  {
+    unique: true,
+    where:
+      '"aisle_code" IS NOT NULL AND "rack_code" IS NOT NULL AND "level_code" IS NOT NULL AND "bin_code" IS NOT NULL',
+  },
+)
 @Entity({ name: 'locations' })
 export class LocationOrmEntity {
   @PrimaryColumn({ name: 'id', type: 'char', length: 36 })
@@ -55,6 +64,18 @@ export class LocationOrmEntity {
 
   @Column({ name: 'capacity_weight', type: 'numeric', precision: 18, scale: 3, nullable: true })
   public CapacityWeight!: number | string | null;
+
+  @Column({ name: 'aisle_code', type: 'varchar', length: 50, nullable: true })
+  public AisleCode!: string | null;
+
+  @Column({ name: 'rack_code', type: 'varchar', length: 50, nullable: true })
+  public RackCode!: string | null;
+
+  @Column({ name: 'level_code', type: 'varchar', length: 50, nullable: true })
+  public LevelCode!: string | null;
+
+  @Column({ name: 'bin_code', type: 'varchar', length: 50, nullable: true })
+  public BinCode!: string | null;
 
   @Column({ name: 'pallet_slot', type: 'integer', nullable: true })
   public PalletSlot!: number | null;

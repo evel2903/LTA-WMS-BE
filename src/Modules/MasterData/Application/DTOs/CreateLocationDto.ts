@@ -12,6 +12,10 @@ export class CreateLocationDto {
   public CapacityQty?: number | null;
   public CapacityVolume?: number | null;
   public CapacityWeight?: number | null;
+  public AisleCode?: string | null;
+  public RackCode?: string | null;
+  public LevelCode?: string | null;
+  public BinCode?: string | null;
   public PalletSlot?: number | null;
   public TemperatureClass?: string | null;
   public DgCompatibilityGroup?: string | null;

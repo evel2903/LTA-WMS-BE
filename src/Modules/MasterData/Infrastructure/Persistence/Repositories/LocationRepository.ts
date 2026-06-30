@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, FindOptionsWhere, IsNull, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
+import { CompleteLocationPhysicalAddress } from '@modules/MasterData/Application/Services/LocationPhysicalAddressPolicy';
 import {
   ILocationRepository,
   LocationListFilter,
@@ -24,6 +25,24 @@ export class LocationRepository implements ILocationRepository {
 
   public async FindByWarehouseAndCode(warehouseId: string, locationCode: string): Promise<LocationEntity | null> {
     const entity = await this.locations.findOne({ where: { WarehouseId: warehouseId, LocationCode: locationCode } });
+    return entity ? LocationOrmMapper.ToDomain(entity) : null;
+  }
+
+  public async FindByPhysicalAddress(
+    warehouseId: string,
+    zoneId: string,
+    address: CompleteLocationPhysicalAddress,
+  ): Promise<LocationEntity | null> {
+    const entity = await this.locations.findOne({
+      where: {
+        WarehouseId: warehouseId,
+        ZoneId: zoneId,
+        AisleCode: address.AisleCode,
+        RackCode: address.RackCode,
+        LevelCode: address.LevelCode,
+        BinCode: address.BinCode,
+      },
+    });
     return entity ? LocationOrmMapper.ToDomain(entity) : null;
   }
 
@@ -92,6 +111,9 @@ export class LocationRepository implements ILocationRepository {
 
   private HandleUniqueViolation(error: unknown): void {
     if ((error as { code?: string }).code === '23505') {
+      if ((error as { constraint?: string }).constraint === 'UQ_locations_physical_address_full') {
+        throw new ConflictException('Location physical address already exists in zone');
+      }
       throw new ConflictException('Location code already exists in warehouse');
     }
   }

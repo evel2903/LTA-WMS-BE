@@ -17,6 +17,7 @@ import { ILocationRepository } from '@modules/MasterData/Application/Interfaces/
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
 import { IZoneRepository } from '@modules/MasterData/Application/Interfaces/IZoneRepository';
 import { LocationDtoMapper } from '@modules/MasterData/Application/Mappers/LocationDtoMapper';
+import { LocationPhysicalAddressPolicy } from '@modules/MasterData/Application/Services/LocationPhysicalAddressPolicy';
 import { LocationPolicyValidator } from '@modules/MasterData/Application/Services/LocationPolicyValidator';
 import { LocationEntity } from '@modules/MasterData/Domain/Entities/LocationEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
@@ -74,6 +75,18 @@ export class CreateLocationUseCase {
       throw new ConflictException('Location code already exists in warehouse');
     }
 
+    const physicalAddress = LocationPhysicalAddressPolicy.Normalize(request);
+    if (LocationPhysicalAddressPolicy.IsComplete(physicalAddress)) {
+      const duplicateAddress = await this.locationRepository.FindByPhysicalAddress(
+        request.WarehouseId,
+        request.ZoneId,
+        physicalAddress,
+      );
+      if (duplicateAddress) {
+        throw new ConflictException('Location physical address already exists in zone');
+      }
+    }
+
     const parentLocationId = request.ParentLocationId ?? null;
     if (parentLocationId !== null) {
       if (parentLocationId.trim().length === 0) {
@@ -101,6 +114,10 @@ export class CreateLocationUseCase {
       CapacityQty: request.CapacityQty ?? null,
       CapacityVolume: request.CapacityVolume ?? null,
       CapacityWeight: request.CapacityWeight ?? null,
+      AisleCode: physicalAddress.AisleCode,
+      RackCode: physicalAddress.RackCode,
+      LevelCode: physicalAddress.LevelCode,
+      BinCode: physicalAddress.BinCode,
       PalletSlot: request.PalletSlot ?? null,
       TemperatureClass: request.TemperatureClass ?? null,
       DgCompatibilityGroup: request.DgCompatibilityGroup ?? null,

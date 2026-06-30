@@ -21,6 +21,7 @@ import { ILocationRepository } from '@modules/MasterData/Application/Interfaces/
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
 import { IZoneRepository } from '@modules/MasterData/Application/Interfaces/IZoneRepository';
 import { LocationDtoMapper } from '@modules/MasterData/Application/Mappers/LocationDtoMapper';
+import { LocationPhysicalAddressPolicy } from '@modules/MasterData/Application/Services/LocationPhysicalAddressPolicy';
 import { LocationPolicyValidator } from '@modules/MasterData/Application/Services/LocationPolicyValidator';
 import { LocationEntity } from '@modules/MasterData/Domain/Entities/LocationEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
@@ -62,6 +63,12 @@ export class UpdateLocationUseCase {
     const targetLocationCode = request.LocationCode ?? location.LocationCode;
     const targetParentLocationId =
       request.ParentLocationId !== undefined ? request.ParentLocationId : location.ParentLocationId;
+    const targetPhysicalAddress = LocationPhysicalAddressPolicy.Normalize({
+      AisleCode: request.AisleCode !== undefined ? request.AisleCode : location.AisleCode,
+      RackCode: request.RackCode !== undefined ? request.RackCode : location.RackCode,
+      LevelCode: request.LevelCode !== undefined ? request.LevelCode : location.LevelCode,
+      BinCode: request.BinCode !== undefined ? request.BinCode : location.BinCode,
+    });
     await AssertUpdateDataScopes(this.permissionChecker, ResolveActorUserId(request, context), ObjectType.Location, [
       { WarehouseId: location.WarehouseId },
       { WarehouseId: targetWarehouseId },
@@ -93,6 +100,17 @@ export class UpdateLocationUseCase {
       }
     }
 
+    if (LocationPhysicalAddressPolicy.IsComplete(targetPhysicalAddress)) {
+      const duplicateAddress = await this.locationRepository.FindByPhysicalAddress(
+        targetWarehouseId,
+        targetZoneId,
+        targetPhysicalAddress,
+      );
+      if (duplicateAddress && duplicateAddress.Id !== location.Id) {
+        throw new ConflictException('Location physical address already exists in zone');
+      }
+    }
+
     if (
       request.ParentLocationId !== undefined ||
       targetWarehouseId !== location.WarehouseId ||
@@ -117,6 +135,10 @@ export class UpdateLocationUseCase {
     location.CapacityQty = request.CapacityQty !== undefined ? request.CapacityQty : location.CapacityQty;
     location.CapacityVolume = request.CapacityVolume !== undefined ? request.CapacityVolume : location.CapacityVolume;
     location.CapacityWeight = request.CapacityWeight !== undefined ? request.CapacityWeight : location.CapacityWeight;
+    location.AisleCode = targetPhysicalAddress.AisleCode;
+    location.RackCode = targetPhysicalAddress.RackCode;
+    location.LevelCode = targetPhysicalAddress.LevelCode;
+    location.BinCode = targetPhysicalAddress.BinCode;
     location.PalletSlot = request.PalletSlot !== undefined ? request.PalletSlot : location.PalletSlot;
     location.TemperatureClass =
       request.TemperatureClass !== undefined ? request.TemperatureClass : location.TemperatureClass;

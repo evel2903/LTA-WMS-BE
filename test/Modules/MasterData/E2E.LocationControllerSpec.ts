@@ -81,6 +81,10 @@ describe('E2E LocationController (no DB)', () => {
         LocationType: 'BIN',
         LocationStatus: LocationStatus.Active,
         CapacityQty: 100,
+        AisleCode: 'A01',
+        RackCode: 'R01',
+        LevelCode: 'L01',
+        BinCode: 'B01',
         BondedFlag: false,
       })
       .expect(201);
@@ -95,6 +99,10 @@ describe('E2E LocationController (no DB)', () => {
         LocationType: 'BIN',
         LocationStatus: LocationStatus.Active,
         CapacityQty: 100,
+        AisleCode: 'A01',
+        RackCode: 'R01',
+        LevelCode: 'L01',
+        BinCode: 'B01',
         BondedFlag: false,
       },
       expect.objectContaining({ ActorUserId: 'test-admin' }),

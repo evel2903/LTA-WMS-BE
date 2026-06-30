@@ -326,6 +326,24 @@ export class MemoryLocationRepository implements ILocationRepository {
     );
   }
 
+  public async FindByPhysicalAddress(
+    warehouseId: string,
+    zoneId: string,
+    address: { AisleCode: string; RackCode: string; LevelCode: string; BinCode: string },
+  ): Promise<LocationEntity | null> {
+    return (
+      [...this.locations.values()].find(
+        (location) =>
+          location.WarehouseId === warehouseId &&
+          location.ZoneId === zoneId &&
+          location.AisleCode === address.AisleCode &&
+          location.RackCode === address.RackCode &&
+          location.LevelCode === address.LevelCode &&
+          location.BinCode === address.BinCode,
+      ) ?? null
+    );
+  }
+
   public async Create(location: LocationEntity): Promise<LocationEntity> {
     this.locations.set(location.Id, location);
     return location;

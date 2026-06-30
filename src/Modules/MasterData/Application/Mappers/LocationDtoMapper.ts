@@ -17,6 +17,10 @@ export class LocationDtoMapper {
       CapacityQty: entity.CapacityQty,
       CapacityVolume: entity.CapacityVolume,
       CapacityWeight: entity.CapacityWeight,
+      AisleCode: entity.AisleCode,
+      RackCode: entity.RackCode,
+      LevelCode: entity.LevelCode,
+      BinCode: entity.BinCode,
       PalletSlot: entity.PalletSlot,
       TemperatureClass: entity.TemperatureClass,
       DgCompatibilityGroup: entity.DgCompatibilityGroup,
@@ -47,6 +51,10 @@ export class LocationDtoMapper {
       LocationType: entity.LocationType,
       LocationProfileId: entity.LocationProfileId,
       LocationStatus: entity.LocationStatus,
+      AisleCode: entity.AisleCode,
+      RackCode: entity.RackCode,
+      LevelCode: entity.LevelCode,
+      BinCode: entity.BinCode,
       Children: children,
     };
   }

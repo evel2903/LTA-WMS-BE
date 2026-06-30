@@ -6,13 +6,26 @@ import { LocationStatus } from '@modules/MasterData/Domain/Enums/LocationStatus'
 class FakeLocationRepository implements ILocationRepository {
   public FindById = jest.fn<Promise<LocationEntity | null>, [string]>();
   public FindByWarehouseAndCode = jest.fn<Promise<LocationEntity | null>, [string, string]>();
+  public FindByPhysicalAddress = jest.fn<
+    Promise<LocationEntity | null>,
+    [string, string, { AisleCode: string; RackCode: string; LevelCode: string; BinCode: string }]
+  >();
   public Create = jest.fn<Promise<LocationEntity>, [LocationEntity]>();
   public Update = jest.fn<Promise<LocationEntity>, [LocationEntity]>();
   public List = jest.fn<Promise<{ Items: LocationEntity[]; TotalItems: number }>, [number, number, unknown?]>();
   public ListForTree = jest.fn<Promise<LocationEntity[]>, [string, string?]>();
 }
 
-const Location = (params: { Id: string; Code: string; ParentLocationId?: string | null; ZoneId?: string }) =>
+const Location = (params: {
+  Id: string;
+  Code: string;
+  ParentLocationId?: string | null;
+  ZoneId?: string;
+  AisleCode?: string | null;
+  RackCode?: string | null;
+  LevelCode?: string | null;
+  BinCode?: string | null;
+}) =>
   new LocationEntity({
     Id: params.Id,
     WarehouseId: 'warehouse-1',
@@ -26,6 +39,10 @@ const Location = (params: { Id: string; Code: string; ParentLocationId?: string 
     CapacityQty: null,
     CapacityVolume: null,
     CapacityWeight: null,
+    AisleCode: params.AisleCode ?? null,
+    RackCode: params.RackCode ?? null,
+    LevelCode: params.LevelCode ?? null,
+    BinCode: params.BinCode ?? null,
     PalletSlot: null,
     TemperatureClass: null,
     DgCompatibilityGroup: null,
@@ -50,7 +67,15 @@ describe('GetLocationTreeUseCase', () => {
     locations.ListForTree.mockResolvedValue([
       Location({ Id: 'aisle-1', Code: 'AISLE-1' }),
       Location({ Id: 'rack-1', Code: 'RACK-1', ParentLocationId: 'aisle-1' }),
-      Location({ Id: 'bin-1', Code: 'BIN-1', ParentLocationId: 'rack-1' }),
+      Location({
+        Id: 'bin-1',
+        Code: 'BIN-1',
+        ParentLocationId: 'rack-1',
+        AisleCode: 'A01',
+        RackCode: 'R01',
+        LevelCode: 'L01',
+        BinCode: 'B01',
+      }),
     ]);
 
     const tree = await new GetLocationTreeUseCase(locations).Execute({ WarehouseId: 'warehouse-1' });
@@ -61,6 +86,14 @@ describe('GetLocationTreeUseCase', () => {
     expect(tree[0].Children).toHaveLength(1);
     expect(tree[0].Children[0].LocationCode).toBe('RACK-1');
     expect(tree[0].Children[0].Children[0].LocationCode).toBe('BIN-1');
+    expect(tree[0].Children[0].Children[0]).toEqual(
+      expect.objectContaining({
+        AisleCode: 'A01',
+        RackCode: 'R01',
+        LevelCode: 'L01',
+        BinCode: 'B01',
+      }),
+    );
   });
 
   it('passes warehouse and zone filters to the repository', async () => {

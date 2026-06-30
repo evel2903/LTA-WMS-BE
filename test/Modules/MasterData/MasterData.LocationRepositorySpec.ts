@@ -19,6 +19,10 @@ const Location = () =>
     CapacityQty: null,
     CapacityVolume: null,
     CapacityWeight: null,
+    AisleCode: null,
+    RackCode: null,
+    LevelCode: null,
+    BinCode: null,
     PalletSlot: null,
     TemperatureClass: null,
     DgCompatibilityGroup: null,
@@ -46,5 +50,28 @@ describe('LocationRepository', () => {
     } as unknown as Repository<LocationOrmEntity>);
 
     await expect(repository.Create(Location())).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('finds a complete physical address in the same warehouse and zone', async () => {
+    const findOne = jest.fn(async () => null);
+    const repository = new LocationRepository({ findOne } as unknown as Repository<LocationOrmEntity>);
+
+    await repository.FindByPhysicalAddress('warehouse-1', 'zone-1', {
+      AisleCode: 'A01',
+      RackCode: 'R01',
+      LevelCode: 'L01',
+      BinCode: 'B01',
+    });
+
+    expect(findOne).toHaveBeenCalledWith({
+      where: {
+        WarehouseId: 'warehouse-1',
+        ZoneId: 'zone-1',
+        AisleCode: 'A01',
+        RackCode: 'R01',
+        LevelCode: 'L01',
+        BinCode: 'B01',
+      },
+    });
   });
 });

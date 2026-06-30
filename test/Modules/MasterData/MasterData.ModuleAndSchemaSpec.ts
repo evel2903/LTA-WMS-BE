@@ -27,6 +27,7 @@ import { AddSkuBarcodeEffectiveWindow1781642650000 } from '@shared/Database/Migr
 import { CreateInventoryStatusDimensionBalance1781626000000 } from '@shared/Database/Migrations/1781626000000-CreateInventoryStatusDimensionBalance';
 import { CreateMasterDataOwnershipPolicy1781627000000 } from '@shared/Database/Migrations/1781627000000-CreateMasterDataOwnershipPolicy';
 import { CreateWarehouseTypes1781718000000 } from '@shared/Database/Migrations/1781718000000-CreateWarehouseTypes';
+import { AddLocationPhysicalLayoutFields1781719000000 } from '@shared/Database/Migrations/1781719000000-AddLocationPhysicalLayoutFields';
 import { getMetadataArgsStorage } from 'typeorm';
 
 describe('MasterData module and schema registration', () => {
@@ -165,6 +166,29 @@ describe('MasterData module and schema registration', () => {
     expect(sql).toContain('foreign key ("zone_id") references "zones"("id")');
     expect(sql).toContain('foreign key ("location_profile_id") references "location_profiles"("id")');
     expect(sql).toContain('foreign key ("parent_location_id") references "locations"("id")');
+  });
+
+  it('provides an additive migration for location physical layout fields and full-address uniqueness', async () => {
+    const migration = new AddLocationPhysicalLayoutFields1781719000000();
+    const queries: string[] = [];
+    const queryRunner = {
+      query: jest.fn(async (sql: string) => {
+        queries.push(sql);
+      }),
+    };
+
+    await migration.up(queryRunner as never);
+
+    const sql = queries.join('\n').toLowerCase();
+    expect(sql).toContain('alter table "locations" add column if not exists "aisle_code"');
+    expect(sql).toContain('alter table "locations" add column if not exists "rack_code"');
+    expect(sql).toContain('alter table "locations" add column if not exists "level_code"');
+    expect(sql).toContain('alter table "locations" add column if not exists "bin_code"');
+    expect(sql).toContain('create unique index if not exists "uq_locations_physical_address_full"');
+    expect(sql).toContain('"warehouse_id"');
+    expect(sql).toContain('"zone_id"');
+    expect(sql).toContain('where "aisle_code" is not null');
+    expect(sql).toContain('and "bin_code" is not null');
   });
 
   it('provides a migration for owners, uoms, skus, FKs and global unique business codes', async () => {

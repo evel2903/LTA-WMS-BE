@@ -38,6 +38,10 @@ class FakeLocationProfileRepository implements ILocationProfileRepository {
 class FakeLocationRepository implements ILocationRepository {
   public FindById = jest.fn<Promise<LocationEntity | null>, [string]>();
   public FindByWarehouseAndCode = jest.fn<Promise<LocationEntity | null>, [string, string]>();
+  public FindByPhysicalAddress = jest.fn<
+    Promise<LocationEntity | null>,
+    [string, string, { AisleCode: string; RackCode: string; LevelCode: string; BinCode: string }]
+  >();
   public Create = jest.fn<Promise<LocationEntity>, [LocationEntity]>();
   public Update = jest.fn<Promise<LocationEntity>, [LocationEntity]>();
   public List = jest.fn<Promise<{ Items: LocationEntity[]; TotalItems: number }>, [number, number, unknown?]>();
@@ -122,6 +126,7 @@ describe('CreateLocationUseCase', () => {
     zones.FindById.mockResolvedValue(Zone());
     profiles.FindById.mockResolvedValue(Profile({ CapacityPolicy: { RequireCapacityQty: true } }));
     locations.FindByWarehouseAndCode.mockResolvedValue(null);
+    locations.FindByPhysicalAddress.mockResolvedValue(null);
     locations.Create.mockImplementation(async (location) => location);
 
     const created = await useCase.Execute({
@@ -133,13 +138,83 @@ describe('CreateLocationUseCase', () => {
       LocationType: 'BIN',
       LocationStatus: LocationStatus.Active,
       CapacityQty: 100,
+      AisleCode: ' a01 ',
+      RackCode: 'r01',
+      LevelCode: 'l01',
+      BinCode: 'b01',
       TemperatureClass: 'AMBIENT',
       BondedFlag: false,
     });
 
     expect(locations.FindByWarehouseAndCode).toHaveBeenCalledWith('warehouse-1', 'BIN-001');
+    expect(locations.FindByPhysicalAddress).toHaveBeenCalledWith('warehouse-1', 'zone-1', {
+      AisleCode: 'A01',
+      RackCode: 'R01',
+      LevelCode: 'L01',
+      BinCode: 'B01',
+    });
     expect(created.LocationCode).toBe('BIN-001');
+    expect(created.AisleCode).toBe('A01');
+    expect(created.RackCode).toBe('R01');
+    expect(created.LevelCode).toBe('L01');
+    expect(created.BinCode).toBe('B01');
     expect(created.CapacityQty).toBe(100);
+  });
+
+  it('normalizes blank physical address fields to null and skips duplicate guard when incomplete', async () => {
+    const { warehouses, zones, profiles, locations, useCase } = buildUseCase();
+    warehouses.FindById.mockResolvedValue(Warehouse());
+    zones.FindById.mockResolvedValue(Zone());
+    profiles.FindById.mockResolvedValue(Profile());
+    locations.FindByWarehouseAndCode.mockResolvedValue(null);
+    locations.Create.mockImplementation(async (location) => location);
+
+    const created = await useCase.Execute({
+      WarehouseId: 'warehouse-1',
+      ZoneId: 'zone-1',
+      LocationProfileId: 'profile-1',
+      LocationCode: 'BIN-001',
+      LocationName: 'Bin 001',
+      LocationType: 'BIN',
+      LocationStatus: LocationStatus.Active,
+      AisleCode: ' A01 ',
+      RackCode: '',
+      LevelCode: '   ',
+      BinCode: null,
+    });
+
+    expect(locations.FindByPhysicalAddress).not.toHaveBeenCalled();
+    expect(created.AisleCode).toBe('A01');
+    expect(created.RackCode).toBeNull();
+    expect(created.LevelCode).toBeNull();
+    expect(created.BinCode).toBeNull();
+  });
+
+  it('throws ConflictException when a complete physical address already exists in the same warehouse and zone', async () => {
+    const { warehouses, zones, profiles, locations, useCase } = buildUseCase();
+    warehouses.FindById.mockResolvedValue(Warehouse());
+    zones.FindById.mockResolvedValue(Zone());
+    profiles.FindById.mockResolvedValue(Profile());
+    locations.FindByWarehouseAndCode.mockResolvedValue(null);
+    locations.FindByPhysicalAddress.mockResolvedValue({ Id: 'location-existing' } as LocationEntity);
+
+    await expect(
+      useCase.Execute({
+        WarehouseId: 'warehouse-1',
+        ZoneId: 'zone-1',
+        LocationProfileId: 'profile-1',
+        LocationCode: 'BIN-001',
+        LocationName: 'Bin 001',
+        LocationType: 'BIN',
+        LocationStatus: LocationStatus.Active,
+        AisleCode: 'A01',
+        RackCode: 'R01',
+        LevelCode: 'L01',
+        BinCode: 'B01',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(locations.Create).not.toHaveBeenCalled();
   });
 
   it('throws NotFoundException when warehouse, zone or profile is missing', async () => {

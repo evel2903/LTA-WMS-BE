@@ -13,6 +13,10 @@ export class LocationEntity {
   public CapacityQty: number | null;
   public CapacityVolume: number | null;
   public CapacityWeight: number | null;
+  public AisleCode: string | null;
+  public RackCode: string | null;
+  public LevelCode: string | null;
+  public BinCode: string | null;
   public PalletSlot: number | null;
   public TemperatureClass: string | null;
   public DgCompatibilityGroup: string | null;
@@ -43,6 +47,10 @@ export class LocationEntity {
     CapacityQty?: number | null;
     CapacityVolume?: number | null;
     CapacityWeight?: number | null;
+    AisleCode?: string | null;
+    RackCode?: string | null;
+    LevelCode?: string | null;
+    BinCode?: string | null;
     PalletSlot?: number | null;
     TemperatureClass?: string | null;
     DgCompatibilityGroup?: string | null;
@@ -72,6 +80,10 @@ export class LocationEntity {
     this.CapacityQty = params.CapacityQty ?? null;
     this.CapacityVolume = params.CapacityVolume ?? null;
     this.CapacityWeight = params.CapacityWeight ?? null;
+    this.AisleCode = params.AisleCode ?? null;
+    this.RackCode = params.RackCode ?? null;
+    this.LevelCode = params.LevelCode ?? null;
+    this.BinCode = params.BinCode ?? null;
     this.PalletSlot = params.PalletSlot ?? null;
     this.TemperatureClass = params.TemperatureClass ?? null;
     this.DgCompatibilityGroup = params.DgCompatibilityGroup ?? null;

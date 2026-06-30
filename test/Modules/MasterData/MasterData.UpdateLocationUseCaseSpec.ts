@@ -44,6 +44,10 @@ class FakeLocationProfileRepository implements ILocationProfileRepository {
 class FakeLocationRepository implements ILocationRepository {
   public FindById = jest.fn<Promise<LocationEntity | null>, [string]>();
   public FindByWarehouseAndCode = jest.fn<Promise<LocationEntity | null>, [string, string]>();
+  public FindByPhysicalAddress = jest.fn<
+    Promise<LocationEntity | null>,
+    [string, string, { AisleCode: string; RackCode: string; LevelCode: string; BinCode: string }]
+  >();
   public Create = jest.fn<Promise<LocationEntity>, [LocationEntity]>();
   public Update = jest.fn<Promise<LocationEntity>, [LocationEntity]>();
   public List = jest.fn<Promise<{ Items: LocationEntity[]; TotalItems: number }>, [number, number, unknown?]>();
@@ -64,6 +68,10 @@ const Location = (overrides: Partial<LocationEntity> = {}) =>
     CapacityQty: overrides.CapacityQty ?? null,
     CapacityVolume: overrides.CapacityVolume ?? null,
     CapacityWeight: overrides.CapacityWeight ?? null,
+    AisleCode: overrides.AisleCode ?? null,
+    RackCode: overrides.RackCode ?? null,
+    LevelCode: overrides.LevelCode ?? null,
+    BinCode: overrides.BinCode ?? null,
     PalletSlot: overrides.PalletSlot ?? null,
     TemperatureClass: overrides.TemperatureClass ?? null,
     DgCompatibilityGroup: overrides.DgCompatibilityGroup ?? null,
@@ -175,6 +183,43 @@ describe('UpdateLocationUseCase', () => {
     await expect(useCase.Execute({ Id: 'location-1', LocationCode: 'BIN-002' })).rejects.toBeInstanceOf(
       ConflictException,
     );
+  });
+
+  it('updates and normalizes physical address fields without duplicate check when address is incomplete', async () => {
+    const { locations, useCase } = buildUseCase();
+    locations.FindById.mockResolvedValue(Location({ Id: 'location-1' }));
+
+    const updated = await useCase.Execute({
+      Id: 'location-1',
+      AisleCode: ' a02 ',
+      RackCode: '',
+      LevelCode: null,
+      BinCode: 'b02',
+    });
+
+    expect(locations.FindByPhysicalAddress).not.toHaveBeenCalled();
+    expect(updated.AisleCode).toBe('A02');
+    expect(updated.RackCode).toBeNull();
+    expect(updated.LevelCode).toBeNull();
+    expect(updated.BinCode).toBe('B02');
+  });
+
+  it('throws ConflictException when updating to a duplicate complete physical address', async () => {
+    const { locations, useCase } = buildUseCase();
+    locations.FindById.mockResolvedValue(Location({ Id: 'location-1' }));
+    locations.FindByPhysicalAddress.mockResolvedValue(Location({ Id: 'location-2' }));
+
+    await expect(
+      useCase.Execute({
+        Id: 'location-1',
+        AisleCode: 'A01',
+        RackCode: 'R01',
+        LevelCode: 'L01',
+        BinCode: 'B01',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(locations.Update).not.toHaveBeenCalled();
   });
 
   it('throws BusinessRuleException when parent is the same location', async () => {
