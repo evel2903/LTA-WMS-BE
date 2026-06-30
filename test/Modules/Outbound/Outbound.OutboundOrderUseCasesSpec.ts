@@ -321,6 +321,10 @@ class MemoryIntegrationRepository {
     return this.outbox.find((item) => item.MessageId === messageId) ?? null;
   }
 
+  async FindOutboxMessageById(id: string): Promise<OutboxMessageEntity | null> {
+    return this.outbox.find((item) => item.Id === id) ?? null;
+  }
+
   async CreateImport(importBatch: never, interfaceMessages: never[], outboxMessages: OutboxMessageEntity[]) {
     return { ImportBatch: importBatch, InterfaceMessages: interfaceMessages, OutboxMessages: outboxMessages };
   }
@@ -330,12 +334,54 @@ class MemoryIntegrationRepository {
     return outboxMessage;
   }
 
+  async UpdateOutboxMessage(outboxMessage: OutboxMessageEntity): Promise<OutboxMessageEntity> {
+    const index = this.outbox.findIndex((item) => item.Id === outboxMessage.Id);
+    if (index >= 0) this.outbox[index] = outboxMessage;
+    return outboxMessage;
+  }
+
   async ListImportBatches(): Promise<{ Items: never[]; TotalItems: number }> {
     return { Items: [], TotalItems: 0 };
   }
 
   async ListOutboxMessages(): Promise<{ Items: OutboxMessageEntity[]; TotalItems: number }> {
     return { Items: this.outbox, TotalItems: this.outbox.length };
+  }
+
+  async ListInterfaceMessages(): Promise<{ Items: never[]; TotalItems: number }> {
+    return { Items: [], TotalItems: 0 };
+  }
+
+  async FindReconciliationRunById(): Promise<null> {
+    return null;
+  }
+
+  async FindReconciliationRunByIdempotencyKey(): Promise<null> {
+    return null;
+  }
+
+  async CreateReconciliationRun(run: never, items: never[]) {
+    return { Run: run, Items: items };
+  }
+
+  async UpdateReconciliationRun(run: never): Promise<never> {
+    return run;
+  }
+
+  async ListReconciliationRuns(): Promise<{ Items: never[]; TotalItems: number }> {
+    return { Items: [], TotalItems: 0 };
+  }
+
+  async FindReconciliationItemById(): Promise<null> {
+    return null;
+  }
+
+  async UpdateReconciliationItem(item: never): Promise<never> {
+    return item;
+  }
+
+  async ListReconciliationItems(): Promise<{ Items: never[]; TotalItems: number }> {
+    return { Items: [], TotalItems: 0 };
   }
 }
 

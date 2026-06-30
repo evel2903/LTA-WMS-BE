@@ -22,6 +22,10 @@ import { CreateWarehouseUseCase } from '@modules/MasterData/Application/UseCases
 import { GetWarehouseByIdUseCase } from '@modules/MasterData/Application/UseCases/GetWarehouseByIdUseCase';
 import { ListWarehousesUseCase } from '@modules/MasterData/Application/UseCases/ListWarehousesUseCase';
 import { UpdateWarehouseUseCase } from '@modules/MasterData/Application/UseCases/UpdateWarehouseUseCase';
+import { CreateWarehouseTypeUseCase } from '@modules/MasterData/Application/UseCases/CreateWarehouseTypeUseCase';
+import { GetWarehouseTypeUseCase } from '@modules/MasterData/Application/UseCases/GetWarehouseTypeUseCase';
+import { ListWarehouseTypesUseCase } from '@modules/MasterData/Application/UseCases/ListWarehouseTypesUseCase';
+import { UpdateWarehouseTypeUseCase } from '@modules/MasterData/Application/UseCases/UpdateWarehouseTypeUseCase';
 import { CreateZoneUseCase } from '@modules/MasterData/Application/UseCases/CreateZoneUseCase';
 import { GetZoneByIdUseCase } from '@modules/MasterData/Application/UseCases/GetZoneByIdUseCase';
 import { ListZonesUseCase } from '@modules/MasterData/Application/UseCases/ListZonesUseCase';
@@ -83,6 +87,10 @@ import {
   IWarehouseRepository,
   WAREHOUSE_REPOSITORY,
 } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
+import {
+  IWarehouseTypeRepository,
+  WAREHOUSE_TYPE_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IWarehouseTypeRepository';
 import { IZoneRepository, ZONE_REPOSITORY } from '@modules/MasterData/Application/Interfaces/IZoneRepository';
 import {
   ILocationProfileRepository,
@@ -129,6 +137,7 @@ import {
 } from '@modules/MasterData/Application/Interfaces/IMasterDataOwnershipPolicyRepository';
 import { SiteOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/SiteOrmEntity';
 import { WarehouseOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/WarehouseOrmEntity';
+import { WarehouseTypeOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/WarehouseTypeOrmEntity';
 import { ZoneOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ZoneOrmEntity';
 import { LocationProfileOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/LocationProfileOrmEntity';
 import { LocationOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/LocationOrmEntity';
@@ -145,6 +154,7 @@ import { InventoryBalanceOrmEntity } from '@modules/MasterData/Infrastructure/Pe
 import { MasterDataOwnershipPolicyOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/MasterDataOwnershipPolicyOrmEntity';
 import { SiteRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/SiteRepository';
 import { WarehouseRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/WarehouseRepository';
+import { WarehouseTypeRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/WarehouseTypeRepository';
 import { ZoneRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/ZoneRepository';
 import { LocationProfileRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/LocationProfileRepository';
 import { LocationRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/LocationRepository';
@@ -161,6 +171,7 @@ import { InventoryBalanceRepository } from '@modules/MasterData/Infrastructure/P
 import { MasterDataOwnershipPolicyRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/MasterDataOwnershipPolicyRepository';
 import { SiteController } from '@modules/MasterData/Presentation/Controllers/SiteController';
 import { WarehouseController } from '@modules/MasterData/Presentation/Controllers/WarehouseController';
+import { WarehouseTypeController } from '@modules/MasterData/Presentation/Controllers/WarehouseTypeController';
 import { ZoneController } from '@modules/MasterData/Presentation/Controllers/ZoneController';
 import { InventoryStatusController } from '@modules/MasterData/Presentation/Controllers/InventoryStatusController';
 import { LocationProfileController } from '@modules/MasterData/Presentation/Controllers/LocationProfileController';
@@ -178,6 +189,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     TypeOrmModule.forFeature([
       SiteOrmEntity,
       WarehouseOrmEntity,
+      WarehouseTypeOrmEntity,
       ZoneOrmEntity,
       LocationProfileOrmEntity,
       LocationOrmEntity,
@@ -198,6 +210,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
   controllers: [
     SiteController,
     WarehouseController,
+    WarehouseTypeController,
     ZoneController,
     LocationProfileController,
     LocationController,
@@ -213,6 +226,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
   providers: [
     { provide: SITE_REPOSITORY, useClass: SiteRepository },
     { provide: WAREHOUSE_REPOSITORY, useClass: WarehouseRepository },
+    { provide: WAREHOUSE_TYPE_REPOSITORY, useClass: WarehouseTypeRepository },
     { provide: ZONE_REPOSITORY, useClass: ZoneRepository },
     { provide: LOCATION_PROFILE_REPOSITORY, useClass: LocationProfileRepository },
     { provide: LOCATION_REPOSITORY, useClass: LocationRepository },
@@ -293,6 +307,34 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
         AuditedTransaction,
         PERMISSION_CHECKER,
       ],
+    },
+    {
+      provide: CreateWarehouseTypeUseCase,
+      useFactory: (
+        warehouseTypes: IWarehouseTypeRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new CreateWarehouseTypeUseCase(warehouseTypes, ownership, audited),
+      inject: [WAREHOUSE_TYPE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
+    },
+    {
+      provide: GetWarehouseTypeUseCase,
+      useFactory: (warehouseTypes: IWarehouseTypeRepository) => new GetWarehouseTypeUseCase(warehouseTypes),
+      inject: [WAREHOUSE_TYPE_REPOSITORY],
+    },
+    {
+      provide: ListWarehouseTypesUseCase,
+      useFactory: (warehouseTypes: IWarehouseTypeRepository) => new ListWarehouseTypesUseCase(warehouseTypes),
+      inject: [WAREHOUSE_TYPE_REPOSITORY],
+    },
+    {
+      provide: UpdateWarehouseTypeUseCase,
+      useFactory: (
+        warehouseTypes: IWarehouseTypeRepository,
+        ownership: MasterDataOwnershipPolicyService,
+        audited: AuditedTransaction,
+      ) => new UpdateWarehouseTypeUseCase(warehouseTypes, ownership, audited),
+      inject: [WAREHOUSE_TYPE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
     },
     {
       provide: CreateZoneUseCase,
@@ -806,6 +848,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
   exports: [
     SITE_REPOSITORY,
     WAREHOUSE_REPOSITORY,
+    WAREHOUSE_TYPE_REPOSITORY,
     ZONE_REPOSITORY,
     LOCATION_PROFILE_REPOSITORY,
     LOCATION_REPOSITORY,

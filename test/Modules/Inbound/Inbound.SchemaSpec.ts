@@ -30,6 +30,12 @@ const fakeRunner = () => {
   return { runner, queries };
 };
 
+const normalizeMigrationSql = (queries: string[]) =>
+  queries
+    .join('\n')
+    .replace(/\bIF NOT EXISTS\s+/g, '')
+    .replace(/\bIF EXISTS\s+/g, '');
+
 describe('Inbound schema registration', () => {
   it('registers Inbound ORM entities for TypeORM migrations', () => {
     expect(DataSource.options.entities).toEqual(
@@ -51,7 +57,7 @@ describe('Inbound schema registration', () => {
   it('creates inbound plan tables and unique business-key index in migration', async () => {
     const { runner, queries } = fakeRunner();
     await new CreateInboundPlans1781643000000().up(runner);
-    const sql = queries.join('\n');
+    const sql = normalizeMigrationSql(queries);
     expect(sql).toContain('CREATE TABLE "inbound_plans"');
     expect(sql).toContain('CREATE TABLE "inbound_plan_lines"');
     expect(sql).toContain('CREATE UNIQUE INDEX "UQ_inbound_plans_business_key"');
@@ -62,7 +68,7 @@ describe('Inbound schema registration', () => {
   it('drops inbound indexes and tables in migration down()', async () => {
     const { runner, queries } = fakeRunner();
     await new CreateInboundPlans1781643000000().down(runner);
-    const sql = queries.join('\n');
+    const sql = normalizeMigrationSql(queries);
     expect(sql).toContain('DROP INDEX "public"."IDX_inbound_plan_lines_plan"');
     expect(sql).toContain('DROP INDEX "public"."IDX_inbound_plans_source_status"');
     expect(sql).toContain('DROP INDEX "public"."UQ_inbound_plans_business_key"');
@@ -73,7 +79,7 @@ describe('Inbound schema registration', () => {
   it('creates receiving session, receipt and receipt line tables with idempotency indexes', async () => {
     const { runner, queries } = fakeRunner();
     await new CreateReceivingReceipts1781643300000().up(runner);
-    const sql = queries.join('\n');
+    const sql = normalizeMigrationSql(queries);
     expect(sql).toContain('CREATE TABLE "receiving_sessions"');
     expect(sql).toContain('CREATE TABLE "receipts"');
     expect(sql).toContain('CREATE TABLE "receipt_lines"');
@@ -84,7 +90,7 @@ describe('Inbound schema registration', () => {
   it('creates inbound discrepancy table with idempotency, exception link and scope indexes', async () => {
     const { runner, queries } = fakeRunner();
     await new CreateInboundDiscrepancies1781643600000().up(runner);
-    const sql = queries.join('\n');
+    const sql = normalizeMigrationSql(queries);
     expect(sql).toContain('CREATE TABLE "inbound_discrepancies"');
     expect(sql).toContain('"expected_quantity" numeric(18,4) NOT NULL');
     expect(sql).toContain('"actual_quantity" numeric(18,4) NOT NULL');
@@ -97,7 +103,7 @@ describe('Inbound schema registration', () => {
   it('creates QC task and result tables with idempotency, split quantities and status targets', async () => {
     const { runner, queries } = fakeRunner();
     await new CreateQcTasksAndResults1781643900000().up(runner);
-    const sql = queries.join('\n');
+    const sql = normalizeMigrationSql(queries);
     expect(sql).toContain('CREATE TABLE "qc_tasks"');
     expect(sql).toContain('CREATE TABLE "qc_results"');
     expect(sql).toContain('"task_status" varchar(40) NOT NULL');
@@ -115,7 +121,7 @@ describe('Inbound schema registration', () => {
   it('creates inbound LPN and putaway release tables without adding InventoryStatus terms', async () => {
     const { runner, queries } = fakeRunner();
     await new CreateInboundLpnsAndPutawayReleases1781644200000().up(runner);
-    const sql = queries.join('\n');
+    const sql = normalizeMigrationSql(queries);
     expect(sql).toContain('CREATE TABLE "inbound_lpns"');
     expect(sql).toContain('CREATE TABLE "inbound_putaway_releases"');
     expect(sql).toContain('CREATE UNIQUE INDEX "UQ_inbound_lpns_scope_lpn"');

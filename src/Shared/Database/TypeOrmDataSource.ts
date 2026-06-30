@@ -6,6 +6,7 @@ import { UserOrmEntity } from '@modules/Users/Infrastructure/Persistence/Entitie
 import { RefreshTokenOrmEntity } from '@modules/Authentication/Infrastructure/Persistence/Entities/RefreshTokenOrmEntity';
 import { SiteOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/SiteOrmEntity';
 import { WarehouseOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/WarehouseOrmEntity';
+import { WarehouseTypeOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/WarehouseTypeOrmEntity';
 import { ZoneOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ZoneOrmEntity';
 import { LocationProfileOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/LocationProfileOrmEntity';
 import { LocationOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/LocationOrmEntity';
@@ -95,6 +96,7 @@ export default new DataSource({
     RefreshTokenOrmEntity,
     SiteOrmEntity,
     WarehouseOrmEntity,
+    WarehouseTypeOrmEntity,
     ZoneOrmEntity,
     LocationProfileOrmEntity,
     LocationOrmEntity,

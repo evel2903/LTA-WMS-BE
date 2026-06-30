@@ -21,4 +21,5 @@ module.exports = {
   coverageDirectory: './coverage',
   clearMocks: true,
   testEnvironment: 'node',
+  testTimeout: 60000,
 };

@@ -20,6 +20,12 @@ const fakeRunner = () => {
   return { runner, queries };
 };
 
+const normalizeMigrationSql = (queries: string[]) =>
+  queries
+    .join('\n')
+    .replace(/\bIF NOT EXISTS\s+/g, '')
+    .replace(/\bIF EXISTS\s+/g, '');
+
 describe('InventoryExecution schema registration', () => {
   it('registers putaway task ORM entity for TypeORM migrations', () => {
     expect(DataSource.options.entities).toEqual(expect.arrayContaining([PutawayTaskOrmEntity]));
@@ -38,7 +44,7 @@ describe('InventoryExecution schema registration', () => {
   it('creates putaway task table and indexes without adding InventoryStatus terms', async () => {
     const { runner, queries } = fakeRunner();
     await new CreatePutawayTasks1781644500000().up(runner);
-    const sql = queries.join('\n');
+    const sql = normalizeMigrationSql(queries);
 
     expect(sql).toContain('CREATE TABLE "putaway_tasks"');
     expect(sql).toContain('"inventory_status_code" varchar(80) NOT NULL');
@@ -59,7 +65,7 @@ describe('InventoryExecution schema registration', () => {
   it('drops putaway task table and indexes in migration down()', async () => {
     const { runner, queries } = fakeRunner();
     await new CreatePutawayTasks1781644500000().down(runner);
-    const sql = queries.join('\n');
+    const sql = normalizeMigrationSql(queries);
 
     expect(sql).toContain('DROP INDEX "public"."IDX_putaway_tasks_target_location"');
     expect(sql).toContain('DROP INDEX "public"."IDX_putaway_tasks_scope_status"');
@@ -71,7 +77,7 @@ describe('InventoryExecution schema registration', () => {
   it('creates inventory transaction and movement tables without adding InventoryStatus milestones', async () => {
     const { runner, queries } = fakeRunner();
     await new CreateInventoryTransactionsAndMovements1781644600000().up(runner);
-    const sql = queries.join('\n');
+    const sql = normalizeMigrationSql(queries);
 
     expect(sql).toContain('CREATE TABLE "inventory_transactions"');
     expect(sql).toContain('CREATE TABLE "inventory_movements"');
@@ -92,7 +98,7 @@ describe('InventoryExecution schema registration', () => {
   it('drops inventory transaction and movement tables and indexes in migration down()', async () => {
     const { runner, queries } = fakeRunner();
     await new CreateInventoryTransactionsAndMovements1781644600000().down(runner);
-    const sql = queries.join('\n');
+    const sql = normalizeMigrationSql(queries);
 
     expect(sql).toContain('DROP INDEX "public"."IDX_inventory_movements_to_dimension"');
     expect(sql).toContain('DROP CONSTRAINT "FK_inventory_movements_to_balance"');
@@ -164,7 +170,7 @@ describe('InventoryExecution schema registration', () => {
   it('relaxes inventory ledger putaway reference for V1-15 non-putaway control operations', async () => {
     const { runner, queries } = fakeRunner();
     await new RelaxInventoryControlLedgerForNonPutaway1781644700000().up(runner);
-    const sql = queries.join('\n');
+    const sql = normalizeMigrationSql(queries);
 
     expect(sql).toContain('ALTER TABLE "inventory_transactions" ALTER COLUMN "putaway_task_id" DROP NOT NULL');
     expect(sql).toContain('ALTER TABLE "inventory_movements" ALTER COLUMN "putaway_task_id" DROP NOT NULL');
@@ -180,7 +186,7 @@ describe('InventoryExecution schema registration', () => {
   it('reverts V1-15 inventory ledger relaxation in migration down()', async () => {
     const { runner, queries } = fakeRunner();
     await new RelaxInventoryControlLedgerForNonPutaway1781644700000().down(runner);
-    const sql = queries.join('\n');
+    const sql = normalizeMigrationSql(queries);
 
     expect(sql).toContain('DROP INDEX "public"."UQ_inventory_transactions_operation_idempotency_no_task"');
     expect(sql).toContain('ALTER TABLE "inventory_movements" ALTER COLUMN "putaway_task_id" SET NOT NULL');
@@ -190,7 +196,7 @@ describe('InventoryExecution schema registration', () => {
   it('creates cycle count work table without adding InventoryStatus milestones', async () => {
     const { runner, queries } = fakeRunner();
     await new CreateCycleCountWorks1781644800000().up(runner);
-    const sql = queries.join('\n');
+    const sql = normalizeMigrationSql(queries);
 
     expect(sql).toContain('CREATE TABLE "cycle_count_works"');
     expect(sql).toContain('"work_status" varchar(40) NOT NULL');
@@ -206,7 +212,7 @@ describe('InventoryExecution schema registration', () => {
   it('drops cycle count work table and indexes in migration down()', async () => {
     const { runner, queries } = fakeRunner();
     await new CreateCycleCountWorks1781644800000().down(runner);
-    const sql = queries.join('\n');
+    const sql = normalizeMigrationSql(queries);
 
     expect(sql).toContain('DROP CONSTRAINT "FK_cycle_count_works_approval_request"');
     expect(sql).toContain('DROP INDEX "public"."UQ_cycle_count_works_unlock_idempotency"');

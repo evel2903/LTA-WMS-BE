@@ -78,10 +78,58 @@ describe('C5 AC5 audit on V0 mutations + A6 hard-block (live Postgres)', () => {
     UserAgent: 'jest-c5-integration',
   });
 
+  const ensureOwnershipPolicySeeds = async () => {
+    await dataSource.query(`
+      INSERT INTO "master_data_ownership_policies" (
+        "id", "object_group", "display_name", "source_of_truth_type", "typical_source_systems",
+        "ownership_mode", "direct_edit_allowed", "requires_audit", "requires_reason",
+        "requires_source_system", "requires_reference_id", "implementation_status",
+        "deferred_to_story", "policy_notes", "source_doc_ref", "created_at", "updated_at"
+      ) VALUES
+        (
+          '00000000-0000-0000-0000-000000000601', 'Sku', 'SKU', 'ExternalSystem',
+          '["ERP","OMS","PIM","OwnerMaster"]'::jsonb, 'ExternalOwnedReadOnly', false, true,
+          true, true, true, 'PartiallyImplemented', 'C5',
+          'SKU basic attributes are external-owned; WMS operational flags are conditional.',
+          'doc04#14', now(), now()
+        ),
+        (
+          '00000000-0000-0000-0000-000000000604', 'WarehouseLocation', 'Warehouse/Location', 'Wms',
+          '["WMS"]'::jsonb, 'WmsOwnedEditable', true, true, true, false, false,
+          'Implemented', 'C5',
+          'Warehouse and location are WMS-owned but cannot be silently deleted once used.',
+          'doc04#14', now(), now()
+        ),
+        (
+          '00000000-0000-0000-0000-000000000605', 'LocationProfile', 'Location Profile', 'Wms',
+          '["WMS"]'::jsonb, 'WmsOwnedControlled', true, true, true, false, false,
+          'Implemented', 'C5',
+          'Location profile changes affect rules and require version/audit enforcement.',
+          'doc04#14', now(), now()
+        )
+      ON CONFLICT ("object_group") DO UPDATE SET
+        "display_name" = EXCLUDED."display_name",
+        "source_of_truth_type" = EXCLUDED."source_of_truth_type",
+        "typical_source_systems" = EXCLUDED."typical_source_systems",
+        "ownership_mode" = EXCLUDED."ownership_mode",
+        "direct_edit_allowed" = EXCLUDED."direct_edit_allowed",
+        "requires_audit" = EXCLUDED."requires_audit",
+        "requires_reason" = EXCLUDED."requires_reason",
+        "requires_source_system" = EXCLUDED."requires_source_system",
+        "requires_reference_id" = EXCLUDED."requires_reference_id",
+        "implementation_status" = EXCLUDED."implementation_status",
+        "deferred_to_story" = EXCLUDED."deferred_to_story",
+        "policy_notes" = EXCLUDED."policy_notes",
+        "source_doc_ref" = EXCLUDED."source_doc_ref",
+        "updated_at" = now()
+    `);
+  };
+
   beforeAll(async () => {
     try {
       if (!dataSource.isInitialized) await dataSource.initialize();
       await dataSource.runMigrations();
+      await ensureOwnershipPolicySeeds();
       available = true;
     } catch {
       available = false;

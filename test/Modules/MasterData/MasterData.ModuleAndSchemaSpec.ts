@@ -3,6 +3,7 @@ import { AppModule } from '@app/App.module';
 import { MasterDataModule } from '@modules/MasterData/MasterDataModule';
 import { SiteOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/SiteOrmEntity';
 import { WarehouseOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/WarehouseOrmEntity';
+import { WarehouseTypeOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/WarehouseTypeOrmEntity';
 import { ZoneOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ZoneOrmEntity';
 import { LocationProfileOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/LocationProfileOrmEntity';
 import { LocationOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/LocationOrmEntity';
@@ -25,6 +26,7 @@ import { AddUomConversionOverlapExclusion1781625100000 } from '@shared/Database/
 import { AddSkuBarcodeEffectiveWindow1781642650000 } from '@shared/Database/Migrations/1781642650000-AddSkuBarcodeEffectiveWindow';
 import { CreateInventoryStatusDimensionBalance1781626000000 } from '@shared/Database/Migrations/1781626000000-CreateInventoryStatusDimensionBalance';
 import { CreateMasterDataOwnershipPolicy1781627000000 } from '@shared/Database/Migrations/1781627000000-CreateMasterDataOwnershipPolicy';
+import { CreateWarehouseTypes1781718000000 } from '@shared/Database/Migrations/1781718000000-CreateWarehouseTypes';
 import { getMetadataArgsStorage } from 'typeorm';
 
 describe('MasterData module and schema registration', () => {
@@ -37,6 +39,10 @@ describe('MasterData module and schema registration', () => {
     expect(TypeOrmDataSource.options.entities).toEqual(
       expect.arrayContaining([SiteOrmEntity, WarehouseOrmEntity, ZoneOrmEntity]),
     );
+  });
+
+  it('registers WarehouseType ORM entity in TypeOrmDataSource', () => {
+    expect(TypeOrmDataSource.options.entities).toEqual(expect.arrayContaining([WarehouseTypeOrmEntity]));
   });
 
   it('registers LocationProfile and Location ORM entities in TypeOrmDataSource', () => {
@@ -118,6 +124,25 @@ describe('MasterData module and schema registration', () => {
     expect(sql).toContain('unique ("site_code")');
     expect(sql).toContain('unique ("warehouse_code")');
     expect(sql).toContain('unique ("warehouse_id", "zone_code")');
+  });
+
+  it('provides a migration for warehouse type catalog without coupling warehouses by FK', async () => {
+    const migration = new CreateWarehouseTypes1781718000000();
+    const queries: string[] = [];
+    const queryRunner = {
+      query: jest.fn(async (sql: string) => {
+        queries.push(sql);
+      }),
+    };
+
+    await migration.up(queryRunner as never);
+
+    const sql = queries.join('\n').toLowerCase();
+    expect(sql).toContain('create table if not exists "warehouse_types"');
+    expect(sql).toContain('unique ("warehouse_type_code")');
+    expect(sql).toContain('wt-01');
+    expect(sql).toContain('wt-08');
+    expect(sql).not.toContain('foreign key');
   });
 
   it('provides a migration for location profiles, locations, FKs and unique location code per warehouse', async () => {
