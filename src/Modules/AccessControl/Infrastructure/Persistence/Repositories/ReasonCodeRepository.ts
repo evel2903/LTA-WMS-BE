@@ -60,6 +60,11 @@ export class ReasonCodeRepository implements IReasonCodeRepository {
     if (filter.Action) {
       query.andWhere('rc.AppliesToActions @> :action::jsonb', { action: JSON.stringify([filter.Action]) });
     }
+    if (filter.ObjectType) {
+      query.andWhere('rc.AppliesToObjects @> :objectType::jsonb', {
+        objectType: JSON.stringify([filter.ObjectType]),
+      });
+    }
     query.orderBy('rc.ReasonCode', 'ASC').skip(skip).take(take);
     const [entities, total] = await query.getManyAndCount();
     return { Items: entities.map(ReasonCodeOrmMapper.ToDomain), TotalItems: total };
