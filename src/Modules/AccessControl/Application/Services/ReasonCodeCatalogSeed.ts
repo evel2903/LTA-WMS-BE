@@ -82,7 +82,7 @@ export const ReasonCodeCatalogEntries: ReadonlyArray<ReasonCodeCatalogEntry> = [
     ReasonGroup: ReasonGroup.MasterDataConfigChange,
     Description: 'Cancel or delete a record.',
     AppliesToActions: [ActionCode.DeleteCancel],
-    AppliesToObjects: [...MASTER_OBJECTS, ...CONFIG_OBJECTS],
+    AppliesToObjects: [...MASTER_OBJECTS, ...CONFIG_OBJECTS, ObjectType.Partner],
   },
   {
     ReasonCode: 'RC-RULE-OVERRIDE',
@@ -98,7 +98,7 @@ export const ReasonCodeCatalogEntries: ReadonlyArray<ReasonCodeCatalogEntry> = [
     ReasonGroup: ReasonGroup.RuleOverride,
     Description: 'Approve a pending request.',
     AppliesToActions: [ActionCode.Approve],
-    AppliesToObjects: [ObjectType.ApprovalRequest, ObjectType.WarehouseProfile],
+    AppliesToObjects: [ObjectType.ApprovalRequest, ObjectType.WarehouseProfile, ObjectType.ExceptionCase],
   },
   {
     ReasonCode: 'RC-UNLOCK',

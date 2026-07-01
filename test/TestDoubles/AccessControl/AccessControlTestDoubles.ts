@@ -223,6 +223,8 @@ export class InMemoryReasonCodeRepository implements IReasonCodeRepository {
     if (filter.ReasonGroup) items = items.filter((rc) => rc.ReasonGroup === filter.ReasonGroup);
     if (filter.Status) items = items.filter((rc) => rc.Status === filter.Status);
     if (filter.Action) items = items.filter((rc) => rc.AppliesToActions.includes(filter.Action!));
+    if (filter.ObjectType) items = items.filter((rc) => rc.AppliesToObjects.includes(filter.ObjectType!));
+    items.sort((a, b) => a.ReasonCode.localeCompare(b.ReasonCode));
     return { Items: items.slice(skip, skip + take), TotalItems: items.length };
   }
 }

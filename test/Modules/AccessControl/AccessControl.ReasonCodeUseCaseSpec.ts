@@ -5,6 +5,7 @@ import { ReasonGroup } from '@modules/AccessControl/Domain/Enums/ReasonGroup';
 import { ReasonCodeStatus } from '@modules/AccessControl/Domain/Enums/ReasonCodeStatus';
 import { CreateReasonCodeUseCase } from '@modules/AccessControl/Application/UseCases/CreateReasonCodeUseCase';
 import { GetReasonCodeUseCase } from '@modules/AccessControl/Application/UseCases/GetReasonCodeUseCase';
+import { ListReasonCodesUseCase } from '@modules/AccessControl/Application/UseCases/ListReasonCodesUseCase';
 import { UpdateReasonCodeUseCase } from '@modules/AccessControl/Application/UseCases/UpdateReasonCodeUseCase';
 import { InMemoryReasonCodeRepository } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
@@ -29,6 +30,153 @@ describe('Reason code use cases', () => {
     const useCase = new CreateReasonCodeUseCase(repo);
     await useCase.Execute(validCreate);
     await expect(useCase.Execute(validCreate)).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('lists reason codes by action and object type intersection', async () => {
+    const repo = new InMemoryReasonCodeRepository();
+    const create = new CreateReasonCodeUseCase(repo);
+    await create.Execute({
+      ...validCreate,
+      ReasonCode: 'RC-WH-UPDATE',
+      AppliesToActions: [ActionCode.Update],
+      AppliesToObjects: [ObjectType.Warehouse],
+    });
+    await create.Execute({
+      ...validCreate,
+      ReasonCode: 'RC-SITE-UPDATE',
+      AppliesToActions: [ActionCode.Update],
+      AppliesToObjects: [ObjectType.Site],
+    });
+    await create.Execute({
+      ...validCreate,
+      ReasonCode: 'RC-WH-APPROVE',
+      AppliesToActions: [ActionCode.Approve],
+      AppliesToObjects: [ObjectType.Warehouse],
+    });
+
+    const result = await new ListReasonCodesUseCase(repo).Execute({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.Warehouse,
+      PageSize: 100,
+    });
+
+    expect(result.Items.map((item) => item.ReasonCode)).toEqual(['RC-WH-UPDATE']);
+    expect(result.Meta.TotalItems).toBe(1);
+  });
+
+  it('combines status, group, action and object type filters', async () => {
+    const repo = new InMemoryReasonCodeRepository();
+    const create = new CreateReasonCodeUseCase(repo);
+    const update = new UpdateReasonCodeUseCase(repo);
+    await create.Execute({
+      ...validCreate,
+      ReasonCode: 'RC-MATCH',
+      ReasonGroup: ReasonGroup.ManualFix,
+      AppliesToActions: [ActionCode.Update],
+      AppliesToObjects: [ObjectType.Warehouse],
+    });
+    await create.Execute({
+      ...validCreate,
+      ReasonCode: 'RC-WRONG-GROUP',
+      ReasonGroup: ReasonGroup.RuleOverride,
+      AppliesToActions: [ActionCode.Update],
+      AppliesToObjects: [ObjectType.Warehouse],
+    });
+    await create.Execute({
+      ...validCreate,
+      ReasonCode: 'RC-WRONG-ACTION',
+      ReasonGroup: ReasonGroup.ManualFix,
+      AppliesToActions: [ActionCode.Approve],
+      AppliesToObjects: [ObjectType.Warehouse],
+    });
+    await create.Execute({
+      ...validCreate,
+      ReasonCode: 'RC-WRONG-OBJECT',
+      ReasonGroup: ReasonGroup.ManualFix,
+      AppliesToActions: [ActionCode.Update],
+      AppliesToObjects: [ObjectType.Site],
+    });
+    const inactive = await create.Execute({
+      ...validCreate,
+      ReasonCode: 'RC-WRONG-STATUS',
+      ReasonGroup: ReasonGroup.ManualFix,
+      AppliesToActions: [ActionCode.Update],
+      AppliesToObjects: [ObjectType.Warehouse],
+    });
+    await update.Execute({ Id: inactive.Id, Status: ReasonCodeStatus.Inactive });
+
+    const result = await new ListReasonCodesUseCase(repo).Execute({
+      ReasonGroup: ReasonGroup.ManualFix,
+      Status: ReasonCodeStatus.Active,
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.Warehouse,
+      PageSize: 100,
+    });
+
+    expect(result.Items.map((item) => item.ReasonCode)).toEqual(['RC-MATCH']);
+    expect(result.Meta.TotalItems).toBe(1);
+  });
+
+  it('lists reason codes by object type only', async () => {
+    const repo = new InMemoryReasonCodeRepository();
+    const create = new CreateReasonCodeUseCase(repo);
+    await create.Execute({
+      ...validCreate,
+      ReasonCode: 'RC-WH-UPDATE',
+      AppliesToActions: [ActionCode.Update],
+      AppliesToObjects: [ObjectType.Warehouse],
+    });
+    await create.Execute({
+      ...validCreate,
+      ReasonCode: 'RC-WH-APPROVE',
+      AppliesToActions: [ActionCode.Approve],
+      AppliesToObjects: [ObjectType.Warehouse],
+    });
+    await create.Execute({
+      ...validCreate,
+      ReasonCode: 'RC-SITE-UPDATE',
+      AppliesToActions: [ActionCode.Update],
+      AppliesToObjects: [ObjectType.Site],
+    });
+
+    const result = await new ListReasonCodesUseCase(repo).Execute({
+      ObjectType: ObjectType.Warehouse,
+      PageSize: 100,
+    });
+
+    expect(result.Items.map((item) => item.ReasonCode)).toEqual(['RC-WH-APPROVE', 'RC-WH-UPDATE']);
+    expect(result.Meta.TotalItems).toBe(2);
+  });
+
+  it('keeps list backward compatible when ObjectType is omitted', async () => {
+    const repo = new InMemoryReasonCodeRepository();
+    const create = new CreateReasonCodeUseCase(repo);
+    await create.Execute({
+      ...validCreate,
+      ReasonCode: 'RC-WH-UPDATE',
+      AppliesToActions: [ActionCode.Update],
+      AppliesToObjects: [ObjectType.Warehouse],
+    });
+    await create.Execute({
+      ...validCreate,
+      ReasonCode: 'RC-SITE-UPDATE',
+      AppliesToActions: [ActionCode.Update],
+      AppliesToObjects: [ObjectType.Site],
+    });
+    await create.Execute({
+      ...validCreate,
+      ReasonCode: 'RC-WH-APPROVE',
+      AppliesToActions: [ActionCode.Approve],
+      AppliesToObjects: [ObjectType.Warehouse],
+    });
+
+    const result = await new ListReasonCodesUseCase(repo).Execute({
+      Action: ActionCode.Update,
+      PageSize: 100,
+    });
+
+    expect(result.Items.map((item) => item.ReasonCode)).toEqual(['RC-SITE-UPDATE', 'RC-WH-UPDATE']);
+    expect(result.Meta.TotalItems).toBe(2);
   });
 
   it('rejects an unknown action enum in the payload', async () => {

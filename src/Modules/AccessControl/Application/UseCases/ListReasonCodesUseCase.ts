@@ -25,6 +25,7 @@ export class ListReasonCodesUseCase {
       ReasonGroup: input.ReasonGroup,
       Status: input.Status,
       Action: input.Action,
+      ObjectType: input.ObjectType,
     });
     return {
       Items: Items.map(ReasonCodeDtoMapper.ToDto),

@@ -1,5 +1,6 @@
 import { EntityManager } from 'typeorm';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ReasonCodeStatus } from '@modules/AccessControl/Domain/Enums/ReasonCodeStatus';
 import { ReasonGroup } from '@modules/AccessControl/Domain/Enums/ReasonGroup';
 import { ReasonCodeEntity } from '@modules/AccessControl/Domain/Entities/ReasonCodeEntity';
@@ -10,6 +11,7 @@ export interface ReasonCodeListFilter {
   ReasonGroup?: ReasonGroup;
   Status?: ReasonCodeStatus;
   Action?: ActionCode;
+  ObjectType?: ObjectType;
 }
 
 export interface IReasonCodeRepository {

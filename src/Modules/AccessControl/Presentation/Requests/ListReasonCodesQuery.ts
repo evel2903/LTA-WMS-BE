@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, Min } from 'class-validator';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ReasonCodeStatus } from '@modules/AccessControl/Domain/Enums/ReasonCodeStatus';
 import { ReasonGroup } from '@modules/AccessControl/Domain/Enums/ReasonGroup';
 
@@ -28,4 +29,8 @@ export class ListReasonCodesQuery {
   @IsOptional()
   @IsEnum(ActionCode)
   public Action?: ActionCode;
+
+  @IsOptional()
+  @IsEnum(ObjectType)
+  public ObjectType?: ObjectType;
 }
