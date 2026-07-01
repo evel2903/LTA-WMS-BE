@@ -4,6 +4,7 @@ import dataSource from '@shared/Database/TypeOrmDataSource';
 import { SeedDemoDataCcFlow } from '@shared/Database/Seed/DemoDataCcFlowSeed';
 import { SeedDemoDataCcFoundation } from '@shared/Database/Seed/DemoDataCcFoundationSeed';
 import { SeedDemoDataCcInventory } from '@shared/Database/Seed/DemoDataCcInventorySeed';
+import { CleanupLegacyDemoDataCcRows } from '@shared/Database/Seed/DemoDataCcLegacyCleanup';
 import { SeedDemoDataCcLocationTree } from '@shared/Database/Seed/DemoDataCcLocationTreeSeed';
 import { SeedDemoDataCcScreenCoverage } from '@shared/Database/Seed/DemoDataCcScreenCoverageSeed';
 import {
@@ -11,19 +12,22 @@ import {
   FormatDemoDataCcTargetSummary,
 } from '@shared/Database/Seed/DemoDataCcTargetGuard';
 
-const Run = async (): Promise<void> => {
+export const RunDemoDataCcSeed = async (): Promise<void> => {
   const target = AssertDemoDataCcLocalTarget(GetEnv(), 'process.env + .env');
 
-  console.log(`[DEMO-DATA-CC] Target verified: ${FormatDemoDataCcTargetSummary(target)}`);
+  console.log(`[DEMO-DATA-LTA] Target verified: ${FormatDemoDataCcTargetSummary(target)}`);
   await dataSource.initialize();
   try {
+    await dataSource.transaction(async (manager) => {
+      await CleanupLegacyDemoDataCcRows(manager);
+    });
     const foundation = await SeedDemoDataCcFoundation(dataSource);
     const locationTree = await SeedDemoDataCcLocationTree(dataSource);
     const inventory = await SeedDemoDataCcInventory(dataSource);
     const flow = await SeedDemoDataCcFlow(dataSource);
     const screenCoverage = await SeedDemoDataCcScreenCoverage(dataSource);
     console.log(
-      `[DEMO-DATA-CC] Demo seed complete: ${JSON.stringify({
+      `[DEMO-DATA-LTA] Demo seed complete: ${JSON.stringify({
         foundation,
         locationTree,
         inventory,
@@ -36,7 +40,9 @@ const Run = async (): Promise<void> => {
   }
 };
 
-Run().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  RunDemoDataCcSeed().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

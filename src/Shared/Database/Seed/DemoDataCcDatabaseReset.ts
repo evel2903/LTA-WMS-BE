@@ -1,4 +1,6 @@
 import type { DataSource } from 'typeorm';
+import { GetEnv } from '@shared/Config/Env/Env';
+import { AssertDemoDataCcLocalConnectionTarget } from '@shared/Database/Seed/DemoDataCcTargetGuard';
 
 export const DemoDataCcProtectedTables = ['migrations'] as const;
 
@@ -46,6 +48,7 @@ export const ListDemoDataCcResetTables = async (dataSource: DataSource): Promise
 };
 
 export const ResetDemoDataCcLocalDatabase = async (dataSource: DataSource): Promise<DemoDataCcResetResult> => {
+  AssertDemoDataCcLocalConnectionTarget(dataSource.options, GetEnv(), 'DataSource.options');
   const tables = await ListDemoDataCcResetTables(dataSource);
   const truncateSql = BuildDemoDataCcTruncateSql(tables);
 

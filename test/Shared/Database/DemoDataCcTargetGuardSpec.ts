@@ -1,5 +1,7 @@
 import {
+  AssertDemoDataCcLocalConnectionTarget,
   AssertDemoDataCcLocalTarget,
+  BuildDemoDataCcTargetSummaryFromConnectionOptions,
   BuildDemoDataCcTargetSummary,
   FormatDemoDataCcTargetSummary,
   ValidateDemoDataCcTarget,
@@ -79,5 +81,38 @@ describe('DemoDataCcTargetGuard', () => {
         DbDatabase: '',
       }),
     ).toThrow('DB_DATABASE is required');
+  });
+
+  it('validates the actual TypeORM connection target used by cleanup helpers', () => {
+    const target = AssertDemoDataCcLocalConnectionTarget(
+      { host: 'localhost', port: '5432', database: 'backend_seed' },
+      { NodeEnv: 'development' },
+      'EntityManager.connection.options',
+    );
+
+    expect(target).toMatchObject({
+      DbHost: 'localhost',
+      DbPort: 5432,
+      DbDatabase: 'backend_seed',
+      EnvSource: 'EntityManager.connection.options',
+    });
+  });
+
+  it('rejects cleanup when the actual TypeORM connection is not local even if env was local', () => {
+    expect(() =>
+      AssertDemoDataCcLocalConnectionTarget(
+        { host: 'prod.database.internal', port: 5432, database: 'backend_seed' },
+        { NodeEnv: 'development' },
+      ),
+    ).toThrow('DB_HOST=prod.database.internal is not an allowed local target');
+
+    expect(() =>
+      ValidateDemoDataCcTarget(
+        BuildDemoDataCcTargetSummaryFromConnectionOptions(
+          { host: 'localhost', port: 'not-a-number', database: 'backend_seed' },
+          { NodeEnv: 'development' },
+        ),
+      ),
+    ).toThrow('DB_PORT must be a positive number');
   });
 });

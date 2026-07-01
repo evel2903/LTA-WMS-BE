@@ -1,18 +1,21 @@
-import { BuildDemoDataCcLocationTreePlan } from '@shared/Database/Seed/DemoDataCcLocationTreeSeed';
+import {
+  AssertDemoDataCcWritableLocationTreeRow,
+  BuildDemoDataCcLocationTreePlan,
+} from '@shared/Database/Seed/DemoDataCcLocationTreeSeed';
 
 describe('DemoDataCcLocationTreeSeed', () => {
-  it('builds the required Coca-Cola HCM zone set', () => {
+  it('builds the required LTA HCM zone set', () => {
     const plan = BuildDemoDataCcLocationTreePlan();
 
-    expect(plan.WarehouseCode).toBe('CC-HCM-01');
+    expect(plan.WarehouseCode).toBe('LTA-HCM-01');
     expect(plan.Zones.map((zone) => zone.ZoneCode)).toEqual([
-      'CC-RCV',
-      'CC-QC',
-      'CC-RSV',
-      'CC-PF',
-      'CC-PACK',
-      'CC-LOAD',
-      'CC-QAR',
+      'LTA-RCV',
+      'LTA-QC',
+      'LTA-RSV',
+      'LTA-PF',
+      'LTA-PACK',
+      'LTA-LOAD',
+      'LTA-QAR',
     ]);
   });
 
@@ -38,5 +41,15 @@ describe('DemoDataCcLocationTreeSeed', () => {
 
     expect(codes).toEqual(expect.arrayContaining(['RSV-A01-R01-L01-B01', 'PF-A01-R01-L01-B01']));
     expect(plan.Locations.some((location) => location.PalletSlot && location.PalletSlot > 0)).toBe(true);
+  });
+
+  it('blocks overwriting existing location tree rows that are not owned by the demo seed', () => {
+    expect(() => AssertDemoDataCcWritableLocationTreeRow({ SourceSystem: 'SEED' }, 'location', 'PF-A01')).toThrow(
+      'existing non-demo location PF-A01',
+    );
+
+    expect(() =>
+      AssertDemoDataCcWritableLocationTreeRow({ SourceSystem: 'DEMO-DATA-LTA' }, 'location', 'PF-A01'),
+    ).not.toThrow();
   });
 });
