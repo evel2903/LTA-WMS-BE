@@ -77,16 +77,30 @@ import { ShipmentPackageStagingStatus } from '@modules/Shipping/Domain/Enums/Shi
 import { ShipmentPackageStagingOrmEntity } from '@modules/Shipping/Infrastructure/Persistence/Entities/ShipmentPackageStagingOrmEntity';
 import { UserOrmEntity } from '@modules/Users/Infrastructure/Persistence/Entities/UserOrmEntity';
 import { WarehouseProfileOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileOrmEntity';
+import { GetEnv } from '@shared/Config/Env/Env';
 import { BuildDemoDataCcInventoryDimensionHash } from '@shared/Database/Seed/DemoDataCcInventorySeed';
+import { CleanupDemoDataCcScreenCoverage } from '@shared/Database/Seed/DemoDataCcScreenCoverageSeed';
+import { AssertDemoDataCcLocalConnectionTarget } from '@shared/Database/Seed/DemoDataCcTargetGuard';
 
-const DemoSourceSystem = 'DEMO-DATA-CC';
-const DemoFlowPrefix = 'CC-DEMO-';
+const DemoSourceSystem = 'DEMO-DATA-LTA';
+const DemoFlowPrefix = 'LTA-DEMO-';
+const LegacyDemoSourceSystem = 'DEMO-DATA-CC';
+const LegacyDemoFlowReferences = ['CC-DEMO-WT01', 'CC-DEMO-WT05', 'CC-DEMO-WT06'] as const;
+const DemoFlowLpnCodes = ['LTA-FLOW-LPN-WT01'] as const;
+const LegacyDemoFlowLpnCodes = ['CC-FLOW-LPN-WT01', 'CC-FLOW-LPN-WT05', 'CC-FLOW-LPN-WT06'] as const;
 
 export type DemoDataCcFlowScenario = {
-  ScenarioCode: 'WT-01' | 'WT-05' | 'WT-06';
+  ScenarioCode: 'WT-01';
   FlowReference: string;
   SkuCode: string;
   Quantity: number;
+  ContainerNumber: string;
+  SealNumber: string;
+  ShipmentReference: string;
+  TruckReference: string;
+  VehicleNumber: string;
+  LoadReference: string;
+  GateOutReference: string;
   InboundLocationCode: string;
   PutawayLocationCode: string;
   PickLocationCode: string;
@@ -117,6 +131,33 @@ export type DemoDataCcFlowSeedResult = {
   ReconciliationRunCount: number;
   ScenarioReferences: string[];
 };
+
+export type DemoDataCcFlowOutboxPayload = {
+  SourceId: string;
+  ScenarioCode: DemoDataCcFlowScenario['ScenarioCode'];
+  Quantity: number;
+  UomCode: string;
+  ShipmentReference?: string;
+  TruckReference?: string;
+  VehicleNumber?: string;
+  LoadReference?: string;
+  GateOutReference?: string;
+  ContainerNumber?: string;
+  SealNumber?: string;
+};
+
+export const DemoDataCcFlowOutboxEventTypes = [
+  'InboundImported',
+  'PutawayConfirmed',
+  'OutboundOrderImported',
+  'AllocationCompleted',
+  'PickConfirmed',
+  'PackagePacked',
+  'LoadingConfirmed',
+  'GoodsIssuePosted',
+] as const;
+
+export type DemoDataCcFlowOutboxEventType = (typeof DemoDataCcFlowOutboxEventTypes)[number];
 
 type DemoDataCcFlowContext = {
   ActorId: string | null;
@@ -171,17 +212,13 @@ type ScenarioIds = {
 };
 
 export const BuildDemoDataCcFlowPlan = (): DemoDataCcFlowPlan => ({
-  WarehouseCode: 'CC-HCM-01',
-  OwnerCode: 'CCVN',
-  SupplierCode: 'CC-SUP-HCM',
-  CustomerCode: 'CC-CUS-MT',
-  CarrierCode: 'CC-CAR-3PL',
-  UomCode: 'CASE',
-  Scenarios: [
-    scenario('WT-01', 'CC-COKE-330-CAN', 12, 'RSV-A01-R01-L01-B01', 'PF-A01-R01-L01-B01'),
-    scenario('WT-05', 'CC-COKE-390-BTL', 8, 'RSV-A01-R01-L01-B02', 'PF-A01-R01-L01-B02'),
-    scenario('WT-06', 'CC-SPRITE-330-CAN', 10, 'RSV-A01-R02-L01-B01', 'PF-A01-R01-L01-B01'),
-  ],
+  WarehouseCode: 'LTA-HCM-01',
+  OwnerCode: 'LTA',
+  SupplierCode: 'LTA-SUP-SEAL',
+  CustomerCode: 'LTA-CUS-SEAL',
+  CarrierCode: 'LTA-CAR-3PL',
+  UomCode: 'BOX',
+  Scenarios: [scenario('WT-01', 'LTA-SEAL-CABLE-001', 12, 'RSV-A01-R01-L01-B01', 'PF-A01-R01-L01-B01')],
 });
 
 const scenario = (
@@ -195,6 +232,13 @@ const scenario = (
   FlowReference: `${DemoFlowPrefix}${ScenarioCode.replace('-', '')}`,
   SkuCode,
   Quantity,
+  ContainerNumber: 'CONT-LTA-WT01-0001',
+  SealNumber: 'SEAL-LTA-WT01-20260701',
+  ShipmentReference: 'LTA-WT01-SEAL-DEMO',
+  TruckReference: 'TRUCK-LTA-WT01-0001',
+  VehicleNumber: '51D-WT01',
+  LoadReference: 'LOAD-LTA-WT01-SEAL',
+  GateOutReference: 'GATEOUT-LTA-WT01-SEAL',
   InboundLocationCode: 'QC-A01-STG01',
   PutawayLocationCode,
   PickLocationCode,
@@ -202,6 +246,83 @@ const scenario = (
   DockLocationCode: 'LOAD-A01-D01',
   GoodsIssueTrigger: 'at_loading',
 });
+
+export const BuildDemoDataCcFlowOutboxPayload = (input: {
+  EventType: DemoDataCcFlowOutboxEventType;
+  Scenario: DemoDataCcFlowScenario;
+  SourceId: string;
+  UomCode: string;
+}): DemoDataCcFlowOutboxPayload => {
+  if (!DemoDataCcFlowOutboxEventTypes.includes(input.EventType)) {
+    throw new Error(`Unsupported demo-data outbox event: ${input.EventType as string}.`);
+  }
+
+  const payload: DemoDataCcFlowOutboxPayload = {
+    SourceId: input.SourceId,
+    ScenarioCode: input.Scenario.ScenarioCode,
+    Quantity: input.Scenario.Quantity,
+    UomCode: input.UomCode,
+  };
+
+  if (['PackagePacked', 'LoadingConfirmed', 'GoodsIssuePosted'].includes(input.EventType)) {
+    payload.ContainerNumber = input.Scenario.ContainerNumber;
+    payload.SealNumber = input.Scenario.SealNumber;
+  }
+
+  if (['LoadingConfirmed', 'GoodsIssuePosted'].includes(input.EventType)) {
+    payload.ShipmentReference = input.Scenario.ShipmentReference;
+    payload.TruckReference = input.Scenario.TruckReference;
+    payload.VehicleNumber = input.Scenario.VehicleNumber;
+    payload.LoadReference = input.Scenario.LoadReference;
+  }
+
+  if (input.EventType === 'GoodsIssuePosted') {
+    payload.GateOutReference = input.Scenario.GateOutReference;
+  }
+
+  return payload;
+};
+
+export const BuildDemoDataCcFlowOutboxEvidenceRefs = (input: {
+  EventType: DemoDataCcFlowOutboxEventType;
+  Scenario: DemoDataCcFlowScenario;
+}): string[] => {
+  if (!DemoDataCcFlowOutboxEventTypes.includes(input.EventType)) {
+    throw new Error(`Unsupported demo-data outbox event: ${input.EventType as string}.`);
+  }
+
+  const refs = [`${input.Scenario.FlowReference}:${input.EventType}`];
+
+  if (['PackagePacked', 'LoadingConfirmed', 'GoodsIssuePosted'].includes(input.EventType)) {
+    refs.push(`container:${input.Scenario.ContainerNumber}`, `seal:${input.Scenario.SealNumber}`);
+  }
+
+  if (['LoadingConfirmed', 'GoodsIssuePosted'].includes(input.EventType)) {
+    refs.push(
+      `shipment:${input.Scenario.ShipmentReference}`,
+      `truck:${input.Scenario.TruckReference}`,
+      `vehicle:${input.Scenario.VehicleNumber}`,
+      `load:${input.Scenario.LoadReference}`,
+    );
+  }
+
+  if (input.EventType === 'GoodsIssuePosted') {
+    refs.push(`gateout:${input.Scenario.GateOutReference}`);
+  }
+
+  return refs;
+};
+
+export const BuildDemoDataCcFlowShippingEvidenceRefs = (input: DemoDataCcFlowScenario): string[] => [
+  `${input.FlowReference}:shipping`,
+  `container:${input.ContainerNumber}`,
+  `seal:${input.SealNumber}`,
+  `shipment:${input.ShipmentReference}`,
+  `truck:${input.TruckReference}`,
+  `vehicle:${input.VehicleNumber}`,
+  `load:${input.LoadReference}`,
+  `gateout:${input.GateOutReference}`,
+];
 
 export const DemoDataCcForbiddenFlowInventoryStatuses = [
   'SHIPPED',
@@ -236,80 +357,188 @@ export const SeedDemoDataCcFlow = async (dataSource: DataSource): Promise<DemoDa
     };
   });
 
-const CleanupDemoDataCcFlow = async (manager: EntityManager): Promise<void> => {
-  await manager.query(
-    `DELETE FROM integration_reconciliation_items WHERE run_id IN (SELECT id FROM integration_reconciliation_runs WHERE business_reference LIKE $1)`,
-    [`${DemoFlowPrefix}%`],
-  );
-  await manager.query(`DELETE FROM integration_reconciliation_runs WHERE business_reference LIKE $1`, [
-    `${DemoFlowPrefix}%`,
-  ]);
-  await manager.query(
-    `DELETE FROM integration_outbox_messages WHERE source_system = $1 AND business_reference LIKE $2`,
-    [DemoSourceSystem, `${DemoFlowPrefix}%`],
-  );
-  await manager.query(
-    `DELETE FROM integration_interface_messages WHERE source_system = $1 AND business_reference LIKE $2`,
-    [DemoSourceSystem, `${DemoFlowPrefix}%`],
-  );
-  await manager.query(`DELETE FROM integration_import_batches WHERE source_system = $1 AND batch_reference LIKE $2`, [
+export const CleanupDemoDataCcFlow = async (manager: EntityManager): Promise<void> => {
+  AssertDemoDataCcLocalConnectionTarget(manager.connection.options, GetEnv(), 'EntityManager.connection.options');
+  await CleanupDemoDataCcScreenCoverage(manager);
+  await CleanupDemoDataCcFlowByReferences(
+    manager,
     DemoSourceSystem,
-    `${DemoFlowPrefix}%`,
-  ]);
-  await manager.query(
-    `DELETE FROM workflow_handoffs WHERE core_flow_instance_id IN (SELECT id FROM core_flow_instances WHERE business_reference LIKE $1)`,
-    [`${DemoFlowPrefix}%`],
+    BuildDemoDataCcFlowPlan().Scenarios.map((item) => item.FlowReference),
+    DemoFlowLpnCodes,
   );
-  await manager.query(
-    `DELETE FROM workflow_milestones WHERE core_flow_instance_id IN (SELECT id FROM core_flow_instances WHERE business_reference LIKE $1)`,
-    [`${DemoFlowPrefix}%`],
+  await CleanupDemoDataCcFlowByReferences(
+    manager,
+    LegacyDemoSourceSystem,
+    LegacyDemoFlowReferences,
+    LegacyDemoFlowLpnCodes,
   );
-  await manager.query(`DELETE FROM core_flow_instances WHERE business_reference LIKE $1`, [`${DemoFlowPrefix}%`]);
-  await manager.query(`DELETE FROM shipping_package_staging WHERE staging_code LIKE $1`, [`STG-${DemoFlowPrefix}%`]);
-  await manager.query(
-    `DELETE FROM outbound_package_contents WHERE package_id IN (SELECT id FROM outbound_packages WHERE package_code LIKE $1)`,
-    [`PKG-${DemoFlowPrefix}%`],
-  );
-  await manager.query(`DELETE FROM outbound_packages WHERE package_code LIKE $1`, [`PKG-${DemoFlowPrefix}%`]);
-  await manager.query(`DELETE FROM outbound_pack_sessions WHERE session_number LIKE $1`, [`PS-${DemoFlowPrefix}%`]);
-  await manager.query(`DELETE FROM outbound_pick_tasks WHERE task_number LIKE $1`, [`PT-${DemoFlowPrefix}%`]);
-  await manager.query(`DELETE FROM outbound_pick_releases WHERE release_number LIKE $1`, [`PR-${DemoFlowPrefix}%`]);
-  await manager.query(
-    `DELETE FROM outbound_allocation_lines WHERE allocation_id IN (SELECT id FROM outbound_allocations WHERE allocation_number LIKE $1)`,
-    [`AL-${DemoFlowPrefix}%`],
-  );
-  await manager.query(`DELETE FROM outbound_allocations WHERE allocation_number LIKE $1`, [`AL-${DemoFlowPrefix}%`]);
-  await manager.query(
-    `DELETE FROM outbound_order_lines WHERE outbound_order_id IN (SELECT id FROM outbound_orders WHERE source_system = $1 AND order_number LIKE $2)`,
-    [DemoSourceSystem, `OO-${DemoFlowPrefix}%`],
-  );
-  await manager.query(`DELETE FROM outbound_orders WHERE source_system = $1 AND order_number LIKE $2`, [
-    DemoSourceSystem,
-    `OO-${DemoFlowPrefix}%`,
-  ]);
-  await manager.query(`DELETE FROM inventory_movements WHERE movement_code LIKE $1`, [`MV-${DemoFlowPrefix}%`]);
-  await manager.query(`DELETE FROM inventory_transactions WHERE transaction_code LIKE $1`, [`TX-${DemoFlowPrefix}%`]);
-  await manager.query(`DELETE FROM putaway_tasks WHERE task_code LIKE $1`, [`PA-${DemoFlowPrefix}%`]);
-  await manager.query(`DELETE FROM inbound_putaway_releases WHERE idempotency_key LIKE $1`, [`${DemoFlowPrefix}%`]);
-  await manager.query(`DELETE FROM inbound_lpns WHERE lpn_code LIKE $1`, [`CC-FLOW-LPN-%`]);
-  await manager.query(`DELETE FROM qc_results WHERE idempotency_key LIKE $1`, [`${DemoFlowPrefix}%`]);
-  await manager.query(`DELETE FROM qc_tasks WHERE idempotency_key LIKE $1`, [`${DemoFlowPrefix}%`]);
-  await manager.query(`DELETE FROM receipt_lines WHERE idempotency_key LIKE $1`, [`${DemoFlowPrefix}%`]);
-  await manager.query(`DELETE FROM receiving_sessions WHERE session_key LIKE $1`, [`RS-${DemoFlowPrefix}%`]);
-  await manager.query(`DELETE FROM receipts WHERE business_reference LIKE $1`, [`${DemoFlowPrefix}%`]);
-  await manager.query(
-    `DELETE FROM inbound_plan_lines WHERE inbound_plan_id IN (SELECT id FROM inbound_plans WHERE source_system = $1 AND source_document_type = 'DEMO_FLOW')`,
-    [DemoSourceSystem],
-  );
-  await manager.query(`DELETE FROM inbound_plans WHERE source_system = $1 AND source_document_type = 'DEMO_FLOW'`, [
-    DemoSourceSystem,
-  ]);
-  await manager.query(
-    `DELETE FROM inventory_balances WHERE dimension_id IN (SELECT id FROM inventory_dimensions WHERE reference_id LIKE $1)`,
-    [`${DemoFlowPrefix}%`],
-  );
-  await manager.query(`DELETE FROM inventory_dimensions WHERE reference_id LIKE $1`, [`${DemoFlowPrefix}%`]);
 };
+
+const CleanupDemoDataCcFlowByReferences = async (
+  manager: EntityManager,
+  sourceSystem: string,
+  flowReferences: readonly string[],
+  lpnCodes: readonly string[],
+): Promise<void> => {
+  const codes = BuildDemoDataCcFlowCleanupCodes(flowReferences);
+  await manager.query(
+    `DELETE FROM integration_reconciliation_items WHERE run_id IN (SELECT id FROM integration_reconciliation_runs WHERE business_reference = ANY($1::text[]) AND idempotency_key = ANY($2::text[]) AND evidence_refs ?| $3::text[])`,
+    [flowReferences, codes.ReconciliationIdempotencyKeys, codes.ReconciliationEvidenceRefs],
+  );
+  await manager.query(
+    `DELETE FROM integration_reconciliation_runs WHERE business_reference = ANY($1::text[]) AND idempotency_key = ANY($2::text[]) AND evidence_refs ?| $3::text[]`,
+    [flowReferences, codes.ReconciliationIdempotencyKeys, codes.ReconciliationEvidenceRefs],
+  );
+  await manager.query(
+    `DELETE FROM integration_outbox_messages WHERE source_system = $1 AND business_reference = ANY($2::text[])`,
+    [sourceSystem, flowReferences],
+  );
+  await manager.query(
+    `DELETE FROM integration_interface_messages WHERE source_system = $1 AND business_reference = ANY($2::text[])`,
+    [sourceSystem, flowReferences],
+  );
+  await manager.query(
+    `DELETE FROM integration_import_batches WHERE source_system = $1 AND batch_reference = ANY($2::text[])`,
+    [sourceSystem, codes.ImportBatchReferences],
+  );
+  await manager.query(
+    `DELETE FROM workflow_handoffs WHERE core_flow_instance_id IN (SELECT id FROM core_flow_instances WHERE source_system = $1 AND business_reference = ANY($2::text[]))`,
+    [sourceSystem, flowReferences],
+  );
+  await manager.query(
+    `DELETE FROM workflow_milestones WHERE core_flow_instance_id IN (SELECT id FROM core_flow_instances WHERE source_system = $1 AND business_reference = ANY($2::text[]))`,
+    [sourceSystem, flowReferences],
+  );
+  await manager.query(
+    `DELETE FROM core_flow_instances WHERE source_system = $1 AND business_reference = ANY($2::text[])`,
+    [sourceSystem, flowReferences],
+  );
+  await manager.query(`DELETE FROM shipping_package_staging WHERE staging_code = ANY($1::text[])`, [
+    codes.ShippingStagingCodes,
+  ]);
+  await manager.query(
+    `DELETE FROM outbound_package_contents WHERE package_id IN (SELECT id FROM outbound_packages WHERE package_code = ANY($1::text[]))`,
+    [codes.PackageCodes],
+  );
+  await manager.query(`DELETE FROM outbound_packages WHERE package_code = ANY($1::text[])`, [codes.PackageCodes]);
+  await manager.query(`DELETE FROM outbound_pack_sessions WHERE session_number = ANY($1::text[])`, [
+    codes.PackSessionNumbers,
+  ]);
+  await manager.query(`DELETE FROM outbound_pick_tasks WHERE task_number = ANY($1::text[])`, [codes.PickTaskNumbers]);
+  await manager.query(`DELETE FROM outbound_pick_releases WHERE release_number = ANY($1::text[])`, [
+    codes.PickReleaseNumbers,
+  ]);
+  await manager.query(
+    `DELETE FROM outbound_allocation_lines WHERE allocation_id IN (SELECT id FROM outbound_allocations WHERE allocation_number = ANY($1::text[]))`,
+    [codes.AllocationNumbers],
+  );
+  await manager.query(`DELETE FROM outbound_allocations WHERE allocation_number = ANY($1::text[])`, [
+    codes.AllocationNumbers,
+  ]);
+  await manager.query(
+    `DELETE FROM outbound_order_lines WHERE outbound_order_id IN (SELECT id FROM outbound_orders WHERE source_system = $1 AND order_number = ANY($2::text[]))`,
+    [sourceSystem, codes.OutboundOrderNumbers],
+  );
+  await manager.query(`DELETE FROM outbound_orders WHERE source_system = $1 AND order_number = ANY($2::text[])`, [
+    sourceSystem,
+    codes.OutboundOrderNumbers,
+  ]);
+  await manager.query(`DELETE FROM inventory_movements WHERE movement_code = ANY($1::text[])`, [codes.MovementCodes]);
+  await manager.query(`DELETE FROM inventory_transactions WHERE transaction_code = ANY($1::text[])`, [
+    codes.TransactionCodes,
+  ]);
+  await manager.query(`DELETE FROM putaway_tasks WHERE task_code = ANY($1::text[])`, [codes.PutawayTaskCodes]);
+  await manager.query(`DELETE FROM inbound_putaway_releases WHERE idempotency_key = ANY($1::text[])`, [
+    codes.PutawayReleaseIdempotencyKeys,
+  ]);
+  await manager.query(
+    `DELETE FROM inbound_lpns WHERE idempotency_key = ANY($1::text[]) AND lpn_code = ANY($2::text[])`,
+    [codes.LpnIdempotencyKeys, lpnCodes],
+  );
+  await manager.query(`DELETE FROM qc_results WHERE idempotency_key = ANY($1::text[])`, [codes.QcResultKeys]);
+  await manager.query(`DELETE FROM qc_tasks WHERE idempotency_key = ANY($1::text[])`, [codes.QcTaskKeys]);
+  await manager.query(`DELETE FROM receipt_lines WHERE idempotency_key = ANY($1::text[])`, [
+    codes.ReceiptLineIdempotencyKeys,
+  ]);
+  await manager.query(`DELETE FROM receiving_sessions WHERE session_key = ANY($1::text[])`, [
+    codes.ReceivingSessionKeys,
+  ]);
+  await manager.query(`DELETE FROM receipts WHERE business_reference = ANY($1::text[])`, [
+    codes.ReceiptBusinessReferences,
+  ]);
+  await manager.query(
+    `DELETE FROM inbound_plan_lines WHERE inbound_plan_id IN (SELECT id FROM inbound_plans WHERE source_system = $1 AND source_document_type = 'DEMO_FLOW' AND (business_reference = ANY($2::text[]) OR source_document_number = ANY($3::text[])))`,
+    [sourceSystem, codes.InboundPlanBusinessReferences, codes.InboundPlanSourceDocumentNumbers],
+  );
+  await manager.query(
+    `DELETE FROM inbound_plans WHERE source_system = $1 AND source_document_type = 'DEMO_FLOW' AND (business_reference = ANY($2::text[]) OR source_document_number = ANY($3::text[]))`,
+    [sourceSystem, codes.InboundPlanBusinessReferences, codes.InboundPlanSourceDocumentNumbers],
+  );
+  await manager.query(
+    `DELETE FROM inventory_balances WHERE source_system = $1 AND dimension_id IN (SELECT id FROM inventory_dimensions WHERE source_system = $1 AND reference_id = ANY($2::text[]))`,
+    [sourceSystem, codes.InventoryReferenceIds],
+  );
+  await manager.query(`DELETE FROM inventory_dimensions WHERE source_system = $1 AND reference_id = ANY($2::text[])`, [
+    sourceSystem,
+    codes.InventoryReferenceIds,
+  ]);
+};
+
+const BuildDemoDataCcFlowCleanupCodes = (
+  flowReferences: readonly string[],
+): {
+  ImportBatchReferences: string[];
+  ShippingStagingCodes: string[];
+  PackageCodes: string[];
+  PackSessionNumbers: string[];
+  PickTaskNumbers: string[];
+  PickReleaseNumbers: string[];
+  AllocationNumbers: string[];
+  OutboundOrderNumbers: string[];
+  MovementCodes: string[];
+  TransactionCodes: string[];
+  PutawayTaskCodes: string[];
+  PutawayReleaseIdempotencyKeys: string[];
+  LpnIdempotencyKeys: string[];
+  QcResultKeys: string[];
+  QcTaskKeys: string[];
+  ReceiptLineIdempotencyKeys: string[];
+  ReceivingSessionKeys: string[];
+  ReceiptBusinessReferences: string[];
+  ReconciliationEvidenceRefs: string[];
+  ReconciliationIdempotencyKeys: string[];
+  InboundPlanBusinessReferences: string[];
+  InboundPlanSourceDocumentNumbers: string[];
+  InventoryReferenceIds: string[];
+} => ({
+  ImportBatchReferences: flowReferences.map((reference) => `${reference}-IMPORT`),
+  ShippingStagingCodes: flowReferences.map((reference) => `STG-${reference}`),
+  PackageCodes: flowReferences.map((reference) => `PKG-${reference}`),
+  PackSessionNumbers: flowReferences.map((reference) => `PS-${reference}`),
+  PickTaskNumbers: flowReferences.map((reference) => `PT-${reference}`),
+  PickReleaseNumbers: flowReferences.map((reference) => `PR-${reference}`),
+  AllocationNumbers: flowReferences.map((reference) => `AL-${reference}`),
+  OutboundOrderNumbers: flowReferences.map((reference) => `OO-${reference}`),
+  MovementCodes: flowReferences.flatMap((reference) => [`MV-${reference}-PUTAWAY`, `MV-${reference}-GI`]),
+  TransactionCodes: flowReferences.flatMap((reference) => [`TX-${reference}-PUTAWAY`, `TX-${reference}-GI`]),
+  PutawayTaskCodes: flowReferences.map((reference) => `PA-${reference}`),
+  PutawayReleaseIdempotencyKeys: flowReferences.map((reference) => `${reference}-putaway-release`),
+  LpnIdempotencyKeys: flowReferences.map((reference) => `${reference}-lpn`),
+  QcResultKeys: flowReferences.map((reference) => `${reference}-qc-result`),
+  QcTaskKeys: flowReferences.map((reference) => `${reference}-qc-task`),
+  ReceiptLineIdempotencyKeys: flowReferences.map((reference) => `${reference}-receipt-line`),
+  ReceivingSessionKeys: flowReferences.map((reference) => `RS-${reference}`),
+  ReceiptBusinessReferences: flowReferences.map((reference) => `${reference}-RCPT`),
+  ReconciliationEvidenceRefs: flowReferences.map((reference) => `${reference}:reconciliation`),
+  ReconciliationIdempotencyKeys: flowReferences.map((reference) => `${reference}-reconciliation`),
+  InboundPlanBusinessReferences: flowReferences.map((reference) => `${reference}-INB`),
+  InboundPlanSourceDocumentNumbers: flowReferences.map((reference) => `${reference}-ASN`),
+  InventoryReferenceIds: flowReferences.flatMap((reference) => [
+    `${reference}:putaway-source`,
+    `${reference}:putaway-destination`,
+    `${reference}:loaded`,
+  ]),
+});
 
 const BuildContext = async (manager: EntityManager, plan: DemoDataCcFlowPlan): Promise<DemoDataCcFlowContext> => {
   const admin = await manager.getRepository(UserOrmEntity).findOne({ where: { EmailAddress: 'admin@example.com' } });
@@ -325,7 +554,7 @@ const BuildContext = async (manager: EntityManager, plan: DemoDataCcFlowPlan): P
   const warehouseProfile = await RequiredByCode(
     manager.getRepository(WarehouseProfileOrmEntity),
     'ProfileCode',
-    'WP-CC-HCM-DEMO',
+    'WP-LTA-HCM-DEMO',
   );
   const uom = await RequiredByCode(manager.getRepository(UomOrmEntity), 'UomCode', plan.UomCode);
   const skusByCode = await RequiredMapByCode(
@@ -380,7 +609,7 @@ const RequiredPartner = async (
     },
   });
   if (!partner) {
-    throw new Error(`DEMO-DATA-CC flow seed requires partner ${partnerCode}.`);
+    throw new Error(`DEMO-DATA-LTA flow seed requires partner ${partnerCode}.`);
   }
 
   return partner;
@@ -393,7 +622,7 @@ const RequiredByCode = async <T extends object>(
 ): Promise<T> => {
   const entity = await repo.findOne({ where: { [codeField]: code } as never });
   if (!entity) {
-    throw new Error(`DEMO-DATA-CC flow seed requires ${repo.metadata.name}.${codeField}=${code}.`);
+    throw new Error(`DEMO-DATA-LTA flow seed requires ${repo.metadata.name}.${codeField}=${code}.`);
   }
 
   return entity;
@@ -409,7 +638,7 @@ const RequiredMapByCode = async <T extends object>(
   for (const code of codes) {
     const entity = await repo.findOne({ where: { ...extraWhere, [codeField]: code } as never });
     if (!entity) {
-      throw new Error(`DEMO-DATA-CC flow seed requires ${repo.metadata.name}.${codeField}=${code}.`);
+      throw new Error(`DEMO-DATA-LTA flow seed requires ${repo.metadata.name}.${codeField}=${code}.`);
     }
     result.set(code, entity);
   }
@@ -434,9 +663,9 @@ const SeedScenario = async (
   const availableStatus = RequiredMapValue(context.InventoryStatusesByCode, 'AVAILABLE');
   const loadedStatus = RequiredMapValue(context.InventoryStatusesByCode, 'LOADED');
   const flowReference = item.FlowReference;
-  const lpnCode = `CC-FLOW-LPN-${item.ScenarioCode.replace('-', '')}`;
-  const lotNumber = `CC-FLOW-BATCH-${item.ScenarioCode.replace('-', '')}`;
-  const expiryDate = `2026-${item.ScenarioCode === 'WT-05' ? '10' : '09'}-30`;
+  const lpnCode = `LTA-FLOW-LPN-${item.ScenarioCode.replace('-', '')}`;
+  const lotNumber = `LTA-FLOW-BATCH-${item.ScenarioCode.replace('-', '')}`;
+  const expiryDate = '2026-09-30';
   const eventIds = BuildOutboxIds();
 
   await SaveEntity(manager.getRepository(CoreFlowInstanceOrmEntity), {
@@ -450,8 +679,10 @@ const SeedScenario = async (
     Status: CoreFlowInstanceStatus.Completed,
     Metadata: {
       scenario: item.ScenarioCode,
-      demo: 'Coca-Cola HCM',
+      demo: 'LTA HCM',
       flow: 'inbound-to-goods-issue',
+      containerNumber: item.ContainerNumber,
+      sealNumber: item.SealNumber,
     },
     CreatedAt: now,
     UpdatedAt: now,
@@ -574,7 +805,12 @@ const SeedCoreFlowMilestones = async (
       ReasonCodeId: null,
       ReasonNote: null,
       ExceptionCaseId: null,
-      Metadata: { scenario: item.ScenarioCode, sequence: index + 1 },
+      Metadata: {
+        scenario: item.ScenarioCode,
+        sequence: index + 1,
+        containerNumber: item.ContainerNumber,
+        sealNumber: item.SealNumber,
+      },
       OccurredAt: AddMinutes(now, index),
       CreatedBy: context.ActorId,
     });
@@ -649,7 +885,7 @@ const SeedInbound = async (
     GateInAt: AddMinutes(now, 1),
     GateReference: `${flowReference}-GATE-IN`,
     VehicleNumber: `51C-${item.ScenarioCode.replace('-', '')}`,
-    DriverName: 'Tài xế demo Coca-Cola',
+    DriverName: 'Tài xế demo LTA',
     EvidenceRefs: [`${flowReference}:inbound-plan`],
     CoreFlowInstanceId: ids.CoreFlowInstanceId,
     CreatedAt: now,
@@ -949,7 +1185,7 @@ const SeedOperationalInventory = async (
     TargetLocationCode: input.putawayLocation.LocationCode,
     TargetLocationProfileId: input.putawayLocation.LocationProfileId,
     Priority: 30,
-    WorkPoolCode: 'CC-DEMO-PUTAWAY',
+    WorkPoolCode: 'LTA-DEMO-PUTAWAY',
     AssignedUserId: null,
     ConstraintJson: { demo: true },
     EligibilityDecisionJson: { eligible: true, rule: 'demo-seed' },
@@ -1382,8 +1618,16 @@ const SeedOutbound = async (
     CheckReasonCode: null,
     CheckReasonCodeId: null,
     CheckReasonNote: null,
-    CheckEvidenceRefs: [`${input.flowReference}:pack-check`],
-    CheckPayloadJson: { scenario: item.ScenarioCode },
+    CheckEvidenceRefs: [
+      `${input.flowReference}:pack-check`,
+      `container:${item.ContainerNumber}`,
+      `seal:${item.SealNumber}`,
+    ],
+    CheckPayloadJson: {
+      scenario: item.ScenarioCode,
+      containerNumber: item.ContainerNumber,
+      sealNumber: item.SealNumber,
+    },
     CheckIdempotencyKey: `${input.flowReference}-pack-check`,
     CheckPayloadFingerprint: Hash(`${input.flowReference}-pack-check`),
     StartedAt: AddMinutes(now, 16),
@@ -1409,7 +1653,7 @@ const SeedOutbound = async (
     Status: PackageStatus.ReadyForStaging,
     CheckRequired: true,
     CheckResult: PackageCheckResult.Passed,
-    CartonType: 'CASE',
+    CartonType: 'BOX',
     Weight: item.Quantity * 10,
     Length: 60,
     Width: 40,
@@ -1475,14 +1719,14 @@ const SeedShipping = async (
     OwnerCode: context.Owner.OwnerCode,
     Status: ShipmentPackageStagingStatus.GateOutRecorded,
     InventoryStatusCode: 'LOADED',
-    ShipmentReference: `${item.FlowReference}-SHIP`,
+    ShipmentReference: item.ShipmentReference,
     StagingLaneCode: packLocation.LocationCode,
     StagingLocationId: packLocation.Id,
     StagingLocationCode: packLocation.LocationCode,
     DockDoorId: dockLocation.Id,
     DockDoorCode: dockLocation.LocationCode,
-    TruckReference: `${item.FlowReference}-TRUCK`,
-    VehicleNumber: `51D-${item.ScenarioCode.replace('-', '')}`,
+    TruckReference: item.TruckReference,
+    VehicleNumber: item.VehicleNumber,
     DriverName: 'Tài xế giao hàng demo',
     CarrierId: context.Carrier.Id,
     CarrierCode: context.Carrier.PartnerCode,
@@ -1506,19 +1750,19 @@ const SeedShipping = async (
     ReasonCode: null,
     ReasonCodeId: null,
     ReasonNote: null,
-    EvidenceRefs: [`${item.FlowReference}:shipping`],
+    EvidenceRefs: BuildDemoDataCcFlowShippingEvidenceRefs(item),
     StagedAt: AddMinutes(now, 19),
     StagedBy: context.ActorId,
     DockAssignedAt: AddMinutes(now, 20),
     DockAssignedBy: context.ActorId,
     TruckAssignedAt: AddMinutes(now, 20),
     TruckAssignedBy: context.ActorId,
-    LoadReference: `${item.FlowReference}-LOAD`,
+    LoadReference: item.LoadReference,
     LoadedAt: AddMinutes(now, 21),
     LoadedBy: context.ActorId,
     ShipmentConfirmedAt: AddMinutes(now, 22),
     ShipmentConfirmedBy: context.ActorId,
-    GateOutReference: `${item.FlowReference}-GATE-OUT`,
+    GateOutReference: item.GateOutReference,
     GateOutAt: AddMinutes(now, 23),
     GateOutBy: context.ActorId,
     GoodsIssueTrigger: item.GoodsIssueTrigger,
@@ -1603,6 +1847,8 @@ const SeedIntegration = async (
   ] as const;
 
   for (const [eventType, id, sourceId] of events) {
+    const eventTime = GetDemoDataCcFlowOutboxEventTime(now, eventType);
+
     await SaveEntity(manager.getRepository(OutboxMessageOrmEntity), {
       Id: id,
       SourceMessageId: null,
@@ -1614,15 +1860,15 @@ const SeedIntegration = async (
       TargetSystem: 'ERP-TMS-DEMO',
       WarehouseContext: context.Warehouse.WarehouseCode,
       OwnerContext: context.Owner.OwnerCode,
-      EventTime: AddMinutes(now, 20),
+      EventTime: eventTime,
       CorrelationId: `${item.FlowReference}-corr`,
       CausationId: `${item.FlowReference}-${eventType}-cause`,
-      Payload: {
+      Payload: BuildDemoDataCcFlowOutboxPayload({
+        EventType: eventType,
+        Scenario: item,
         SourceId: sourceId,
-        ScenarioCode: item.ScenarioCode,
-        Quantity: item.Quantity,
         UomCode: uomCode,
-      },
+      }),
       Status: OutboxMessageStatus.Pending,
       AttemptCount: 0,
       MaxAttempts: 5,
@@ -1639,10 +1885,13 @@ const SeedIntegration = async (
       ReasonCode: null,
       ReasonCodeId: null,
       ReasonNote: null,
-      EvidenceRefs: [`${item.FlowReference}:${eventType}`],
-      CreatedAt: AddMinutes(now, 20),
+      EvidenceRefs: BuildDemoDataCcFlowOutboxEvidenceRefs({
+        EventType: eventType,
+        Scenario: item,
+      }),
+      CreatedAt: eventTime,
       CreatedBy: context.ActorId,
-      UpdatedAt: AddMinutes(now, 20),
+      UpdatedAt: eventTime,
     });
   }
 
@@ -1704,7 +1953,7 @@ const SeedIntegration = async (
 const RequiredMapValue = <T>(map: Map<string, T>, key: string): T => {
   const value = map.get(key);
   if (!value) {
-    throw new Error(`DEMO-DATA-CC flow seed missing map value ${key}.`);
+    throw new Error(`DEMO-DATA-LTA flow seed missing map value ${key}.`);
   }
 
   return value;
@@ -1714,5 +1963,24 @@ const SaveEntity = async <T extends object>(repo: Repository<T>, entity: DeepPar
   await repo.save(repo.create(entity));
 
 const AddMinutes = (date: Date, minutes: number): Date => new Date(date.getTime() + minutes * 60 * 1000);
+
+const DemoDataCcFlowOutboxEventMinuteByType: Record<DemoDataCcFlowOutboxEventType, number> = {
+  InboundImported: 0,
+  PutawayConfirmed: 8,
+  OutboundOrderImported: 12,
+  AllocationCompleted: 13,
+  PickConfirmed: 15,
+  PackagePacked: 17,
+  LoadingConfirmed: 21,
+  GoodsIssuePosted: 24,
+};
+
+export const GetDemoDataCcFlowOutboxEventTime = (date: Date, eventType: DemoDataCcFlowOutboxEventType): Date => {
+  if (!DemoDataCcFlowOutboxEventTypes.includes(eventType)) {
+    throw new Error(`Unsupported demo-data outbox event: ${eventType as string}.`);
+  }
+
+  return AddMinutes(date, DemoDataCcFlowOutboxEventMinuteByType[eventType]);
+};
 
 const Hash = (value: string): string => createHash('sha256').update(value).digest('hex');

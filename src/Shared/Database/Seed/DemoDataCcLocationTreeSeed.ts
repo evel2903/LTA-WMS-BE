@@ -6,7 +6,7 @@ import { LocationProfileOrmEntity } from '@modules/MasterData/Infrastructure/Per
 import { WarehouseOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/WarehouseOrmEntity';
 import { ZoneOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ZoneOrmEntity';
 
-const DemoSourceSystem = 'DEMO-DATA-CC';
+const DemoSourceSystem = 'DEMO-DATA-LTA';
 const ActiveStatus = 'Active';
 const EnabledLocationStatus = 'Active';
 
@@ -59,67 +59,79 @@ export type DemoDataCcLocationTreeSeedResult = {
   SampleLocations: string[];
 };
 
+export const AssertDemoDataCcWritableLocationTreeRow = (
+  entity: { SourceSystem?: string | null },
+  label: string,
+  code: string,
+): void => {
+  if (entity.SourceSystem !== DemoSourceSystem) {
+    throw new Error(
+      `DEMO-DATA-LTA location seed found existing non-demo ${label} ${code}. Run yarn.cmd demo-data:prepare or choose a demo-specific code before reseeding.`,
+    );
+  }
+};
+
 export const BuildDemoDataCcLocationTreePlan = (): DemoDataCcLocationTreePlan => {
   const profiles: LocationProfileSeed[] = [
     {
-      ProfileCode: 'LP-CC-DOCK',
-      ProfileName: 'Coca-Cola Dock/Staging',
+      ProfileCode: 'LP-LTA-DOCK',
+      ProfileName: 'LTA Dock/Staging',
       LocationType: 'DOCK',
       CapacityPolicy: { palletSlots: 6 },
       OperationPolicy: { allowReceiving: true, allowLoading: true },
     },
     {
-      ProfileCode: 'LP-CC-QC',
-      ProfileName: 'Coca-Cola QC Staging',
+      ProfileCode: 'LP-LTA-QC',
+      ProfileName: 'LTA QC Staging',
       LocationType: 'QC_STAGE',
       CapacityPolicy: { palletSlots: 12 },
       OperationPolicy: { allowQc: true },
     },
     {
-      ProfileCode: 'LP-CC-AISLE',
-      ProfileName: 'Coca-Cola Aisle',
+      ProfileCode: 'LP-LTA-AISLE',
+      ProfileName: 'LTA Aisle',
       LocationType: 'AISLE',
       CapacityPolicy: { structuralNode: true },
       OperationPolicy: { allowInventory: false },
     },
     {
-      ProfileCode: 'LP-CC-RACK',
-      ProfileName: 'Coca-Cola Rack',
+      ProfileCode: 'LP-LTA-RACK',
+      ProfileName: 'LTA Rack',
       LocationType: 'RACK',
       CapacityPolicy: { structuralNode: true },
       OperationPolicy: { allowInventory: false },
     },
     {
-      ProfileCode: 'LP-CC-LEVEL',
-      ProfileName: 'Coca-Cola Rack Level',
+      ProfileCode: 'LP-LTA-LEVEL',
+      ProfileName: 'LTA Rack Level',
       LocationType: 'LEVEL',
       CapacityPolicy: { structuralNode: true },
       OperationPolicy: { allowInventory: false },
     },
     {
-      ProfileCode: 'LP-CC-RESERVE',
-      ProfileName: 'Coca-Cola Reserve Pallet',
+      ProfileCode: 'LP-LTA-RESERVE',
+      ProfileName: 'LTA Reserve Pallet',
       LocationType: 'RESERVE',
       CapacityPolicy: { palletSlots: 24, maxWeightKg: 18000 },
       OperationPolicy: { allowPutaway: true, allowReplenishmentSource: true },
     },
     {
-      ProfileCode: 'LP-CC-PICKFACE',
-      ProfileName: 'Coca-Cola Pick Face',
+      ProfileCode: 'LP-LTA-PICKFACE',
+      ProfileName: 'LTA Pick Face',
       LocationType: 'PICK_FACE',
       CapacityPolicy: { palletSlots: 4, maxEachQty: 1200 },
       OperationPolicy: { allowPicking: true, allowReplenishmentTarget: true },
     },
     {
-      ProfileCode: 'LP-CC-PACK',
-      ProfileName: 'Coca-Cola Packing Station',
+      ProfileCode: 'LP-LTA-PACK',
+      ProfileName: 'LTA Packing Station',
       LocationType: 'PACKING',
       CapacityPolicy: { workStations: 4 },
       OperationPolicy: { allowPacking: true },
     },
     {
-      ProfileCode: 'LP-CC-QUARANTINE',
-      ProfileName: 'Coca-Cola Quarantine Hold',
+      ProfileCode: 'LP-LTA-QUARANTINE',
+      ProfileName: 'LTA Quarantine Hold',
       LocationType: 'QUARANTINE',
       CapacityPolicy: { palletSlots: 8 },
       OperationPolicy: { allowHold: true, allowPicking: false },
@@ -127,30 +139,30 @@ export const BuildDemoDataCcLocationTreePlan = (): DemoDataCcLocationTreePlan =>
   ];
 
   const zones: ZoneSeed[] = [
-    { ZoneCode: 'CC-RCV', ZoneName: 'Receiving - Nhận hàng', ZoneType: 'RECEIVING', Sequence: 10 },
-    { ZoneCode: 'CC-QC', ZoneName: 'QC - Kiểm hàng', ZoneType: 'QC', Sequence: 20 },
-    { ZoneCode: 'CC-RSV', ZoneName: 'Reserve - Lưu trữ pallet', ZoneType: 'RESERVE', Sequence: 30 },
-    { ZoneCode: 'CC-PF', ZoneName: 'Pick Face - Soạn hàng lẻ', ZoneType: 'PICK_FACE', Sequence: 40 },
-    { ZoneCode: 'CC-PACK', ZoneName: 'Packing - Đóng gói', ZoneType: 'PACKING', Sequence: 50 },
-    { ZoneCode: 'CC-LOAD', ZoneName: 'Loading - Xuất hàng', ZoneType: 'LOADING', Sequence: 60 },
-    { ZoneCode: 'CC-QAR', ZoneName: 'Quarantine - Cách ly', ZoneType: 'QUARANTINE', Sequence: 70 },
+    { ZoneCode: 'LTA-RCV', ZoneName: 'Receiving - Nhận hàng', ZoneType: 'RECEIVING', Sequence: 10 },
+    { ZoneCode: 'LTA-QC', ZoneName: 'QC - Kiểm hàng', ZoneType: 'QC', Sequence: 20 },
+    { ZoneCode: 'LTA-RSV', ZoneName: 'Reserve - Lưu trữ pallet', ZoneType: 'RESERVE', Sequence: 30 },
+    { ZoneCode: 'LTA-PF', ZoneName: 'Pick Face - Soạn hàng lẻ', ZoneType: 'PICK_FACE', Sequence: 40 },
+    { ZoneCode: 'LTA-PACK', ZoneName: 'Packing - Đóng gói', ZoneType: 'PACKING', Sequence: 50 },
+    { ZoneCode: 'LTA-LOAD', ZoneName: 'Loading - Xuất hàng', ZoneType: 'LOADING', Sequence: 60 },
+    { ZoneCode: 'LTA-QAR', ZoneName: 'Quarantine - Cách ly', ZoneType: 'QUARANTINE', Sequence: 70 },
   ];
 
   const locations: DemoDataCcLocationSeed[] = [
-    loc('RCV-A01', 'Receiving aisle A01', 'CC-RCV', 'LP-CC-AISLE', 'AISLE', undefined, 10, 10),
-    loc('RCV-A01-D01', 'Dock nhận hàng 01', 'CC-RCV', 'LP-CC-DOCK', 'DOCK', 'RCV-A01', 11, 11, 6),
-    loc('RCV-A01-D02', 'Dock nhận hàng 02', 'CC-RCV', 'LP-CC-DOCK', 'DOCK', 'RCV-A01', 12, 12, 6),
-    loc('QC-A01', 'QC aisle A01', 'CC-QC', 'LP-CC-AISLE', 'AISLE', undefined, 20, 20),
-    loc('QC-A01-STG01', 'QC staging 01', 'CC-QC', 'LP-CC-QC', 'QC_STAGE', 'QC-A01', 21, 21, 8),
-    loc('QC-A01-HOLD01', 'QC hold 01', 'CC-QC', 'LP-CC-QC', 'QC_STAGE', 'QC-A01', 22, 22, 4),
-    loc('RSV-A01', 'Reserve aisle A01', 'CC-RSV', 'LP-CC-AISLE', 'AISLE', undefined, undefined, 100),
-    loc('RSV-A01-R01', 'Reserve rack R01', 'CC-RSV', 'LP-CC-RACK', 'RACK', 'RSV-A01', undefined, 110),
-    loc('RSV-A01-R01-L01', 'Reserve level L01', 'CC-RSV', 'LP-CC-LEVEL', 'LEVEL', 'RSV-A01-R01', undefined, 111),
+    loc('RCV-A01', 'Receiving aisle A01', 'LTA-RCV', 'LP-LTA-AISLE', 'AISLE', undefined, 10, 10),
+    loc('RCV-A01-D01', 'Dock nhận hàng 01', 'LTA-RCV', 'LP-LTA-DOCK', 'DOCK', 'RCV-A01', 11, 11, 6),
+    loc('RCV-A01-D02', 'Dock nhận hàng 02', 'LTA-RCV', 'LP-LTA-DOCK', 'DOCK', 'RCV-A01', 12, 12, 6),
+    loc('QC-A01', 'QC aisle A01', 'LTA-QC', 'LP-LTA-AISLE', 'AISLE', undefined, 20, 20),
+    loc('QC-A01-STG01', 'QC staging 01', 'LTA-QC', 'LP-LTA-QC', 'QC_STAGE', 'QC-A01', 21, 21, 8),
+    loc('QC-A01-HOLD01', 'QC hold 01', 'LTA-QC', 'LP-LTA-QC', 'QC_STAGE', 'QC-A01', 22, 22, 4),
+    loc('RSV-A01', 'Reserve aisle A01', 'LTA-RSV', 'LP-LTA-AISLE', 'AISLE', undefined, undefined, 100),
+    loc('RSV-A01-R01', 'Reserve rack R01', 'LTA-RSV', 'LP-LTA-RACK', 'RACK', 'RSV-A01', undefined, 110),
+    loc('RSV-A01-R01-L01', 'Reserve level L01', 'LTA-RSV', 'LP-LTA-LEVEL', 'LEVEL', 'RSV-A01-R01', undefined, 111),
     loc(
       'RSV-A01-R01-L01-B01',
       'Reserve bin B01',
-      'CC-RSV',
-      'LP-CC-RESERVE',
+      'LTA-RSV',
+      'LP-LTA-RESERVE',
       'BIN',
       'RSV-A01-R01-L01',
       undefined,
@@ -160,43 +172,63 @@ export const BuildDemoDataCcLocationTreePlan = (): DemoDataCcLocationTreePlan =>
     loc(
       'RSV-A01-R01-L01-B02',
       'Reserve bin B02',
-      'CC-RSV',
-      'LP-CC-RESERVE',
+      'LTA-RSV',
+      'LP-LTA-RESERVE',
       'BIN',
       'RSV-A01-R01-L01',
       undefined,
       1112,
       2,
     ),
-    loc('RSV-A01-R02', 'Reserve rack R02', 'CC-RSV', 'LP-CC-RACK', 'RACK', 'RSV-A01', undefined, 120),
-    loc('RSV-A01-R02-L01', 'Reserve level L01 R02', 'CC-RSV', 'LP-CC-LEVEL', 'LEVEL', 'RSV-A01-R02', undefined, 121),
+    loc('RSV-A01-R02', 'Reserve rack R02', 'LTA-RSV', 'LP-LTA-RACK', 'RACK', 'RSV-A01', undefined, 120),
+    loc('RSV-A01-R02-L01', 'Reserve level L01 R02', 'LTA-RSV', 'LP-LTA-LEVEL', 'LEVEL', 'RSV-A01-R02', undefined, 121),
     loc(
       'RSV-A01-R02-L01-B01',
       'Reserve bin R02 B01',
-      'CC-RSV',
-      'LP-CC-RESERVE',
+      'LTA-RSV',
+      'LP-LTA-RESERVE',
       'BIN',
       'RSV-A01-R02-L01',
       undefined,
       1211,
       2,
     ),
-    loc('PF-A01', 'Pick face aisle A01', 'CC-PF', 'LP-CC-AISLE', 'AISLE', undefined, 200, 200),
-    loc('PF-A01-R01', 'Pick face rack R01', 'CC-PF', 'LP-CC-RACK', 'RACK', 'PF-A01', 210, 210),
-    loc('PF-A01-R01-L01', 'Pick face level L01', 'CC-PF', 'LP-CC-LEVEL', 'LEVEL', 'PF-A01-R01', 211, 211),
-    loc('PF-A01-R01-L01-B01', 'Pick face bin lon', 'CC-PF', 'LP-CC-PICKFACE', 'BIN', 'PF-A01-R01-L01', 2111, 2111, 1),
-    loc('PF-A01-R01-L01-B02', 'Pick face bin chai', 'CC-PF', 'LP-CC-PICKFACE', 'BIN', 'PF-A01-R01-L01', 2112, 2112, 1),
-    loc('PACK-A01', 'Packing aisle A01', 'CC-PACK', 'LP-CC-AISLE', 'AISLE', undefined, 300, 300),
-    loc('PACK-A01-ST01', 'Bàn đóng gói 01', 'CC-PACK', 'LP-CC-PACK', 'PACK_STATION', 'PACK-A01', 301, 301),
-    loc('PACK-A01-ST02', 'Bàn đóng gói 02', 'CC-PACK', 'LP-CC-PACK', 'PACK_STATION', 'PACK-A01', 302, 302),
-    loc('LOAD-A01', 'Loading aisle A01', 'CC-LOAD', 'LP-CC-AISLE', 'AISLE', undefined, 400, 400),
-    loc('LOAD-A01-D01', 'Cửa xuất hàng 01', 'CC-LOAD', 'LP-CC-DOCK', 'DOCK', 'LOAD-A01', 401, 401, 8),
-    loc('LOAD-A01-D02', 'Cửa xuất hàng 02', 'CC-LOAD', 'LP-CC-DOCK', 'DOCK', 'LOAD-A01', 402, 402, 8),
-    loc('QAR-A01', 'Quarantine aisle A01', 'CC-QAR', 'LP-CC-AISLE', 'AISLE', undefined, 900, 900),
-    loc('QAR-A01-HOLD01', 'Vị trí cách ly 01', 'CC-QAR', 'LP-CC-QUARANTINE', 'QUARANTINE', 'QAR-A01', 901, 901, 4),
+    loc('PF-A01', 'Pick face aisle A01', 'LTA-PF', 'LP-LTA-AISLE', 'AISLE', undefined, 200, 200),
+    loc('PF-A01-R01', 'Pick face rack R01', 'LTA-PF', 'LP-LTA-RACK', 'RACK', 'PF-A01', 210, 210),
+    loc('PF-A01-R01-L01', 'Pick face level L01', 'LTA-PF', 'LP-LTA-LEVEL', 'LEVEL', 'PF-A01-R01', 211, 211),
+    loc(
+      'PF-A01-R01-L01-B01',
+      'Pick face bin seal A',
+      'LTA-PF',
+      'LP-LTA-PICKFACE',
+      'BIN',
+      'PF-A01-R01-L01',
+      2111,
+      2111,
+      1,
+    ),
+    loc(
+      'PF-A01-R01-L01-B02',
+      'Pick face bin seal B',
+      'LTA-PF',
+      'LP-LTA-PICKFACE',
+      'BIN',
+      'PF-A01-R01-L01',
+      2112,
+      2112,
+      1,
+    ),
+    loc('PACK-A01', 'Packing aisle A01', 'LTA-PACK', 'LP-LTA-AISLE', 'AISLE', undefined, 300, 300),
+    loc('PACK-A01-ST01', 'Bàn đóng gói 01', 'LTA-PACK', 'LP-LTA-PACK', 'PACK_STATION', 'PACK-A01', 301, 301),
+    loc('PACK-A01-ST02', 'Bàn đóng gói 02', 'LTA-PACK', 'LP-LTA-PACK', 'PACK_STATION', 'PACK-A01', 302, 302),
+    loc('LOAD-A01', 'Loading aisle A01', 'LTA-LOAD', 'LP-LTA-AISLE', 'AISLE', undefined, 400, 400),
+    loc('LOAD-A01-D01', 'Cửa xuất hàng 01', 'LTA-LOAD', 'LP-LTA-DOCK', 'DOCK', 'LOAD-A01', 401, 401, 8),
+    loc('LOAD-A01-D02', 'Cửa xuất hàng 02', 'LTA-LOAD', 'LP-LTA-DOCK', 'DOCK', 'LOAD-A01', 402, 402, 8),
+    loc('QAR-A01', 'Quarantine aisle A01', 'LTA-QAR', 'LP-LTA-AISLE', 'AISLE', undefined, 900, 900),
+    loc('QAR-A01-HOLD01', 'Vị trí cách ly 01', 'LTA-QAR', 'LP-LTA-QUARANTINE', 'QUARANTINE', 'QAR-A01', 901, 901, 4),
   ];
 
-  return { WarehouseCode: 'CC-HCM-01', Profiles: profiles, Zones: zones, Locations: locations };
+  return { WarehouseCode: 'LTA-HCM-01', Profiles: profiles, Zones: zones, Locations: locations };
 };
 
 const loc = (
@@ -222,7 +254,7 @@ const loc = (
   CapacityQty: PalletSlot ? PalletSlot * 100 : null,
   CapacityVolume: PalletSlot ? PalletSlot * 1.2 : null,
   CapacityWeight: PalletSlot ? PalletSlot * 750 : null,
-  OwnerRestriction: 'CCVN',
+  OwnerRestriction: 'LTA',
   MixSkuPolicy: LocationType === 'BIN' ? 'SAME_SKU' : 'MIXED',
   MixLotPolicy: LocationType === 'BIN' ? 'SAME_LOT' : 'MIXED',
   MixOwnerPolicy: 'SINGLE_OWNER',
@@ -249,8 +281,9 @@ export const SeedDemoDataCcLocationTree = async (dataSource: DataSource): Promis
   const actorId = admin?.Id ?? null;
   const warehouse = await warehouses.findOne({ where: { WarehouseCode: plan.WarehouseCode } });
   if (!warehouse) {
-    throw new Error(`DEMO-DATA-CC location seed requires warehouse ${plan.WarehouseCode}.`);
+    throw new Error(`DEMO-DATA-LTA location seed requires warehouse ${plan.WarehouseCode}.`);
   }
+  AssertDemoDataCcWritableLocationTreeRow(warehouse, 'warehouse', plan.WarehouseCode);
 
   const profileByCode = new Map<string, LocationProfileOrmEntity>();
   for (const input of plan.Profiles) {
@@ -258,6 +291,8 @@ export const SeedDemoDataCcLocationTree = async (dataSource: DataSource): Promis
     if (!profile) {
       profile = new LocationProfileOrmEntity();
       profile.Id = randomUUID();
+    } else {
+      AssertDemoDataCcWritableLocationTreeRow(profile, 'location profile', input.ProfileCode);
     }
     profile.ProfileCode = input.ProfileCode;
     profile.ProfileName = input.ProfileName;
@@ -265,7 +300,7 @@ export const SeedDemoDataCcLocationTree = async (dataSource: DataSource): Promis
     profile.Version = 1;
     profile.Status = ActiveStatus;
     profile.CapacityPolicy = input.CapacityPolicy;
-    profile.EligibilityPolicy = { ownerCodes: ['CCVN'] };
+    profile.EligibilityPolicy = { ownerCodes: ['LTA'] };
     profile.MixPolicy = { allowMultiSku: input.LocationType !== 'BIN', allowMultiLot: input.LocationType !== 'BIN' };
     profile.CompliancePolicy = { demo: true };
     profile.OperationPolicy = input.OperationPolicy;
@@ -281,6 +316,8 @@ export const SeedDemoDataCcLocationTree = async (dataSource: DataSource): Promis
     if (!zone) {
       zone = new ZoneOrmEntity();
       zone.Id = randomUUID();
+    } else {
+      AssertDemoDataCcWritableLocationTreeRow(zone, 'zone', input.ZoneCode);
     }
     zone.WarehouseId = warehouse.Id;
     zone.ZoneCode = input.ZoneCode;
@@ -301,19 +338,21 @@ export const SeedDemoDataCcLocationTree = async (dataSource: DataSource): Promis
     const zone = zoneByCode.get(input.ZoneCode);
     const profile = profileByCode.get(input.ProfileCode);
     if (!zone || !profile) {
-      throw new Error(`DEMO-DATA-CC location seed has unresolved zone/profile for ${input.LocationCode}.`);
+      throw new Error(`DEMO-DATA-LTA location seed has unresolved zone/profile for ${input.LocationCode}.`);
     }
 
     let location = await locations.findOne({ where: { WarehouseId: warehouse.Id, LocationCode: input.LocationCode } });
     if (!location) {
       location = new LocationOrmEntity();
       location.Id = randomUUID();
+    } else {
+      AssertDemoDataCcWritableLocationTreeRow(location, 'location', input.LocationCode);
     }
     location.WarehouseId = warehouse.Id;
     location.ZoneId = zone.Id;
     const parentLocation = input.ParentLocationCode ? locationByCode.get(input.ParentLocationCode) : null;
     if (input.ParentLocationCode && !parentLocation) {
-      throw new Error(`DEMO-DATA-CC location seed parent not found for ${input.LocationCode}.`);
+      throw new Error(`DEMO-DATA-LTA location seed parent not found for ${input.LocationCode}.`);
     }
 
     location.ParentLocationId = parentLocation?.Id ?? null;

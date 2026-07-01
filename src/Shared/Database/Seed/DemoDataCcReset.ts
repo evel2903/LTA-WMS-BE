@@ -10,12 +10,12 @@ import {
 const Run = async (): Promise<void> => {
   const target = AssertDemoDataCcLocalTarget(GetEnv(), 'process.env + .env');
 
-  console.log(`[DEMO-DATA-CC] Target verified: ${FormatDemoDataCcTargetSummary(target)}`);
+  console.log(`[DEMO-DATA-LTA] Target verified: ${FormatDemoDataCcTargetSummary(target)}`);
   await dataSource.initialize();
   try {
     const result = await ResetDemoDataCcLocalDatabase(dataSource);
     console.log(
-      `[DEMO-DATA-CC] Reset complete: truncated=${result.TruncatedTables.length} protected=${result.ProtectedTables.join(
+      `[DEMO-DATA-LTA] Reset complete: truncated=${result.TruncatedTables.length} protected=${result.ProtectedTables.join(
         ',',
       )}`,
     );

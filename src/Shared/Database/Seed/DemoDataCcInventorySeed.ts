@@ -14,7 +14,7 @@ import { UomOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Ent
 import { WarehouseOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/WarehouseOrmEntity';
 import { UserOrmEntity } from '@modules/Users/Infrastructure/Persistence/Entities/UserOrmEntity';
 
-const DemoSourceSystem = 'DEMO-DATA-CC';
+const DemoSourceSystem = 'DEMO-DATA-LTA';
 const ActiveStatus = 'Active';
 const EffectiveFrom = new Date('2026-01-01T00:00:00.000Z');
 
@@ -120,46 +120,50 @@ export type DemoDataCcInventorySeedResult = {
 };
 
 export const BuildDemoDataCcInventoryPlan = (): DemoDataCcInventoryPlan => ({
-  WarehouseCode: 'CC-HCM-01',
-  OwnerCode: 'CCVN',
+  WarehouseCode: 'LTA-HCM-01',
+  OwnerCode: 'LTA',
   Uoms: [
-    { UomCode: 'CAN', UomName: 'Lon', UomType: 'Quantity', DecimalPrecision: 0 },
-    { UomCode: 'BOTTLE', UomName: 'Chai', UomType: 'Quantity', DecimalPrecision: 0 },
-    { UomCode: 'CASE', UomName: 'Thùng', UomType: 'Quantity', DecimalPrecision: 0 },
+    { UomCode: 'PCS', UomName: 'Cái', UomType: 'Quantity', DecimalPrecision: 0 },
+    { UomCode: 'BOX', UomName: 'Hộp', UomType: 'Quantity', DecimalPrecision: 0 },
+    { UomCode: 'CARTON', UomName: 'Thùng', UomType: 'Quantity', DecimalPrecision: 0 },
     { UomCode: 'PALLET', UomName: 'Pallet', UomType: 'Quantity', DecimalPrecision: 0 },
   ],
   Skus: [
     sku({
-      SkuCode: 'CC-COKE-330-CAN',
-      SkuName: 'Coca-Cola Original Lon 330ml',
-      BaseUomCode: 'CAN',
-      CaseFactor: 24,
-      PalletFactor: 120,
-      BarcodeValue: '8938505970011',
+      SkuCode: 'LTA-SEAL-CABLE-001',
+      SkuName: 'Seal cáp container LTA',
+      BaseUomCode: 'PCS',
+      BoxFactor: 100,
+      CartonFactor: 10,
+      PalletFactor: 40,
+      BarcodeValue: '8938505980010',
     }),
     sku({
-      SkuCode: 'CC-COKE-390-BTL',
-      SkuName: 'Coca-Cola Original Chai 390ml',
-      BaseUomCode: 'BOTTLE',
-      CaseFactor: 24,
-      PalletFactor: 100,
-      BarcodeValue: '8938505970028',
+      SkuCode: 'LTA-SEAL-BOLT-001',
+      SkuName: 'Seal cối container LTA',
+      BaseUomCode: 'PCS',
+      BoxFactor: 50,
+      CartonFactor: 10,
+      PalletFactor: 36,
+      BarcodeValue: '8938505980027',
     }),
     sku({
-      SkuCode: 'CC-SPRITE-330-CAN',
-      SkuName: 'Sprite Lon 330ml',
-      BaseUomCode: 'CAN',
-      CaseFactor: 24,
-      PalletFactor: 120,
-      BarcodeValue: '8938505970035',
+      SkuCode: 'LTA-SEAL-PLASTIC-001',
+      SkuName: 'Seal nhựa container LTA',
+      BaseUomCode: 'PCS',
+      BoxFactor: 200,
+      CartonFactor: 8,
+      PalletFactor: 30,
+      BarcodeValue: '8938505980034',
     }),
     sku({
-      SkuCode: 'CC-FANTA-330-CAN',
-      SkuName: 'Fanta Cam Lon 330ml',
-      BaseUomCode: 'CAN',
-      CaseFactor: 24,
-      PalletFactor: 120,
-      BarcodeValue: '8938505970042',
+      SkuCode: 'LTA-SEAL-RFID-001',
+      SkuName: 'Seal RFID container LTA',
+      BaseUomCode: 'PCS',
+      BoxFactor: 25,
+      CartonFactor: 20,
+      PalletFactor: 20,
+      BarcodeValue: '8938505980041',
     }),
   ],
   InventoryStatuses: [
@@ -183,140 +187,204 @@ export const BuildDemoDataCcInventoryPlan = (): DemoDataCcInventoryPlan => ({
   ],
   InventorySamples: [
     sample(
-      'CC-COKE-330-CAN',
+      'LTA-SEAL-CABLE-001',
       'RSV-A01-R01-L01-B01',
       'AVAILABLE',
-      'CASE',
-      'CC-LPN-0001',
-      'CC-BATCH-250601',
-      '2025-06-01',
+      'BOX',
+      'LTA-LPN-0001',
+      'LTA-SEAL-BATCH-260601',
       '2026-06-01',
+      '2031-06-01',
       120,
       0,
     ),
     sample(
-      'CC-COKE-330-CAN',
+      'LTA-SEAL-CABLE-001',
       'PF-A01-R01-L01-B01',
       'AVAILABLE',
-      'CASE',
-      'CC-LPN-0002',
-      'CC-BATCH-250615',
-      '2025-06-15',
+      'BOX',
+      'LTA-LPN-0002',
+      'LTA-SEAL-BATCH-260615',
       '2026-06-15',
+      '2031-06-15',
       36,
       0,
     ),
     sample(
-      'CC-COKE-330-CAN',
+      'LTA-SEAL-CABLE-001',
       'PF-A01-R01-L01-B01',
       'ALLOCATED',
-      'CASE',
-      'CC-LPN-0003',
-      'CC-BATCH-250615',
-      '2025-06-15',
+      'BOX',
+      'LTA-LPN-0003',
+      'LTA-SEAL-BATCH-260615',
       '2026-06-15',
+      '2031-06-15',
       24,
       24,
     ),
     sample(
-      'CC-COKE-390-BTL',
+      'LTA-SEAL-BOLT-001',
       'RSV-A01-R01-L01-B02',
       'AVAILABLE',
-      'CASE',
-      'CC-LPN-0004',
-      'CC-BATCH-250701',
-      '2025-07-01',
+      'BOX',
+      'LTA-LPN-0004',
+      'LTA-SEAL-BATCH-260701',
       '2026-07-01',
+      '2031-07-01',
       96,
       0,
     ),
     sample(
-      'CC-SPRITE-330-CAN',
+      'LTA-SEAL-PLASTIC-001',
       'RSV-A01-R02-L01-B01',
       'AVAILABLE',
-      'CASE',
-      'CC-LPN-0005',
-      'SP-BATCH-250731',
-      '2025-07-31',
-      '2026-08-31',
+      'BOX',
+      'LTA-LPN-0005',
+      'LTA-SEAL-BATCH-260731',
+      '2026-07-31',
+      '2031-07-31',
       80,
       0,
     ),
     sample(
-      'CC-FANTA-330-CAN',
+      'LTA-SEAL-RFID-001',
       'QC-A01-STG01',
       'PENDING_QC',
-      'CASE',
-      'CC-LPN-0006',
-      'FA-BATCH-250801',
-      '2025-08-01',
+      'BOX',
+      'LTA-LPN-0006',
+      'LTA-SEAL-BATCH-260801',
       '2026-08-01',
+      '2031-08-01',
       30,
       0,
     ),
     sample(
-      'CC-COKE-330-CAN',
+      'LTA-SEAL-CABLE-001',
       'QAR-A01-HOLD01',
       'HOLD',
-      'CASE',
-      'CC-LPN-0007',
-      'CC-BATCH-250501',
-      '2025-05-01',
+      'BOX',
+      'LTA-LPN-0007',
+      'LTA-SEAL-BATCH-260501',
       '2026-05-01',
+      '2031-05-01',
       12,
       0,
     ),
   ],
 });
 
+export const ShouldReuseExistingDemoDataCcCatalogRow = (
+  entity: { SourceSystem: string | null | undefined } | null | undefined,
+): boolean => Boolean(entity && entity.SourceSystem !== DemoSourceSystem);
+
+export const AssertDemoDataCcWritableInventoryRow = (
+  entity: { SourceSystem: string | null | undefined } | null | undefined,
+  label: string,
+  code: string,
+): void => {
+  if (!entity || entity.SourceSystem === DemoSourceSystem) return;
+
+  throw new Error(
+    `DEMO-DATA-LTA inventory seed found existing non-demo ${label} ${code}. Run yarn.cmd demo-data:prepare or choose a demo-specific code before reseeding.`,
+  );
+};
+
+export const AssertReusableDemoDataCcUomCatalogRow = (entity: UomOrmEntity, input: DemoDataCcUomSeed): void => {
+  if (!ShouldReuseExistingDemoDataCcCatalogRow(entity)) return;
+
+  const mismatches: string[] = [];
+  if (entity.UomCode !== input.UomCode) mismatches.push('UomCode');
+  if (entity.UomType !== input.UomType) mismatches.push('UomType');
+  if (Number(entity.DecimalPrecision) !== input.DecimalPrecision) mismatches.push('DecimalPrecision');
+  if (entity.Status !== ActiveStatus) mismatches.push('Status');
+
+  if (mismatches.length > 0) {
+    throw new Error(
+      `DEMO-DATA-LTA inventory seed cannot reuse baseline UOM ${input.UomCode}; mismatched fields: ${mismatches.join(', ')}.`,
+    );
+  }
+};
+
+export const AssertReusableDemoDataCcInventoryStatusCatalogRow = (
+  entity: InventoryStatusOrmEntity,
+  input: DemoDataCcInventoryStatusSeed,
+): void => {
+  if (!ShouldReuseExistingDemoDataCcCatalogRow(entity)) return;
+
+  const mismatches: string[] = [];
+  if (entity.StatusCode !== input.StatusCode) mismatches.push('StatusCode');
+  if (entity.StageGroup !== input.StageGroup) mismatches.push('StageGroup');
+  if (entity.AllowsAllocation !== input.AllowsAllocation) mismatches.push('AllowsAllocation');
+  if (entity.AllowsPick !== input.AllowsPick) mismatches.push('AllowsPick');
+  if (entity.Hold !== input.Hold) mismatches.push('Hold');
+  if (entity.IsTerminal !== input.IsTerminal) mismatches.push('IsTerminal');
+  if (entity.IsMilestone !== input.IsMilestone) mismatches.push('IsMilestone');
+  if (entity.Status !== ActiveStatus) mismatches.push('Status');
+
+  if (mismatches.length > 0) {
+    throw new Error(
+      `DEMO-DATA-LTA inventory seed cannot reuse baseline inventory status ${input.StatusCode}; mismatched fields: ${mismatches.join(', ')}.`,
+    );
+  }
+};
+
 const sku = (input: {
   SkuCode: string;
   SkuName: string;
-  BaseUomCode: 'CAN' | 'BOTTLE';
-  CaseFactor: number;
+  BaseUomCode: 'PCS';
+  BoxFactor: number;
+  CartonFactor: number;
   PalletFactor: number;
   BarcodeValue: string;
 }): DemoDataCcSkuSeed => ({
   SkuCode: input.SkuCode,
   SkuName: input.SkuName,
   BaseUomCode: input.BaseUomCode,
-  InventoryUomCode: 'CASE',
-  ItemClass: 'BEVERAGE',
-  ShelfLifeDays: 365,
-  MinRemainingShelfLifeDays: 45,
+  InventoryUomCode: 'BOX',
+  ItemClass: 'CONTAINER_SEAL',
+  ShelfLifeDays: 1825,
+  MinRemainingShelfLifeDays: 90,
   Packs: [
     {
-      PackCode: 'CASE',
-      PackName: `${input.SkuName} - thùng ${input.CaseFactor}`,
-      UomCode: 'CASE',
-      QuantityPerPack: input.CaseFactor,
+      PackCode: 'BOX',
+      PackName: `${input.SkuName} - hộp ${input.BoxFactor}`,
+      UomCode: 'BOX',
+      QuantityPerPack: input.BoxFactor,
       IsDefault: true,
     },
     {
+      PackCode: 'CARTON',
+      PackName: `${input.SkuName} - thùng ${input.CartonFactor} hộp`,
+      UomCode: 'CARTON',
+      QuantityPerPack: input.CartonFactor,
+      IsDefault: false,
+    },
+    {
       PackCode: 'PALLET',
-      PackName: `${input.SkuName} - pallet ${input.PalletFactor} thùng`,
+      PackName: `${input.SkuName} - pallet ${input.PalletFactor} hộp`,
       UomCode: 'PALLET',
       QuantityPerPack: input.PalletFactor,
       IsDefault: false,
     },
   ],
   Conversions: [
-    { FromUomCode: 'CASE', ToUomCode: input.BaseUomCode, Factor: input.CaseFactor },
-    { FromUomCode: 'PALLET', ToUomCode: 'CASE', Factor: input.PalletFactor },
+    { FromUomCode: 'BOX', ToUomCode: input.BaseUomCode, Factor: input.BoxFactor },
+    { FromUomCode: 'CARTON', ToUomCode: 'BOX', Factor: input.CartonFactor },
+    { FromUomCode: 'PALLET', ToUomCode: 'BOX', Factor: input.PalletFactor },
   ],
   Barcodes: [
     {
       BarcodeValue: input.BarcodeValue,
-      UomCode: 'CASE',
-      PackCode: 'CASE',
+      UomCode: 'BOX',
+      PackCode: 'BOX',
       IsPrimary: true,
     },
   ],
   Coverage: {
-    MinQty: 24,
-    MaxQty: 360,
-    StandardQty: 120,
-    MultipleQty: 12,
+    MinQty: 20,
+    MaxQty: 240,
+    StandardQty: 80,
+    MultipleQty: 10,
     LeadTimeDays: 2,
   },
 });
@@ -415,7 +483,7 @@ export const SeedDemoDataCcInventory = async (dataSource: DataSource): Promise<D
   const forbidden = new Set<string>(DemoDataCcForbiddenInventoryStatusCodes);
   const forbiddenInPlan = plan.InventoryStatuses.filter((status) => forbidden.has(status.StatusCode));
   if (forbiddenInPlan.length > 0) {
-    throw new Error(`DEMO-DATA-CC inventory seed contains forbidden statuses: ${forbiddenInPlan.join(', ')}`);
+    throw new Error(`DEMO-DATA-LTA inventory seed contains forbidden statuses: ${forbiddenInPlan.join(', ')}`);
   }
 
   const users = dataSource.getRepository(UserOrmEntity);
@@ -438,13 +506,18 @@ export const SeedDemoDataCcInventory = async (dataSource: DataSource): Promise<D
   const warehouse = await warehouses.findOne({ where: { WarehouseCode: plan.WarehouseCode } });
   if (!owner || !warehouse) {
     throw new Error(
-      `DEMO-DATA-CC inventory seed requires owner ${plan.OwnerCode} and warehouse ${plan.WarehouseCode}.`,
+      `DEMO-DATA-LTA inventory seed requires owner ${plan.OwnerCode} and warehouse ${plan.WarehouseCode}.`,
     );
   }
 
   const uomByCode = new Map<string, UomOrmEntity>();
   for (const input of plan.Uoms) {
     let uom = await uoms.findOne({ where: { UomCode: input.UomCode } });
+    if (uom && ShouldReuseExistingDemoDataCcCatalogRow(uom)) {
+      AssertReusableDemoDataCcUomCatalogRow(uom, input);
+      uomByCode.set(uom.UomCode, uom);
+      continue;
+    }
     if (!uom) {
       uom = new UomOrmEntity();
       uom.Id = randomUUID();
@@ -463,6 +536,11 @@ export const SeedDemoDataCcInventory = async (dataSource: DataSource): Promise<D
   const inventoryStatusByCode = new Map<string, InventoryStatusOrmEntity>();
   for (const input of plan.InventoryStatuses) {
     let status = await inventoryStatuses.findOne({ where: { StatusCode: input.StatusCode } });
+    if (status && ShouldReuseExistingDemoDataCcCatalogRow(status)) {
+      AssertReusableDemoDataCcInventoryStatusCatalogRow(status, input);
+      inventoryStatusByCode.set(status.StatusCode, status);
+      continue;
+    }
     if (!status) {
       status = new InventoryStatusOrmEntity();
       status.Id = randomUUID();
@@ -491,6 +569,7 @@ export const SeedDemoDataCcInventory = async (dataSource: DataSource): Promise<D
       `Missing inventory UOM ${input.InventoryUomCode}.`,
     );
     let entity = await skus.findOne({ where: { SkuCode: input.SkuCode } });
+    AssertDemoDataCcWritableInventoryRow(entity, 'SKU', input.SkuCode);
     if (!entity) {
       entity = new SkuOrmEntity();
       entity.Id = randomUUID();
@@ -524,6 +603,7 @@ export const SeedDemoDataCcInventory = async (dataSource: DataSource): Promise<D
     for (const packInput of input.Packs) {
       const packUom = Required(uomByCode.get(packInput.UomCode), `Missing pack UOM ${packInput.UomCode}.`);
       let pack = await packs.findOne({ where: { SkuId: saved.Id, PackCode: packInput.PackCode } });
+      AssertDemoDataCcWritableInventoryRow(pack, 'pack definition', `${saved.SkuCode}:${packInput.PackCode}`);
       if (!pack) {
         pack = new PackDefinitionOrmEntity();
         pack.Id = randomUUID();
@@ -553,6 +633,11 @@ export const SeedDemoDataCcInventory = async (dataSource: DataSource): Promise<D
           ToUomId: toUom.Id,
         },
       });
+      AssertDemoDataCcWritableInventoryRow(
+        conversion,
+        'UOM conversion',
+        `${saved.SkuCode}:${conversionInput.FromUomCode}:${conversionInput.ToUomCode}`,
+      );
       if (!conversion) {
         conversion = new UomConversionOrmEntity();
         conversion.Id = randomUUID();
@@ -577,6 +662,7 @@ export const SeedDemoDataCcInventory = async (dataSource: DataSource): Promise<D
           BarcodeValue: barcodeInput.BarcodeValue,
         },
       });
+      AssertDemoDataCcWritableInventoryRow(barcode, 'SKU barcode', `${owner.OwnerCode}:${barcodeInput.BarcodeValue}`);
       if (!barcode) {
         barcode = new SkuBarcodeOrmEntity();
         barcode.Id = randomUUID();
@@ -603,6 +689,7 @@ export const SeedDemoDataCcInventory = async (dataSource: DataSource): Promise<D
         OwnerId: owner.Id,
       },
     });
+    AssertDemoDataCcWritableInventoryRow(coverage, 'item coverage', `${saved.SkuCode}:${warehouse.WarehouseCode}`);
     if (!coverage) {
       coverage = new ItemCoverageOrmEntity();
       coverage.Id = randomUUID();
@@ -631,8 +718,9 @@ export const SeedDemoDataCcInventory = async (dataSource: DataSource): Promise<D
   for (const locationCode of requiredLocationCodes) {
     const location = await locations.findOne({ where: { WarehouseId: warehouse.Id, LocationCode: locationCode } });
     if (!location) {
-      throw new Error(`DEMO-DATA-CC inventory seed requires location ${locationCode}.`);
+      throw new Error(`DEMO-DATA-LTA inventory seed requires location ${locationCode}.`);
     }
+    AssertDemoDataCcWritableInventoryRow(location, 'location', `${warehouse.WarehouseCode}:${locationCode}`);
     locationByCode.set(location.LocationCode, location);
   }
 
@@ -657,6 +745,7 @@ export const SeedDemoDataCcInventory = async (dataSource: DataSource): Promise<D
     });
 
     let dimension = await dimensions.findOne({ where: { DimensionKeyHash: dimensionHash } });
+    AssertDemoDataCcWritableInventoryRow(dimension, 'inventory dimension', input.LpnCode);
     if (!dimension) {
       dimension = new InventoryDimensionOrmEntity();
       dimension.Id = randomUUID();
@@ -680,6 +769,7 @@ export const SeedDemoDataCcInventory = async (dataSource: DataSource): Promise<D
     const savedDimension = await dimensions.save(TouchAudit(dimension, actorId));
 
     let balance = await balances.findOne({ where: { DimensionId: savedDimension.Id } });
+    AssertDemoDataCcWritableInventoryRow(balance, 'inventory balance', input.LpnCode);
     if (!balance) {
       balance = new InventoryBalanceOrmEntity();
       balance.Id = randomUUID();
