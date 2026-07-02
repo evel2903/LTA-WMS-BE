@@ -97,19 +97,20 @@ export class ReleaseInboundToPutawayUseCase {
     // blocking/approval decision is authoritative; a matched-but-non-blocking or empty decision falls
     // through to the previous profile key-check (ADR-5 — no loosening, same pattern since IRE-02). No
     // profile means no scope to gate on, so skip the rule call entirely (IRE-02's null-profile
-    // divergence lesson).
-    const ruleLpnRequired = profile
-      ? await this.ruleGate
-          .Decide({
-            WarehouseId: receipt.WarehouseId,
-            OwnerId: receipt.OwnerId,
-            Attributes: {
-              [InboundRuleAttributeKeys.LpnControlled]: this.BoolPolicy(profile.StrategyPolicy.lpnControlled),
-              [InboundRuleAttributeKeys.HasLpn]: lpn !== null,
-            },
-          })
-          .then((decision) => decision.Blocked || decision.ApprovalRequired)
-      : false;
+    // divergence lesson). request.RequireLpn already forces the outcome on its own (and wins
+    // RequiredBy priority below), so skip the rule call in that case too — wasted work otherwise.
+    let ruleLpnRequired = false;
+    if (profile && request.RequireLpn !== true) {
+      const decision = await this.ruleGate.Decide({
+        WarehouseId: receipt.WarehouseId,
+        OwnerId: receipt.OwnerId,
+        Attributes: {
+          [InboundRuleAttributeKeys.LpnControlled]: this.BoolPolicy(profile.StrategyPolicy.lpnControlled),
+          [InboundRuleAttributeKeys.HasLpn]: lpn !== null,
+        },
+      });
+      ruleLpnRequired = decision.Blocked || decision.ApprovalRequired;
+    }
     const lpnRequired = request.RequireLpn === true || ruleLpnRequired || profileRequiresLpn;
     if (lpnRequired && !lpn) {
       await this.AuditBlocked(context, receipt, line, 'LPN/SSCC is required before release to putaway', {

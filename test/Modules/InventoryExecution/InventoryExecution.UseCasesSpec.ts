@@ -22,31 +22,19 @@ import { ILocationProfileRepository } from '@modules/MasterData/Application/Inte
 import { LocationProfileEntity } from '@modules/MasterData/Domain/Entities/LocationProfileEntity';
 import { LocationStatus } from '@modules/MasterData/Domain/Enums/LocationStatus';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
-import { WarehouseEntity } from '@modules/MasterData/Domain/Entities/WarehouseEntity';
 import { MakeLocation, MemoryLocationRepository } from '@test/Modules/MasterData/InventoryTestDoubles';
 import { ITaskExecutionRepository } from '@modules/TaskExecution/Application/Interfaces/ITaskExecutionRepository';
 import { MobileScanEventEntity } from '@modules/TaskExecution/Domain/Entities/MobileScanEventEntity';
 import { MobileTaskEntity } from '@modules/TaskExecution/Domain/Entities/MobileTaskEntity';
-import {
-  SeedInboundRuleBaseline,
-  InboundBaselineWarehouseTypeCode,
-  InboundBaselineProfileCode,
-} from '@modules/WarehouseProfile/Application/Services/InboundRuleBaselineSeed';
-import { SeedRuleGroupCatalog } from '@modules/WarehouseProfile/Application/Services/RuleGroupCatalogSeed';
-import { RuleResolver } from '@modules/WarehouseProfile/Application/Services/RuleResolver';
-import { ConditionEvaluator } from '@modules/WarehouseProfile/Domain/Services/ConditionEvaluator';
-import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileEntity';
-import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/WarehouseProfileStatus';
 import { IRuleResolver } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
 import { RuleDecision } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleDecision';
 import { RuleEvaluationContext } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleEvaluationContext';
-import {
-  InMemoryRuleGroupRepository,
-  InMemoryRuleDefinitionRepository,
-  InMemoryWarehouseProfileRuleRepository,
-} from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
-import { InMemoryWarehouseProfileRepository } from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
 import { InMemoryWarehouseRepository } from '@test/TestDoubles/MasterData/MasterDataTestDoubles';
+import {
+  BuildEmptyPutawayRuleGate,
+  BuildSeededPutawayRuleGate,
+  MakePutawayDemoWarehouse,
+} from '@test/TestDoubles/InventoryExecution/PutawayRuleGateTestDoubles';
 import { EntityManager } from 'typeorm';
 
 const now = new Date('2026-06-23T03:00:00.000Z');
@@ -104,72 +92,20 @@ const makeProfile = (overrides: Partial<ConstructorParameters<typeof LocationPro
     ...overrides,
   });
 
-const makeWarehouse = (id: string) =>
-  new WarehouseEntity({
-    Id: id,
-    SiteId: 'site-1',
-    WarehouseCode: 'WH-WT01-DEMO',
-    WarehouseName: 'Kho demo WT-01',
-    WarehouseTypeCode: InboundBaselineWarehouseTypeCode,
-    Status: MasterDataStatus.Active,
-    CreatedAt: now,
-    UpdatedAt: now,
-  });
-
 /**
  * Real PutawayRuleGate over a RuleResolver with NO rules seeded — every Decide() returns an empty
  * decision (Matched=false), so the caller falls back to structural eligibility only. This is the
  * default gate in buildUseCase: existing tests keep exercising the backward-compat path (ADR-5).
  */
-const emptyPutawayRuleGate = (warehouseId: string): PutawayRuleGate => {
-  const groups = new InMemoryRuleGroupRepository();
-  const definitions = new InMemoryRuleDefinitionRepository();
-  const bindings = new InMemoryWarehouseProfileRuleRepository();
-  const profiles = new InMemoryWarehouseProfileRepository();
-  const warehouses = new InMemoryWarehouseRepository();
-  warehouses.Seed(makeWarehouse(warehouseId));
-  const resolver = new RuleResolver(profiles, definitions, bindings, groups, new ConditionEvaluator());
-  return new PutawayRuleGate(resolver, warehouses);
-};
+const emptyPutawayRuleGate = (warehouseId: string): PutawayRuleGate => BuildEmptyPutawayRuleGate(warehouseId);
 
 /**
  * Real PutawayRuleGate over a RuleResolver with the WT-01 baseline rules seeded (IRE-00), bound to
  * a demo profile whose WarehouseId/OwnerId match the given release. Used by the IRE-04 rule-driven
  * putaway eligibility tests.
  */
-const seededPutawayRuleGate = async (warehouseId: string, ownerId: string): Promise<PutawayRuleGate> => {
-  const groups = new InMemoryRuleGroupRepository();
-  await SeedRuleGroupCatalog(groups);
-  const definitions = new InMemoryRuleDefinitionRepository();
-  const bindings = new InMemoryWarehouseProfileRuleRepository();
-  const profiles = new InMemoryWarehouseProfileRepository();
-  await profiles.Create(
-    new WarehouseProfileEntity({
-      Id: 'wp-demo-ire04',
-      ProfileCode: InboundBaselineProfileCode,
-      ProfileName: 'Demo WT-01 (IRE-04 spec)',
-      WarehouseTypeCode: InboundBaselineWarehouseTypeCode,
-      WarehouseId: warehouseId,
-      OwnerId: ownerId,
-      Version: 1,
-      Status: WarehouseProfileStatus.Active,
-      ScopeKey: `${warehouseId}:${ownerId}`,
-      EffectiveFrom: new Date('2020-01-01T00:00:00.000Z'),
-      CreatedAt: now,
-      UpdatedAt: now,
-    }),
-  );
-  const seed = await SeedInboundRuleBaseline(groups, definitions, bindings, profiles);
-  expect(seed.DefinitionsCreated).toBe(6);
-  // Pin EffectiveFrom safely in the past — SeedInboundRuleBaseline stamps 2026-07-01 and Decide()
-  // sets no EvaluatedAt, so the resolver defaults to the wall clock (IRE-02 wall-clock lesson).
-  const seededDefs = await definitions.List(0, 100, {});
-  for (const def of seededDefs.Items) def.EffectiveFrom = new Date('2020-01-01T00:00:00.000Z');
-  const warehouses = new InMemoryWarehouseRepository();
-  warehouses.Seed(makeWarehouse(warehouseId));
-  const resolver = new RuleResolver(profiles, definitions, bindings, groups, new ConditionEvaluator());
-  return new PutawayRuleGate(resolver, warehouses);
-};
+const seededPutawayRuleGate = async (warehouseId: string, ownerId: string): Promise<PutawayRuleGate> =>
+  (await BuildSeededPutawayRuleGate(warehouseId, ownerId)).gate;
 
 class MemoryPutawayTaskRepository implements IPutawayTaskRepository {
   public tasks: PutawayTaskEntity[] = [];
@@ -571,7 +507,7 @@ describe('IRE-04 rule-driven putaway eligibility (real RuleResolver + seeded WT-
   it('rule-driven: a Blocked decision on one candidate folds into the existing failures/Rejections[] mechanism and the loop tries the next candidate', async () => {
     const release = makeRelease();
     const warehouses = new InMemoryWarehouseRepository();
-    warehouses.Seed(makeWarehouse(release.WarehouseId));
+    warehouses.Seed(MakePutawayDemoWarehouse(release.WarehouseId));
     const ruleGate = new PutawayRuleGate(new ZoneBlockingRuleResolver('zone-blocked'), warehouses);
     const locations = new MemoryLocationRepository([
       MakeLocation({ Id: 'loc-blocked', LocationCode: 'A-01', ZoneId: 'zone-blocked', PutawaySequence: 10 }),
@@ -593,7 +529,7 @@ describe('IRE-04 rule-driven putaway eligibility (real RuleResolver + seeded WT-
   it('rule-driven: all candidates Blocked → terminal exception with Rejections[] naming the rule-driven reason, exactly like an all-structural-failure case', async () => {
     const release = makeRelease();
     const warehouses = new InMemoryWarehouseRepository();
-    warehouses.Seed(makeWarehouse(release.WarehouseId));
+    warehouses.Seed(MakePutawayDemoWarehouse(release.WarehouseId));
     const ruleGate = new PutawayRuleGate(new ZoneBlockingRuleResolver('zone-active'), warehouses);
     const locations = new MemoryLocationRepository([
       MakeLocation({ Id: 'loc-1', LocationCode: 'A-01', ZoneId: 'zone-active', PutawaySequence: 10 }),
@@ -607,6 +543,47 @@ describe('IRE-04 rule-driven putaway eligibility (real RuleResolver + seeded WT-
       ),
     ).rejects.toThrow('No eligible putaway target location found');
 
+    expect(putawayTasks.tasks).toHaveLength(0);
+  });
+
+  class ApprovalRequiredRuleResolver implements IRuleResolver {
+    public async Resolve(context: RuleEvaluationContext): Promise<RuleDecision> {
+      void context;
+      return {
+        Winner: null,
+        Allowed: true,
+        ApprovalRequired: true,
+        OrderedCandidates: [],
+        EffectivePriorities: {},
+        ReasonReadiness: null,
+      };
+    }
+  }
+
+  it('rule-driven: an ApprovalRequired (not just Blocked) decision also excludes a candidate, and RuleCode=null renders as "unknown" not "null" in the failure reason', async () => {
+    const release = makeRelease();
+    const warehouses = new InMemoryWarehouseRepository();
+    warehouses.Seed(MakePutawayDemoWarehouse(release.WarehouseId));
+    const ruleGate = new PutawayRuleGate(new ApprovalRequiredRuleResolver(), warehouses);
+    const locations = new MemoryLocationRepository([
+      MakeLocation({ Id: 'loc-1', LocationCode: 'A-01', PutawaySequence: 10 }),
+    ]);
+
+    const { useCase, putawayTasks } = buildUseCase({ release, locations, ruleGate });
+    let caught: unknown;
+    try {
+      await useCase.Execute(
+        { InboundPutawayReleaseId: release.Id, TargetLocationId: 'loc-1', IdempotencyKey: 'ire04-approval-key' },
+        contextFor('operator-1'),
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    expect((caught as BusinessRuleException).Details).toMatchObject({
+      Failures: ['RULE_APPROVAL_REQUIRED:unknown'],
+    });
     expect(putawayTasks.tasks).toHaveLength(0);
   });
 
