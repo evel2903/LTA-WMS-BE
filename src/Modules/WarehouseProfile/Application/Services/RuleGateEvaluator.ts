@@ -1,9 +1,10 @@
 import { BusinessRuleException } from '@common/Exceptions/AppException';
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
 import { IRuleResolver } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
+import { ReasonReadiness } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleDecision';
 import { RuleEvaluationContext } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleEvaluationContext';
 
-/** Scope axes + actor/object metadata + business Attributes a caller supplies to a rule gate's Evaluate. */
+/** Scope axes + actor/object metadata + business Attributes a caller supplies to a rule gate. */
 export interface RuleGateInput {
   WarehouseId: string | null | undefined;
   OwnerId?: string | null;
@@ -29,25 +30,41 @@ export interface RuleGateOutcome {
 }
 
 /**
- * Shared context-build + resolve + decision-mapping logic behind every per-module rule gate
- * (ADR-1: InboundRuleGate, PutawayRuleGate). Each module still owns its own thin gate class (DI
- * boundary, module separation) but delegates to this single implementation so the AC2 mapping and
- * the AC5 fail-closed behavior can't silently drift between gates (code-review finding on PR #6).
- *
- * Resolves WarehouseTypeCode from WarehouseId, builds the RuleEvaluationContext (WarehouseId AND
- * OwnerId both included — see IRE-00's critical scope-match lesson), calls Resolve, and maps the
- * RuleDecision: Allowed=false or ApprovalRequired=true both throw BusinessRuleException (always
- * block); Warning/Suggestion are returned; an empty decision or an unresolvable WarehouseId is a
- * no-op (ADR-5 backward-compat).
+ * Non-throwing resolved view of a RuleDecision, for query-style callers that must map the decision
+ * into their own return shape (a readiness DTO, a tolerance enum, an OR-combined flag) instead of
+ * throwing (IRE-02+). `Matched` is false for an empty decision — no rule won, or the gate could not
+ * build a context (missing/unknown WarehouseId) — which callers treat as ADR-5 backward-compat
+ * (fall back to the previous hardcoded behavior).
  */
-export async function EvaluateRuleGate(
+export interface RuleGateDecision {
+  Matched: boolean;
+  Blocked: boolean;
+  ApprovalRequired: boolean;
+  RuleCode: string | null;
+  Warning?: { Message: string; RuleCode: string };
+  Suggestion?: { Message: string; RuleCode: string };
+  ReasonReadiness: ReasonReadiness | null;
+}
+
+function EmptyDecision(): RuleGateDecision {
+  return { Matched: false, Blocked: false, ApprovalRequired: false, RuleCode: null, ReasonReadiness: null };
+}
+
+/**
+ * Shared context-build + resolve logic behind every per-module rule gate (ADR-1: InboundRuleGate,
+ * PutawayRuleGate). Resolves WarehouseTypeCode from WarehouseId, builds the RuleEvaluationContext
+ * (WarehouseId AND OwnerId both included — IRE-00's critical scope-match lesson), calls Resolve,
+ * and returns the decision WITHOUT throwing. An unresolvable WarehouseId yields an empty decision
+ * (ADR-5 backward-compat). Resolver failures propagate (R5 fail-closed).
+ */
+export async function ResolveRuleGate(
   resolver: IRuleResolver,
   warehouses: IWarehouseRepository,
   input: RuleGateInput,
-): Promise<RuleGateOutcome> {
-  if (!input.WarehouseId) return {};
+): Promise<RuleGateDecision> {
+  if (!input.WarehouseId) return EmptyDecision();
   const warehouse = await warehouses.FindById(input.WarehouseId);
-  if (!warehouse) return {};
+  if (!warehouse) return EmptyDecision();
 
   const context: RuleEvaluationContext = {
     WarehouseTypeCode: warehouse.WarehouseTypeCode,
@@ -72,18 +89,42 @@ export async function EvaluateRuleGate(
   // failure must propagate and block the transaction, never be swallowed into a no-op decision.
   const decision = await resolver.Resolve(context);
 
-  if (!decision.Allowed) {
-    throw new BusinessRuleException(decision.Winner?.RuleCode ?? 'Rule blocked the transaction', {
+  return {
+    Matched: decision.Winner !== null,
+    Blocked: !decision.Allowed,
+    ApprovalRequired: decision.ApprovalRequired,
+    RuleCode: decision.Winner?.RuleCode ?? null,
+    Warning: decision.Warning,
+    Suggestion: decision.Suggestion,
+    ReasonReadiness: decision.ReasonReadiness,
+  };
+}
+
+/**
+ * Throwing variant for command-style callers (a use case that must abort the transaction on a
+ * blocking decision). Delegates to ResolveRuleGate and throws on HARD_BLOCK (Allowed=false) or
+ * APPROVAL_REQUIRED; otherwise returns the non-blocking Warning/Suggestion signals. Both throw
+ * branches always block — never silently pass an approval-required decision.
+ */
+export async function EvaluateRuleGate(
+  resolver: IRuleResolver,
+  warehouses: IWarehouseRepository,
+  input: RuleGateInput,
+): Promise<RuleGateOutcome> {
+  const decision = await ResolveRuleGate(resolver, warehouses, input);
+
+  if (decision.Blocked) {
+    throw new BusinessRuleException(decision.RuleCode ?? 'Rule blocked the transaction', {
       ControlMode: 'HARD_BLOCK',
-      RuleCode: decision.Winner?.RuleCode ?? null,
+      RuleCode: decision.RuleCode,
       ApprovalRequired: false,
       ReasonReadiness: decision.ReasonReadiness,
     });
   }
   if (decision.ApprovalRequired) {
-    throw new BusinessRuleException(decision.Winner?.RuleCode ?? 'Approval required to proceed', {
+    throw new BusinessRuleException(decision.RuleCode ?? 'Approval required to proceed', {
       ControlMode: 'APPROVAL_REQUIRED',
-      RuleCode: decision.Winner?.RuleCode ?? null,
+      RuleCode: decision.RuleCode,
       ApprovalRequired: true,
       ReasonReadiness: decision.ReasonReadiness,
     });

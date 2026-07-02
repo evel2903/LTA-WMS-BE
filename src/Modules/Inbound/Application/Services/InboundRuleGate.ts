@@ -2,6 +2,8 @@ import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces
 import { IRuleResolver } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
 import {
   EvaluateRuleGate,
+  ResolveRuleGate,
+  RuleGateDecision,
   RuleGateInput,
   RuleGateOutcome,
 } from '@modules/WarehouseProfile/Application/Services/RuleGateEvaluator';
@@ -51,5 +53,15 @@ export class InboundRuleGate {
 
   public async Evaluate(input: InboundRuleGateInput): Promise<InboundRuleGateOutcome> {
     return EvaluateRuleGate(this.resolver, this.warehouses, input);
+  }
+
+  /**
+   * Non-throwing query variant: returns the resolved RuleGateDecision so a use case can map it into
+   * its own return shape (readiness DTO, tolerance enum, OR-combined flag) instead of aborting.
+   * `Matched === false` means an empty decision — the caller falls back to its previous hardcoded
+   * behavior (ADR-5 backward-compat). Resolver failures still propagate (R5 fail-closed).
+   */
+  public async Decide(input: InboundRuleGateInput): Promise<RuleGateDecision> {
+    return ResolveRuleGate(this.resolver, this.warehouses, input);
   }
 }

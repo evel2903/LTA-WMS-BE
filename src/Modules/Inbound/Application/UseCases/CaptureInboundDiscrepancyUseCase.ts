@@ -33,6 +33,7 @@ import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/
 import { IReceivingRepository } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
 import { ReceivingDtoMapper } from '@modules/Inbound/Application/Mappers/ReceivingDtoMapper';
 import { AssertReceiptPermission } from '@modules/Inbound/Application/Services/ReceiptPermission';
+import { InboundRuleAttributeKeys, InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRuleGate';
 import { InboundDiscrepancyEntity } from '@modules/Inbound/Domain/Entities/InboundDiscrepancyEntity';
 import { ReceiptLineDiscrepancySignal } from '@modules/Inbound/Domain/Enums/ReceiptLineDiscrepancySignal';
 import { InboundDiscrepancyStatus } from '@modules/Inbound/Domain/Enums/InboundDiscrepancyStatus';
@@ -49,6 +50,7 @@ export class CaptureInboundDiscrepancyUseCase {
     private readonly exceptionCases: IExceptionCaseRepository,
     private readonly controlExceptionCatalog: IControlExceptionCatalog,
     private readonly profiles: IWarehouseProfileRepository,
+    private readonly ruleGate: InboundRuleGate,
     private readonly coreFlows: ICoreFlowRepository,
     private readonly integrations: IIntegrationRepository,
     private readonly reasonCatalog: IReasonCodeCatalog,
@@ -100,6 +102,8 @@ export class CaptureInboundDiscrepancyUseCase {
       line.ActualQuantity,
       line.ExpectedQuantity,
       aggregate.Plan.WarehouseProfileId,
+      receipt.WarehouseId,
+      receipt.OwnerId,
     );
     const status = this.StatusFromTolerance(toleranceDecision);
     const severity = this.SeverityFromTolerance(toleranceDecision, catalogEntry.Severity);
@@ -265,14 +269,31 @@ export class CaptureInboundDiscrepancyUseCase {
     actualQuantity: number,
     expectedQuantity: number,
     warehouseProfileId: string | null,
+    warehouseId: string,
+    ownerId: string,
   ): Promise<InboundDiscrepancyToleranceDecision> {
     if (request.DiscrepancyType !== InboundDiscrepancyType.QuantityVariance || actualQuantity <= expectedQuantity) {
       return InboundDiscrepancyToleranceDecision.NotApplicable;
     }
+    // Same formula as the previous hardcoded path — the expectedQuantity===0 boundary yields 100.
+    const overUnderPct = expectedQuantity === 0 ? 100 : ((actualQuantity - expectedQuantity) / expectedQuantity) * 100;
+
+    // Rule engine is the primary source (R-IN-TOL). A matched decision drives the tolerance outcome.
+    const decision = await this.ruleGate.Decide({
+      WarehouseId: warehouseId,
+      OwnerId: ownerId,
+      Attributes: { [InboundRuleAttributeKeys.OverUnderPct]: overUnderPct },
+    });
+    if (decision.Matched) {
+      if (decision.Blocked) return InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked;
+      if (decision.ApprovalRequired) return InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval;
+      return InboundDiscrepancyToleranceDecision.WithinTolerance;
+    }
+
+    // Backward-compat (ADR-5): no rule matched → previous hardcoded threshold logic, unchanged.
     const profile = warehouseProfileId ? await this.profiles.FindById(warehouseProfileId) : null;
     const thresholdPercent = this.NumberPolicy(profile?.ThresholdPolicy?.receivingOverTolerancePercent) ?? 0;
-    const actualPercent = expectedQuantity === 0 ? 100 : ((actualQuantity - expectedQuantity) / expectedQuantity) * 100;
-    if (actualPercent <= thresholdPercent) return InboundDiscrepancyToleranceDecision.WithinTolerance;
+    if (overUnderPct <= thresholdPercent) return InboundDiscrepancyToleranceDecision.WithinTolerance;
     const mode = String(profile?.StrategyPolicy?.receivingOverToleranceMode ?? 'approval').toLowerCase();
     return mode === 'hard_block'
       ? InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked
