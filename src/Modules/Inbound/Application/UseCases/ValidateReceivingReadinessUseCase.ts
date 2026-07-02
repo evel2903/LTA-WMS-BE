@@ -14,6 +14,7 @@ import { ReceivingReadinessDto, ValidateReceivingReadinessDto } from '@modules/I
 import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/IInboundPlanRepository';
 import { InboundPlanEntity } from '@modules/Inbound/Domain/Entities/InboundPlanEntity';
 import { AssertInboundPlanPermission } from '@modules/Inbound/Application/Services/InboundPlanPermission';
+import { InboundRuleAttributeKeys, InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRuleGate';
 import { InboundGateInStatus } from '@modules/Inbound/Domain/Enums/InboundGateInStatus';
 import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileEntity';
 import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/WarehouseProfileStatus';
@@ -23,6 +24,7 @@ export class ValidateReceivingReadinessUseCase {
   constructor(
     private readonly inboundPlans: IInboundPlanRepository,
     private readonly profiles: IWarehouseProfileRepository,
+    private readonly ruleGate: InboundRuleGate,
     private readonly reasonCatalog: IReasonCodeCatalog,
     private readonly audited: AuditedTransaction,
     private readonly permissionChecker?: IPermissionChecker,
@@ -37,7 +39,7 @@ export class ValidateReceivingReadinessUseCase {
     await AssertInboundPlanPermission(this.permissionChecker, context.ActorUserId, ActionCode.Read, aggregate.Plan);
 
     const profile = await this.ResolveProfile(aggregate.Plan);
-    const gateInRequired = this.GateInRequired(profile?.StrategyPolicy as Record<string, unknown> | undefined);
+    const gateInRequired = await this.GateInRequired(aggregate.Plan, profile);
     const gateInRecorded = aggregate.Plan.GateInStatus === InboundGateInStatus.Recorded;
     const overrideAccepted = aggregate.Plan.GateInStatus === InboundGateInStatus.OverrideAccepted;
 
@@ -157,7 +159,28 @@ export class ValidateReceivingReadinessUseCase {
     return profile;
   }
 
-  private GateInRequired(policy?: Record<string, unknown>): boolean {
+  /**
+   * Whether gate-in evidence is required before receiving. Gate-in gating is governed by the plan's
+   * WarehouseProfile: a plan with no linked profile was never gated pre-migration, so we do NOT let
+   * a scope-resolved rule newly gate it (ADR-5 backward-compat — and it also keeps the override path,
+   * which reads the plan-linked profile, reachable). When a linked profile exists, the rule engine is
+   * the primary source: a BLOCKING/APPROVAL decision means gate-in is required. A matched but
+   * non-blocking decision (SoftWarning/AutoSuggestion) carries no required signal, so it falls
+   * through to the StrategyPolicy key-check rather than suppressing a policy-required gate (no
+   * loosening). An empty decision also falls through to the policy (ADR-5).
+   */
+  private async GateInRequired(plan: InboundPlanEntity, profile: WarehouseProfileEntity | null): Promise<boolean> {
+    if (!profile) return false;
+    const decision = await this.ruleGate.Decide({
+      WarehouseId: plan.WarehouseId,
+      OwnerId: plan.OwnerId,
+      Attributes: { [InboundRuleAttributeKeys.HasAppointment]: plan.ExpectedArrivalAt != null },
+    });
+    if (decision.Blocked || decision.ApprovalRequired) return true;
+    return this.GateInRequiredFromPolicy(profile.StrategyPolicy as Record<string, unknown> | undefined);
+  }
+
+  private GateInRequiredFromPolicy(policy?: Record<string, unknown>): boolean {
     if (!policy) return false;
     return (
       policy.inboundGateInRequired === true ||

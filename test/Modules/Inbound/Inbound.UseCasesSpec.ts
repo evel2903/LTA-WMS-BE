@@ -70,6 +70,22 @@ import { IUomRepository } from '@modules/MasterData/Application/Interfaces/IUomR
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
 import { IPartnerRepository } from '@modules/PartnerMaster/Application/Interfaces/IPartnerRepository';
 import { IWarehouseProfileRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
+import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRuleGate';
+import { RuleResolver } from '@modules/WarehouseProfile/Application/Services/RuleResolver';
+import { SeedRuleGroupCatalog } from '@modules/WarehouseProfile/Application/Services/RuleGroupCatalogSeed';
+import {
+  SeedInboundRuleBaseline,
+  InboundBaselineProfileCode,
+  InboundBaselineWarehouseTypeCode,
+} from '@modules/WarehouseProfile/Application/Services/InboundRuleBaselineSeed';
+import { ConditionEvaluator } from '@modules/WarehouseProfile/Domain/Services/ConditionEvaluator';
+import {
+  InMemoryRuleGroupRepository,
+  InMemoryRuleDefinitionRepository,
+  InMemoryWarehouseProfileRuleRepository,
+} from '@test/TestDoubles/WarehouseProfile/RuleTestDoubles';
+import { InMemoryWarehouseProfileRepository } from '@test/TestDoubles/WarehouseProfile/WarehouseProfileTestDoubles';
+import { InMemoryWarehouseRepository } from '@test/TestDoubles/MasterData/MasterDataTestDoubles';
 
 const now = new Date('2026-06-22T08:00:00.000Z');
 
@@ -520,6 +536,64 @@ const profile = (strategyPolicy: Record<string, unknown> = {}, thresholdPolicy: 
     UpdatedAt: now,
   });
 
+/**
+ * Real InboundRuleGate over a RuleResolver with NO rules seeded — every Decide() returns an empty
+ * decision (Matched=false), so callers fall back to their previous hardcoded policy path. This is
+ * the default gate in repoBundle: existing tests keep exercising the backward-compat path (ADR-5).
+ */
+const emptyInboundRuleGate = (): InboundRuleGate => {
+  const groups = new InMemoryRuleGroupRepository();
+  const definitions = new InMemoryRuleDefinitionRepository();
+  const bindings = new InMemoryWarehouseProfileRuleRepository();
+  const profiles = new InMemoryWarehouseProfileRepository();
+  const warehouses = new InMemoryWarehouseRepository();
+  warehouses.Seed(warehouse());
+  const resolver = new RuleResolver(profiles, definitions, bindings, groups, new ConditionEvaluator());
+  return new InboundRuleGate(resolver, warehouses);
+};
+
+/**
+ * Real InboundRuleGate over a RuleResolver with the WT-01 baseline rules seeded (IRE-00), bound to
+ * a demo profile whose WarehouseId/OwnerId match the plans built by createRequest ('warehouse-1' /
+ * 'owner-1'). Used by the IRE-02 rule-driven parity tests.
+ */
+const seededInboundRuleGate = async (): Promise<InboundRuleGate> => {
+  const groups = new InMemoryRuleGroupRepository();
+  await SeedRuleGroupCatalog(groups);
+  const definitions = new InMemoryRuleDefinitionRepository();
+  const bindings = new InMemoryWarehouseProfileRuleRepository();
+  const profiles = new InMemoryWarehouseProfileRepository();
+  await profiles.Create(
+    new WarehouseProfileEntity({
+      Id: 'wp-demo-ire02',
+      ProfileCode: InboundBaselineProfileCode,
+      ProfileName: 'Demo WT-01 (IRE-02 spec)',
+      WarehouseTypeCode: InboundBaselineWarehouseTypeCode,
+      WarehouseId: 'warehouse-1',
+      OwnerId: 'owner-1',
+      Version: 1,
+      Status: WarehouseProfileStatus.Active,
+      ScopeKey: 'warehouse-1:owner-1',
+      EffectiveFrom: now,
+      CreatedAt: now,
+      UpdatedAt: now,
+    }),
+  );
+  const seed = await SeedInboundRuleBaseline(groups, definitions, bindings, profiles);
+  expect(seed.DefinitionsCreated).toBe(6);
+  // Make seeded rules clock-independent: SeedInboundRuleBaseline stamps EffectiveFrom=2026-07-01,
+  // but Decide() sets no EvaluatedAt so the resolver defaults to the wall clock. Pin the seeded
+  // definitions to a safely-past date so these parity tests never flip on a machine/CI clock.
+  const seededDefs = await definitions.List(0, 100, {});
+  for (const def of seededDefs.Items) {
+    def.EffectiveFrom = new Date('2020-01-01T00:00:00.000Z');
+  }
+  const warehouses = new InMemoryWarehouseRepository();
+  warehouses.Seed(warehouse());
+  const resolver = new RuleResolver(profiles, definitions, bindings, groups, new ConditionEvaluator());
+  return new InboundRuleGate(resolver, warehouses);
+};
+
 const createRequest = () => ({
   SourceSystem: 'ERP',
   SourceDocumentType: 'ASN',
@@ -616,6 +690,7 @@ const repoBundle = () => {
     coreFlows,
     integrations,
     profiles,
+    ruleGate: emptyInboundRuleGate() as InboundRuleGate,
     reasonCatalog,
     controlExceptionCatalog,
     labelBlocking,
@@ -650,6 +725,7 @@ const readinessUseCase = (bundle: ReturnType<typeof repoBundle>) =>
   new ValidateReceivingReadinessUseCase(
     bundle.inbound,
     bundle.profiles as unknown as IWarehouseProfileRepository,
+    bundle.ruleGate,
     bundle.reasonCatalog,
     bundle.audited as unknown as AuditedTransaction,
     bundle.permissionChecker,
@@ -683,6 +759,7 @@ const captureInboundDiscrepancyUseCase = (bundle: ReturnType<typeof repoBundle>)
     bundle.exceptionCases,
     bundle.controlExceptionCatalog as never,
     bundle.profiles as unknown as IWarehouseProfileRepository,
+    bundle.ruleGate,
     bundle.coreFlows as unknown as ICoreFlowRepository,
     bundle.integrations as unknown as IIntegrationRepository,
     bundle.reasonCatalog,
@@ -2280,5 +2357,122 @@ describe('GetInboundOperationalStateUseCase (IRM-01)', () => {
     expect(state.QcResults[0].TaskStatus).toBe('Dispositioned');
     expect(state.Lpns[0].LpnCode).toBe('LPN-1');
     expect(state.Releases[0].InventoryStatusCode).toBe('AVAILABLE');
+  });
+});
+
+describe('IRE-02 rule-driven gate-in + tolerance (real RuleResolver + seeded WT-01)', () => {
+  const startAndConfirmLine = async (bundle: ReturnType<typeof repoBundle>, actualQuantity: number) => {
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: actualQuantity,
+        IdempotencyKey: 'ire02-line-1',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    return { created, session, line };
+  };
+
+  const captureQuantityVariance = (bundle: ReturnType<typeof repoBundle>, receiptId: string, receiptLineId: string) =>
+    captureInboundDiscrepancyUseCase(bundle).Execute(
+      {
+        ReceiptId: receiptId,
+        ReceiptLineId: receiptLineId,
+        DiscrepancyType: InboundDiscrepancyType.QuantityVariance,
+        ReasonCode: 'RC-V1-DISCREPANCY',
+        EvidenceRefs: ['photo://dock/ire02'],
+        IdempotencyKey: 'ire02-disc-1',
+      },
+      { ...SystemAuditContext, ActorUserId: 'supervisor-1' },
+    );
+
+  it('tolerance: seeded RULE-IN-TOL-01 (overUnderPct > 5) drives PendingApproval even when the profile threshold (50%) would allow it', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    // Fallback would say WithinTolerance (16.7% <= 50%); the rule must override to PendingApproval.
+    bundle.profiles.FindById.mockResolvedValue(profile({}, { receivingOverTolerancePercent: 50 }));
+    const { session, line } = await startAndConfirmLine(bundle, 14); // expected 12 → 16.7%
+
+    const discrepancy = await captureQuantityVariance(bundle, session.ReceiptId, line.Id);
+
+    expect(discrepancy.ToleranceDecision).toBe(InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval);
+    expect(discrepancy.Status).toBe(InboundDiscrepancyStatus.PendingApproval);
+  });
+
+  it('tolerance backward-compat: empty decision → previous threshold logic (16.7% <= 50%) → WithinTolerance/Routed', async () => {
+    const bundle = repoBundle(); // default empty gate
+    bundle.profiles.FindById.mockResolvedValue(profile({}, { receivingOverTolerancePercent: 50 }));
+    const { session, line } = await startAndConfirmLine(bundle, 14);
+
+    const discrepancy = await captureQuantityVariance(bundle, session.ReceiptId, line.Id);
+
+    expect(discrepancy.ToleranceDecision).toBe(InboundDiscrepancyToleranceDecision.WithinTolerance);
+    expect(discrepancy.Status).toBe(InboundDiscrepancyStatus.Routed);
+  });
+
+  it('tolerance boundary expectedQuantity=0: overUnderPct formula yields exactly 100 (guarded via fallback threshold 50)', async () => {
+    // Run on the FALLBACK path (empty gate) with threshold=50 so the exact computed overUnderPct is
+    // what the comparison hinges on: 100 > 50 → over-tolerance. A wrong expected===0 branch (e.g. 6)
+    // would give 6 <= 50 → WithinTolerance and fail this test — so it truly guards the formula.
+    const bundle = repoBundle(); // default empty gate → fallback threshold path
+    bundle.profiles.FindById.mockResolvedValue(profile({}, { receivingOverTolerancePercent: 50 }));
+    const { session, line } = await startAndConfirmLine(bundle, 14);
+    // Force the stored receipt line to the expected=0 boundary (actual > expected still holds).
+    const storedLine = bundle.receiving.Lines.find((item) => item.Id === line.Id)!;
+    storedLine.ExpectedQuantity = 0;
+    storedLine.ActualQuantity = 3;
+
+    const discrepancy = await captureQuantityVariance(bundle, session.ReceiptId, line.Id);
+
+    expect(discrepancy.ToleranceDecision).toBe(InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval);
+  });
+
+  it('gate-in: a plan with no linked WarehouseProfile is NOT newly gated by a scope-matching rule (ADR-5, override stays reachable)', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    // No plan-linked profile: pre-migration this plan was never gated; the scope rule must not gate it.
+    const created = await createUseCase(bundle).Execute(
+      { ...createRequest(), WarehouseProfileId: undefined },
+      SystemAuditContext,
+    );
+    bundle.inbound.Plans[0].ExpectedArrivalAt = null; // would satisfy RULE-IN-GATE-01 if consulted
+
+    const readiness = await readinessUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    expect(readiness.Allowed).toBe(true);
+    expect(readiness.GateInRequired).toBe(false);
+  });
+
+  it('gate-in: seeded RULE-IN-GATE-01 (no appointment) forces gate-in required even when policy does not', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.profiles.FindById.mockResolvedValue(profile({})); // no inboundGateInRequired policy
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    // No appointment → hasAppointment=false → RULE-IN-GATE-01 fires.
+    bundle.inbound.Plans[0].ExpectedArrivalAt = null;
+
+    const readiness = await readinessUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    expect(readiness.Blocked).toBe(true);
+    expect(readiness.GateInRequired).toBe(true);
+  });
+
+  it('gate-in backward-compat: empty decision + no policy → gate-in not required → Allowed', async () => {
+    const bundle = repoBundle(); // default empty gate
+    bundle.profiles.FindById.mockResolvedValue(profile({}));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    bundle.inbound.Plans[0].ExpectedArrivalAt = null;
+
+    const readiness = await readinessUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    expect(readiness.Allowed).toBe(true);
+    expect(readiness.GateInRequired).toBe(false);
   });
 });
