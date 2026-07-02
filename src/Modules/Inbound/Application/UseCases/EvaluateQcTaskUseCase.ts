@@ -70,15 +70,18 @@ export class EvaluateQcTaskUseCase {
     const planLine = aggregate.Lines.find((item) => item.Id === line.InboundPlanLineId);
     if (!planLine) throw new BusinessRuleException('Inbound plan line not found for QC');
 
-    const profile = aggregate.Plan.WarehouseProfileId
-      ? await this.profiles.FindById(aggregate.Plan.WarehouseProfileId)
-      : null;
-    const sku = await this.skus.FindById(line.SkuId);
-    const supplier = await this.partners.FindById(aggregate.Plan.SupplierId);
+    const [profile, sku, supplier] = await Promise.all([
+      aggregate.Plan.WarehouseProfileId
+        ? this.profiles.FindById(aggregate.Plan.WarehouseProfileId)
+        : Promise.resolve(null),
+      this.skus.FindById(line.SkuId),
+      this.partners.FindById(aggregate.Plan.SupplierId),
+    ]);
     const ruleDecision = await this.ruleGate.Decide({
       WarehouseId: receipt.WarehouseId,
       OwnerId: receipt.OwnerId,
       SkuId: line.SkuId,
+      SupplierId: aggregate.Plan.SupplierId,
       Attributes: { [InboundRuleAttributeKeys.SupplierRisk]: supplier?.RiskLevel?.toLowerCase() ?? null },
     });
     const decision = this.DecideRequirement(

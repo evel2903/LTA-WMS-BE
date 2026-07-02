@@ -193,10 +193,9 @@ describe('Partner master use cases', () => {
     expect(withoutRisk.RiskLevel).toBeNull();
   });
 
-  it('updates RiskLevel, and leaves it unchanged when the field is omitted from the request (IRE-03)', async () => {
+  it('updates RiskLevel to an explicit value (IRE-03)', async () => {
     const partners = new FakePartnerRepository();
-    const existing = partner({ RiskLevel: PartnerRiskLevel.Medium });
-    partners.FindById.mockResolvedValue(existing);
+    partners.FindById.mockResolvedValue(partner({ RiskLevel: PartnerRiskLevel.Medium }));
     partners.FindByCode.mockResolvedValue(null);
     partners.FindByExternalReference.mockResolvedValue(null);
     partners.Update.mockImplementation(async (entity) => entity);
@@ -206,12 +205,34 @@ describe('Partner master use cases', () => {
       RiskLevel: PartnerRiskLevel.High,
     });
     expect(updated.RiskLevel).toBe(PartnerRiskLevel.High);
+  });
+
+  it('leaves RiskLevel unchanged when the field is omitted from the request (IRE-03)', async () => {
+    const partners = new FakePartnerRepository();
+    partners.FindById.mockResolvedValue(partner({ RiskLevel: PartnerRiskLevel.Medium }));
+    partners.FindByCode.mockResolvedValue(null);
+    partners.FindByExternalReference.mockResolvedValue(null);
+    partners.Update.mockImplementation(async (entity) => entity);
 
     const untouched = await new UpdatePartnerUseCase(partners).Execute({
       Id: 'partner-1',
       PartnerName: 'Renamed only',
     });
-    expect(untouched.RiskLevel).toBe(PartnerRiskLevel.High);
+    expect(untouched.RiskLevel).toBe(PartnerRiskLevel.Medium);
+  });
+
+  it('clears RiskLevel when the request explicitly sets it to null (IRE-03)', async () => {
+    const partners = new FakePartnerRepository();
+    partners.FindById.mockResolvedValue(partner({ RiskLevel: PartnerRiskLevel.Medium }));
+    partners.FindByCode.mockResolvedValue(null);
+    partners.FindByExternalReference.mockResolvedValue(null);
+    partners.Update.mockImplementation(async (entity) => entity);
+
+    const cleared = await new UpdatePartnerUseCase(partners).Execute({
+      Id: 'partner-1',
+      RiskLevel: null,
+    });
+    expect(cleared.RiskLevel).toBeNull();
   });
 
   it('deactivates with DeleteCancel audit and requires a reason code', async () => {
