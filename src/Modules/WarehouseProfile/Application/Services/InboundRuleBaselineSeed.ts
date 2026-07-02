@@ -1,11 +1,14 @@
 import { randomUUID } from 'crypto';
+import { ConflictException } from '@common/Exceptions/AppException';
 import { IRuleGroupRepository } from '@modules/WarehouseProfile/Application/Interfaces/IRuleGroupRepository';
 import { IRuleDefinitionRepository } from '@modules/WarehouseProfile/Application/Interfaces/IRuleDefinitionRepository';
 import { IWarehouseProfileRuleRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRuleRepository';
 import { IWarehouseProfileRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
 import { ScopeKeyService } from '@modules/WarehouseProfile/Application/Services/ScopeKeyService';
 import { RuleDefinitionEntity } from '@modules/WarehouseProfile/Domain/Entities/RuleDefinitionEntity';
+import { RuleGroupEntity } from '@modules/WarehouseProfile/Domain/Entities/RuleGroupEntity';
 import { WarehouseProfileRuleEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileRuleEntity';
+import { RuleGroupCatalogState } from '@modules/WarehouseProfile/Domain/Enums/RuleGroupCatalogState';
 import { RulePrecedenceTier } from '@modules/WarehouseProfile/Domain/Enums/RulePrecedenceTier';
 import { RuleControlMode } from '@modules/WarehouseProfile/Domain/Enums/RuleControlMode';
 import { RuleStatus } from '@modules/WarehouseProfile/Domain/Enums/RuleStatus';
@@ -102,6 +105,15 @@ export const InboundRuleBaselineEntries: ReadonlyArray<InboundRuleBaselineEntry>
  * RuleCode does not already exist, and bind it to the WT-01 demo profile if not already bound.
  * Skips (does not throw) when the target profile or rule group is missing, so this seed can run
  * safely even before demo data exists — callers should check the returned counts.
+ *
+ * Defensive checks (beyond the happy path):
+ * - A rule group that EXISTS but is still CatalogState=PLACEHOLDER is treated as not-usable
+ *   (reported in RuleGroupNotActive, never bound) — binding to it would otherwise be silently
+ *   filtered out later by RuleResolver.LoadEnabledRules with no error signal (AC7).
+ * - Concurrent runs (e.g. Seed.ts and DemoDataCcSeed.ts racing against the same DB) can hit a
+ *   TOCTOU gap between the FindByCode/FindByProfileAndRule check and Create(); a ConflictException
+ *   raised by the unique index is treated as "another run already created it" and converged
+ *   instead of crashing the seed script.
  */
 export async function SeedInboundRuleBaseline(
   groupRepository: IRuleGroupRepository,
@@ -110,11 +122,18 @@ export async function SeedInboundRuleBaseline(
   profileRepository: IWarehouseProfileRepository,
 ): Promise<{
   RuleGroupMissing: string[];
+  RuleGroupNotActive: string[];
   ProfileMissing: boolean;
   DefinitionsCreated: number;
   BindingsCreated: number;
 }> {
-  const result = { RuleGroupMissing: [] as string[], ProfileMissing: false, DefinitionsCreated: 0, BindingsCreated: 0 };
+  const result = {
+    RuleGroupMissing: [] as string[],
+    RuleGroupNotActive: [] as string[],
+    ProfileMissing: false,
+    DefinitionsCreated: 0,
+    BindingsCreated: 0,
+  };
 
   const profile = await profileRepository.FindByCode(InboundBaselineProfileCode);
   if (!profile) {
@@ -125,59 +144,95 @@ export async function SeedInboundRuleBaseline(
   const scopeKeyService = new ScopeKeyService();
   const scopeKey = scopeKeyService.Build({ WarehouseTypeCode: InboundBaselineWarehouseTypeCode });
 
+  const groupCache = new Map<string, RuleGroupEntity | null>();
+  const ResolveGroup = async (groupCode: string): Promise<RuleGroupEntity | null> => {
+    if (groupCache.has(groupCode)) {
+      return groupCache.get(groupCode) ?? null;
+    }
+    const group = await groupRepository.FindByCode(groupCode);
+    groupCache.set(groupCode, group);
+    return group;
+  };
+
   for (const entry of InboundRuleBaselineEntries) {
-    const group = await groupRepository.FindByCode(entry.RuleGroupCode);
+    const group = await ResolveGroup(entry.RuleGroupCode);
     if (!group) {
-      result.RuleGroupMissing.push(entry.RuleGroupCode);
+      if (!result.RuleGroupMissing.includes(entry.RuleGroupCode)) {
+        result.RuleGroupMissing.push(entry.RuleGroupCode);
+      }
+      continue;
+    }
+    if (group.CatalogState !== RuleGroupCatalogState.Active) {
+      if (!result.RuleGroupNotActive.includes(entry.RuleGroupCode)) {
+        result.RuleGroupNotActive.push(entry.RuleGroupCode);
+      }
       continue;
     }
 
     let definition = await definitionRepository.FindByCode(entry.RuleCode);
     if (!definition) {
       const now = new Date();
-      definition = await definitionRepository.Create(
-        new RuleDefinitionEntity({
-          Id: randomUUID(),
-          RuleCode: entry.RuleCode,
-          RuleName: entry.RuleName,
-          RuleGroupId: group.Id,
-          PrecedenceTier: entry.PrecedenceTier,
-          ControlMode: entry.ControlMode,
-          WarehouseTypeCode: InboundBaselineWarehouseTypeCode,
-          ScopeKey: scopeKey,
-          ConditionJson: entry.ConditionJson,
-          ActionJson: entry.ActionJson,
-          Status: RuleStatus.Active,
-          EffectiveFrom: new Date('2026-07-01T00:00:00.000Z'),
-          SourceSystem: 'SEED',
-          ReferenceId: null,
-          CreatedAt: now,
-          UpdatedAt: now,
-          CreatedBy: null,
-          UpdatedBy: null,
-        }),
-      );
-      result.DefinitionsCreated += 1;
+      try {
+        definition = await definitionRepository.Create(
+          new RuleDefinitionEntity({
+            Id: randomUUID(),
+            RuleCode: entry.RuleCode,
+            RuleName: entry.RuleName,
+            RuleGroupId: group.Id,
+            PrecedenceTier: entry.PrecedenceTier,
+            ControlMode: entry.ControlMode,
+            WarehouseTypeCode: InboundBaselineWarehouseTypeCode,
+            ScopeKey: scopeKey,
+            ConditionJson: entry.ConditionJson,
+            ActionJson: entry.ActionJson,
+            Status: RuleStatus.Active,
+            EffectiveFrom: new Date('2026-07-01T00:00:00.000Z'),
+            SourceSystem: 'SEED',
+            ReferenceId: null,
+            CreatedAt: now,
+            UpdatedAt: now,
+            CreatedBy: null,
+            UpdatedBy: null,
+          }),
+        );
+        result.DefinitionsCreated += 1;
+      } catch (error) {
+        if (!(error instanceof ConflictException)) {
+          throw error;
+        }
+        const existing = await definitionRepository.FindByCode(entry.RuleCode);
+        if (!existing) {
+          throw error;
+        }
+        definition = existing;
+      }
     }
 
     const existingBinding = await bindingRepository.FindByProfileAndRule(profile.Id, definition.Id);
     if (!existingBinding) {
       const now = new Date();
-      await bindingRepository.Create(
-        new WarehouseProfileRuleEntity({
-          Id: randomUUID(),
-          WarehouseProfileId: profile.Id,
-          RuleDefinitionId: definition.Id,
-          IsEnabled: true,
-          SourceSystem: 'SEED',
-          ReferenceId: null,
-          CreatedAt: now,
-          UpdatedAt: now,
-          CreatedBy: null,
-          UpdatedBy: null,
-        }),
-      );
-      result.BindingsCreated += 1;
+      try {
+        await bindingRepository.Create(
+          new WarehouseProfileRuleEntity({
+            Id: randomUUID(),
+            WarehouseProfileId: profile.Id,
+            RuleDefinitionId: definition.Id,
+            IsEnabled: true,
+            SourceSystem: 'SEED',
+            ReferenceId: null,
+            CreatedAt: now,
+            UpdatedAt: now,
+            CreatedBy: null,
+            UpdatedBy: null,
+          }),
+        );
+        result.BindingsCreated += 1;
+      } catch (error) {
+        if (!(error instanceof ConflictException)) {
+          throw error;
+        }
+        // Concurrent run already bound it — converge instead of crashing.
+      }
     }
   }
 

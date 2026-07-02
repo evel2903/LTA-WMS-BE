@@ -95,7 +95,8 @@ export async function SeedRuleGroupCatalog(groupRepository: IRuleGroupRepository
         existing.GroupName = entry.GroupName;
         existing.Description = entry.Description;
         existing.DisplayOrder = entry.DisplayOrder;
-        existing.UpdatedAt = new Date();
+        // UpdatedAt is a TypeORM @UpdateDateColumn — it is recomputed by save() regardless of
+        // any value assigned here, so it is intentionally not set on this in-memory entity.
         await groupRepository.Update(existing);
       }
       continue;
