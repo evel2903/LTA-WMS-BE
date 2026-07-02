@@ -12,6 +12,7 @@ export class PartnerDtoMapper {
       SourceSystem: partner.SourceSystem,
       ExternalReference: partner.ExternalReference,
       ReferenceText: partner.ReferenceText,
+      RiskLevel: partner.RiskLevel,
       CreatedAt: partner.CreatedAt,
       UpdatedAt: partner.UpdatedAt,
       CreatedBy: partner.CreatedBy,

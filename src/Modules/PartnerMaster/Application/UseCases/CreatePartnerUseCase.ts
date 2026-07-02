@@ -48,6 +48,7 @@ export class CreatePartnerUseCase {
       SourceSystem: request.SourceSystem,
       ExternalReference: request.ExternalReference,
       ReferenceText: request.ReferenceText ?? null,
+      RiskLevel: request.RiskLevel ?? null,
       CreatedAt: now,
       UpdatedAt: now,
     });

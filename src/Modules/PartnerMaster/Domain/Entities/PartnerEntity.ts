@@ -1,3 +1,4 @@
+import { PartnerRiskLevel } from '@modules/PartnerMaster/Domain/Enums/PartnerRiskLevel';
 import { PartnerStatus } from '@modules/PartnerMaster/Domain/Enums/PartnerStatus';
 import { PartnerType } from '@modules/PartnerMaster/Domain/Enums/PartnerType';
 
@@ -10,6 +11,7 @@ export class PartnerEntity {
   public SourceSystem: string;
   public ExternalReference: string;
   public ReferenceText: string | null;
+  public RiskLevel: PartnerRiskLevel | null;
   public readonly CreatedAt: Date;
   public UpdatedAt: Date;
   public CreatedBy: string | null;
@@ -24,6 +26,7 @@ export class PartnerEntity {
     SourceSystem: string;
     ExternalReference: string;
     ReferenceText?: string | null;
+    RiskLevel?: PartnerRiskLevel | null;
     CreatedAt: Date;
     UpdatedAt: Date;
     CreatedBy?: string | null;
@@ -37,6 +40,7 @@ export class PartnerEntity {
     this.SourceSystem = params.SourceSystem;
     this.ExternalReference = params.ExternalReference;
     this.ReferenceText = params.ReferenceText ?? null;
+    this.RiskLevel = params.RiskLevel ?? null;
     this.CreatedAt = params.CreatedAt;
     this.UpdatedAt = params.UpdatedAt;
     this.CreatedBy = params.CreatedBy ?? null;

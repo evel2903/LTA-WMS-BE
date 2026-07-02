@@ -23,10 +23,13 @@ import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/
 import { IReceivingRepository } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
 import { ReceivingDtoMapper } from '@modules/Inbound/Application/Mappers/ReceivingDtoMapper';
 import { AssertQcTaskPermission } from '@modules/Inbound/Application/Services/QcTaskPermission';
+import { InboundRuleAttributeKeys, InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRuleGate';
 import { QcTaskEntity } from '@modules/Inbound/Domain/Entities/QcTaskEntity';
 import { QcTaskStatus } from '@modules/Inbound/Domain/Enums/QcTaskStatus';
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
+import { IPartnerRepository } from '@modules/PartnerMaster/Application/Interfaces/IPartnerRepository';
 import { IWarehouseProfileRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
+import { RuleGateDecision } from '@modules/WarehouseProfile/Application/Services/RuleGateEvaluator';
 
 const INVENTORY_PENDING_QC = 'PENDING_QC';
 const INVENTORY_READY_FOR_PUTAWAY = 'READY_FOR_PUTAWAY';
@@ -36,6 +39,8 @@ export class EvaluateQcTaskUseCase {
     private readonly inboundPlans: IInboundPlanRepository,
     private readonly receiving: IReceivingRepository,
     private readonly profiles: IWarehouseProfileRepository,
+    private readonly ruleGate: InboundRuleGate,
+    private readonly partners: IPartnerRepository,
     private readonly skus: ISkuRepository,
     private readonly coreFlows: ICoreFlowRepository,
     private readonly integrations: IIntegrationRepository,
@@ -65,14 +70,27 @@ export class EvaluateQcTaskUseCase {
     const planLine = aggregate.Lines.find((item) => item.Id === line.InboundPlanLineId);
     if (!planLine) throw new BusinessRuleException('Inbound plan line not found for QC');
 
-    const profile = aggregate.Plan.WarehouseProfileId
-      ? await this.profiles.FindById(aggregate.Plan.WarehouseProfileId)
-      : null;
-    const sku = await this.skus.FindById(line.SkuId);
-    const decision = this.DecideRequirement(request, line.DiscrepancySignals.length > 0, sku?.QcRequired ?? false, {
-      ...(profile?.StrategyPolicy ?? {}),
-      ...(profile?.ThresholdPolicy ?? {}),
+    const [profile, sku, supplier] = await Promise.all([
+      aggregate.Plan.WarehouseProfileId
+        ? this.profiles.FindById(aggregate.Plan.WarehouseProfileId)
+        : Promise.resolve(null),
+      this.skus.FindById(line.SkuId),
+      this.partners.FindById(aggregate.Plan.SupplierId),
+    ]);
+    const ruleDecision = await this.ruleGate.Decide({
+      WarehouseId: receipt.WarehouseId,
+      OwnerId: receipt.OwnerId,
+      SkuId: line.SkuId,
+      SupplierId: aggregate.Plan.SupplierId,
+      Attributes: { [InboundRuleAttributeKeys.SupplierRisk]: supplier?.RiskLevel?.toLowerCase() ?? null },
     });
+    const decision = this.DecideRequirement(
+      request,
+      line.DiscrepancySignals.length > 0,
+      sku?.QcRequired ?? false,
+      { ...(profile?.StrategyPolicy ?? {}), ...(profile?.ThresholdPolicy ?? {}) },
+      ruleDecision,
+    );
     const reasonCodeId = request.ReasonCode?.trim()
       ? (
           await this.reasonCatalog.ValidateReason({
@@ -188,16 +206,23 @@ export class EvaluateQcTaskUseCase {
     hasDiscrepancy: boolean,
     skuRequiresQc: boolean,
     policy: Record<string, unknown>,
+    ruleDecision: RuleGateDecision,
   ): { Required: boolean; TriggerReason: string; PolicySnapshot: Record<string, unknown> } {
     const forceRequired = request.ForceRequired === true;
+    // Rule engine is the primary source (R-QC-TRIG). Only a blocking/approval decision is
+    // authoritative; a matched-but-non-blocking or empty decision falls through to the previous
+    // profile key-check (ADR-5 — no loosening, same pattern fixed during IRE-02's code review).
+    const ruleRequiresQc = ruleDecision.Blocked || ruleDecision.ApprovalRequired;
     const profileRequiresQc = this.BoolPolicy(policy.inboundQcRequired) || this.BoolPolicy(policy.qcRequired);
     const samplePercent = this.NumberPolicy(policy.qcSamplePercent);
     const samplingRequiresQc = samplePercent !== null && samplePercent > 0;
-    const required = forceRequired || hasDiscrepancy || skuRequiresQc || profileRequiresQc || samplingRequiresQc;
+    const policyRequiresQc = !ruleRequiresQc && (profileRequiresQc || samplingRequiresQc);
+    const required = forceRequired || hasDiscrepancy || skuRequiresQc || ruleRequiresQc || policyRequiresQc;
     let trigger = 'NotRequired';
     if (forceRequired) trigger = 'Forced';
     else if (hasDiscrepancy) trigger = 'Discrepancy';
     else if (skuRequiresQc) trigger = 'SkuPolicy';
+    else if (ruleRequiresQc) trigger = 'WarehouseProfile';
     else if (profileRequiresQc) trigger = 'WarehouseProfile';
     else if (samplingRequiresQc) trigger = 'SamplingPolicy';
     return {
@@ -207,6 +232,8 @@ export class EvaluateQcTaskUseCase {
         ForceRequired: forceRequired,
         HasDiscrepancy: hasDiscrepancy,
         SkuRequiresQc: skuRequiresQc,
+        RuleRequiresQc: ruleRequiresQc,
+        RuleCode: ruleDecision.RuleCode,
         InboundQcRequired: profileRequiresQc,
         QcSamplePercent: samplePercent,
       },

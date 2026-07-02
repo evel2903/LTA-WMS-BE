@@ -15,6 +15,7 @@ import {
   PartnerListFilter,
 } from '@modules/PartnerMaster/Application/Interfaces/IPartnerRepository';
 import { PartnerEntity } from '@modules/PartnerMaster/Domain/Entities/PartnerEntity';
+import { PartnerRiskLevel } from '@modules/PartnerMaster/Domain/Enums/PartnerRiskLevel';
 import { PartnerStatus } from '@modules/PartnerMaster/Domain/Enums/PartnerStatus';
 import { PartnerType } from '@modules/PartnerMaster/Domain/Enums/PartnerType';
 
@@ -164,6 +165,74 @@ describe('Partner master use cases', () => {
 
     expect(existing.PartnerName).toBe('Before');
     expect(partners.Update).not.toHaveBeenCalled();
+  });
+
+  it('creates a partner with RiskLevel and defaults it to null when omitted (IRE-03)', async () => {
+    const partners = new FakePartnerRepository();
+    partners.FindByCode.mockResolvedValue(null);
+    partners.FindByExternalReference.mockResolvedValue(null);
+    partners.Create.mockImplementation(async (entity) => entity);
+
+    const withRisk = await new CreatePartnerUseCase(partners).Execute({
+      PartnerCode: 'SUP-RISK',
+      PartnerName: 'Supplier Risk',
+      PartnerType: PartnerType.Supplier,
+      SourceSystem: 'ERP',
+      ExternalReference: 'ERP-SUP-RISK',
+      RiskLevel: PartnerRiskLevel.High,
+    });
+    expect(withRisk.RiskLevel).toBe(PartnerRiskLevel.High);
+
+    const withoutRisk = await new CreatePartnerUseCase(partners).Execute({
+      PartnerCode: 'SUP-NO-RISK',
+      PartnerName: 'Supplier No Risk',
+      PartnerType: PartnerType.Supplier,
+      SourceSystem: 'ERP',
+      ExternalReference: 'ERP-SUP-NO-RISK',
+    });
+    expect(withoutRisk.RiskLevel).toBeNull();
+  });
+
+  it('updates RiskLevel to an explicit value (IRE-03)', async () => {
+    const partners = new FakePartnerRepository();
+    partners.FindById.mockResolvedValue(partner({ RiskLevel: PartnerRiskLevel.Medium }));
+    partners.FindByCode.mockResolvedValue(null);
+    partners.FindByExternalReference.mockResolvedValue(null);
+    partners.Update.mockImplementation(async (entity) => entity);
+
+    const updated = await new UpdatePartnerUseCase(partners).Execute({
+      Id: 'partner-1',
+      RiskLevel: PartnerRiskLevel.High,
+    });
+    expect(updated.RiskLevel).toBe(PartnerRiskLevel.High);
+  });
+
+  it('leaves RiskLevel unchanged when the field is omitted from the request (IRE-03)', async () => {
+    const partners = new FakePartnerRepository();
+    partners.FindById.mockResolvedValue(partner({ RiskLevel: PartnerRiskLevel.Medium }));
+    partners.FindByCode.mockResolvedValue(null);
+    partners.FindByExternalReference.mockResolvedValue(null);
+    partners.Update.mockImplementation(async (entity) => entity);
+
+    const untouched = await new UpdatePartnerUseCase(partners).Execute({
+      Id: 'partner-1',
+      PartnerName: 'Renamed only',
+    });
+    expect(untouched.RiskLevel).toBe(PartnerRiskLevel.Medium);
+  });
+
+  it('clears RiskLevel when the request explicitly sets it to null (IRE-03)', async () => {
+    const partners = new FakePartnerRepository();
+    partners.FindById.mockResolvedValue(partner({ RiskLevel: PartnerRiskLevel.Medium }));
+    partners.FindByCode.mockResolvedValue(null);
+    partners.FindByExternalReference.mockResolvedValue(null);
+    partners.Update.mockImplementation(async (entity) => entity);
+
+    const cleared = await new UpdatePartnerUseCase(partners).Execute({
+      Id: 'partner-1',
+      RiskLevel: null,
+    });
+    expect(cleared.RiskLevel).toBeNull();
   });
 
   it('deactivates with DeleteCancel audit and requires a reason code', async () => {

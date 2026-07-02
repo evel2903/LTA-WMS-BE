@@ -1,3 +1,4 @@
+import { PartnerRiskLevel } from '@modules/PartnerMaster/Domain/Enums/PartnerRiskLevel';
 import { PartnerStatus } from '@modules/PartnerMaster/Domain/Enums/PartnerStatus';
 
 export interface UpdatePartnerDto {
@@ -8,4 +9,5 @@ export interface UpdatePartnerDto {
   SourceSystem?: string;
   ExternalReference?: string;
   ReferenceText?: string | null;
+  RiskLevel?: PartnerRiskLevel | null;
 }

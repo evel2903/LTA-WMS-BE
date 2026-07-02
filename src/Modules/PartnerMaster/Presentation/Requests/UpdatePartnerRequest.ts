@@ -1,4 +1,5 @@
 import { IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
+import { PartnerRiskLevel } from '@modules/PartnerMaster/Domain/Enums/PartnerRiskLevel';
 import { PartnerStatus } from '@modules/PartnerMaster/Domain/Enums/PartnerStatus';
 
 export class UpdatePartnerRequest {
@@ -34,4 +35,8 @@ export class UpdatePartnerRequest {
   @IsString()
   @MaxLength(255)
   public ReferenceText?: string | null;
+
+  @IsOptional()
+  @IsEnum(PartnerRiskLevel)
+  public RiskLevel?: PartnerRiskLevel | null;
 }
