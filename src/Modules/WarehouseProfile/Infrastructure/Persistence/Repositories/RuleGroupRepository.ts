@@ -38,6 +38,17 @@ export class RuleGroupRepository implements IRuleGroupRepository {
     }
   }
 
+  public async Update(group: RuleGroupEntity, manager?: EntityManager): Promise<RuleGroupEntity> {
+    const repo = manager ? manager.getRepository(RuleGroupOrmEntity) : this.groups;
+    try {
+      const updated = await repo.save(RuleGroupOrmMapper.ToOrm(group));
+      return RuleGroupOrmMapper.ToDomain(updated);
+    } catch (error) {
+      this.HandleUniqueViolation(error);
+      throw error;
+    }
+  }
+
   public async List(
     skip: number,
     take: number,

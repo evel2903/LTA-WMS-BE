@@ -4,8 +4,15 @@ import * as bcrypt from 'bcryptjs';
 import dataSource from '@shared/Database/TypeOrmDataSource';
 import { UserOrmEntity } from '@modules/Users/Infrastructure/Persistence/Entities/UserOrmEntity';
 import { SeedRuleGroupCatalog } from '@modules/WarehouseProfile/Application/Services/RuleGroupCatalogSeed';
+import { SeedInboundRuleBaseline } from '@modules/WarehouseProfile/Application/Services/InboundRuleBaselineSeed';
 import { RuleGroupRepository } from '@modules/WarehouseProfile/Infrastructure/Persistence/Repositories/RuleGroupRepository';
 import { RuleGroupOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/RuleGroupOrmEntity';
+import { RuleDefinitionRepository } from '@modules/WarehouseProfile/Infrastructure/Persistence/Repositories/RuleDefinitionRepository';
+import { RuleDefinitionOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/RuleDefinitionOrmEntity';
+import { WarehouseProfileRuleRepository } from '@modules/WarehouseProfile/Infrastructure/Persistence/Repositories/WarehouseProfileRuleRepository';
+import { WarehouseProfileRuleOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileRuleOrmEntity';
+import { WarehouseProfileRepository } from '@modules/WarehouseProfile/Infrastructure/Persistence/Repositories/WarehouseProfileRepository';
+import { WarehouseProfileOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileOrmEntity';
 import { SeedAccessControlRbac } from '@modules/AccessControl/Application/Services/AccessControlRbacSeed';
 import { BridgeLegacyUserRoles } from '@modules/AccessControl/Application/Services/LegacyRoleBridge';
 import { RoleRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/RoleRepository';
@@ -61,10 +68,34 @@ async function Seed() {
       console.log(`Seed: created admin (${adminEmail})`);
     }
 
-    // Idempotent rule group catalog seed (R-MD/R-RBAC/R-COM/R-INT active + V1+ placeholders).
+    // Idempotent rule group catalog seed (R-MD/R-RBAC/R-COM/R-INT/R-INBOUND/R-PUT active + remaining V1+ placeholders).
     const ruleGroupRepository = new RuleGroupRepository(dataSource.getRepository(RuleGroupOrmEntity));
     await SeedRuleGroupCatalog(ruleGroupRepository);
     console.log('Seed: rule group catalog ensured');
+
+    // Idempotent Epic 24 (IN-RULE-24) baseline: one rule per inbound/putaway decision point,
+    // bound to the WT-01 demo profile (WP-LTA-HCM-DEMO) if it exists. No-ops (does not throw)
+    // when the demo profile has not been seeded yet.
+    const ruleDefinitionRepository = new RuleDefinitionRepository(dataSource.getRepository(RuleDefinitionOrmEntity));
+    const warehouseProfileRuleRepository = new WarehouseProfileRuleRepository(
+      dataSource.getRepository(WarehouseProfileRuleOrmEntity),
+    );
+    const warehouseProfileRepository = new WarehouseProfileRepository(
+      dataSource.getRepository(WarehouseProfileOrmEntity),
+    );
+    const inboundRuleBaselineResult = await SeedInboundRuleBaseline(
+      ruleGroupRepository,
+      ruleDefinitionRepository,
+      warehouseProfileRuleRepository,
+      warehouseProfileRepository,
+    );
+    if (inboundRuleBaselineResult.ProfileMissing) {
+      console.log('Seed: inbound rule baseline skipped (WP-LTA-HCM-DEMO profile not seeded yet)');
+    } else {
+      console.log(
+        `Seed: inbound rule baseline ensured (definitions created: ${inboundRuleBaselineResult.DefinitionsCreated}, bindings created: ${inboundRuleBaselineResult.BindingsCreated})`,
+      );
+    }
 
     // Idempotent RBAC seed: 6 core roles, permission catalog and role->permission matrix.
     const roleRepository = new RoleRepository(dataSource.getRepository(RoleOrmEntity));

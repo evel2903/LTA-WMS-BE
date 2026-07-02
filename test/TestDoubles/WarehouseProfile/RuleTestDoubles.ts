@@ -54,6 +54,11 @@ export class InMemoryRuleGroupRepository implements IRuleGroupRepository {
     return group;
   }
 
+  public async Update(group: RuleGroupEntity): Promise<RuleGroupEntity> {
+    this.groups.set(group.Id, group);
+    return group;
+  }
+
   public async List(
     skip: number,
     take: number,

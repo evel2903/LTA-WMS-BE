@@ -12,6 +12,7 @@ export interface IRuleGroupRepository {
   FindById(id: string): Promise<RuleGroupEntity | null>;
   FindByCode(groupCode: string): Promise<RuleGroupEntity | null>;
   Create(group: RuleGroupEntity, manager?: EntityManager): Promise<RuleGroupEntity>;
+  Update(group: RuleGroupEntity, manager?: EntityManager): Promise<RuleGroupEntity>;
   List(
     skip: number,
     take: number,
