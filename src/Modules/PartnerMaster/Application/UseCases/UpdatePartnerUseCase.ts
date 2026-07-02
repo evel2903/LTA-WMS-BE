@@ -55,6 +55,7 @@ export class UpdatePartnerUseCase {
     partner.SourceSystem = nextSourceSystem;
     partner.ExternalReference = nextExternalReference;
     partner.ReferenceText = request.ReferenceText !== undefined ? request.ReferenceText : partner.ReferenceText;
+    partner.RiskLevel = request.RiskLevel !== undefined ? request.RiskLevel : partner.RiskLevel;
     partner.UpdatedAt = new Date();
 
     const buildEntry = (updated: PartnerEntity) =>

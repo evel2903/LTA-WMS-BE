@@ -1,3 +1,4 @@
+import { PartnerRiskLevel } from '@modules/PartnerMaster/Domain/Enums/PartnerRiskLevel';
 import { PartnerStatus } from '@modules/PartnerMaster/Domain/Enums/PartnerStatus';
 import { PartnerType } from '@modules/PartnerMaster/Domain/Enums/PartnerType';
 
@@ -9,4 +10,5 @@ export interface CreatePartnerDto {
   SourceSystem: string;
   ExternalReference: string;
   ReferenceText?: string | null;
+  RiskLevel?: PartnerRiskLevel | null;
 }

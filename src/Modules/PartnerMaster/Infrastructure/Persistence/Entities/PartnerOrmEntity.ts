@@ -30,6 +30,9 @@ export class PartnerOrmEntity {
   @Column({ name: 'reference_text', type: 'varchar', length: 255, nullable: true })
   public ReferenceText!: string | null;
 
+  @Column({ name: 'risk_level', type: 'varchar', length: 20, nullable: true })
+  public RiskLevel!: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   public CreatedAt!: Date;
 

@@ -53,6 +53,7 @@ import { ReceiptLineStatus } from '@modules/Inbound/Domain/Enums/ReceiptLineStat
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 import { OwnerEntity } from '@modules/MasterData/Domain/Entities/OwnerEntity';
 import { PartnerEntity } from '@modules/PartnerMaster/Domain/Entities/PartnerEntity';
+import { PartnerRiskLevel } from '@modules/PartnerMaster/Domain/Enums/PartnerRiskLevel';
 import { PartnerStatus } from '@modules/PartnerMaster/Domain/Enums/PartnerStatus';
 import { PartnerType } from '@modules/PartnerMaster/Domain/Enums/PartnerType';
 import { SkuEntity } from '@modules/MasterData/Domain/Entities/SkuEntity';
@@ -772,6 +773,8 @@ const evaluateQcTaskUseCase = (bundle: ReturnType<typeof repoBundle>) =>
     bundle.inbound,
     bundle.receiving,
     bundle.profiles as unknown as IWarehouseProfileRepository,
+    bundle.ruleGate,
+    bundle.partners as unknown as IPartnerRepository,
     bundle.skus as unknown as ISkuRepository,
     bundle.coreFlows as unknown as ICoreFlowRepository,
     bundle.integrations as unknown as IIntegrationRepository,
@@ -2474,5 +2477,102 @@ describe('IRE-02 rule-driven gate-in + tolerance (real RuleResolver + seeded WT-
 
     expect(readiness.Allowed).toBe(true);
     expect(readiness.GateInRequired).toBe(false);
+  });
+});
+
+describe('IRE-03 rule-driven QC trigger (real RuleResolver + seeded WT-01, Partner.RiskLevel)', () => {
+  const highRiskSupplier = () =>
+    new PartnerEntity({
+      Id: 'supplier-1',
+      PartnerCode: 'SUP-A',
+      PartnerName: 'Supplier A',
+      PartnerType: PartnerType.Supplier,
+      Status: PartnerStatus.Active,
+      SourceSystem: 'ERP',
+      ExternalReference: 'SUP-A',
+      RiskLevel: PartnerRiskLevel.High,
+      CreatedAt: now,
+      UpdatedAt: now,
+    });
+
+  const lowRiskSupplier = () =>
+    new PartnerEntity({
+      Id: 'supplier-1',
+      PartnerCode: 'SUP-A',
+      PartnerName: 'Supplier A',
+      PartnerType: PartnerType.Supplier,
+      Status: PartnerStatus.Active,
+      SourceSystem: 'ERP',
+      ExternalReference: 'SUP-A',
+      RiskLevel: PartnerRiskLevel.Low,
+      CreatedAt: now,
+      UpdatedAt: now,
+    });
+
+  const startAndConfirmLine = async (bundle: ReturnType<typeof repoBundle>) => {
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'ire03-line-1',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    return { session, line };
+  };
+
+  it('supplier-risk: seeded RULE-QC-TRIG-01 (supplierRisk=high) drives QC required even when profile/SKU do not', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.partners.FindById.mockResolvedValue(highRiskSupplier());
+    bundle.profiles.FindById.mockResolvedValue(profile({})); // no inboundQcRequired/qcSamplePercent
+    const { session, line } = await startAndConfirmLine(bundle);
+
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire03-qc-1' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    expect(task.Required).toBe(true);
+    expect(task.TriggerReason).toBe('WarehouseProfile');
+    expect(task.TaskStatus).toBe(QcTaskStatus.PendingQc);
+  });
+
+  it('backward-compat: empty decision (default gate) falls back to previous profile key-check unchanged', async () => {
+    const bundle = repoBundle(); // default empty gate
+    bundle.partners.FindById.mockResolvedValue(lowRiskSupplier());
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundQcRequired: true }));
+    const { session, line } = await startAndConfirmLine(bundle);
+
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire03-qc-2' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    expect(task.Required).toBe(true);
+    expect(task.TriggerReason).toBe('WarehouseProfile');
+  });
+
+  it('OR-combine: rule does not match (low risk) but ForceRequired still triggers QC (3 unchanged trigger sources preserved)', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.partners.FindById.mockResolvedValue(lowRiskSupplier());
+    bundle.profiles.FindById.mockResolvedValue(profile({})); // no policy trigger either
+    const { session, line } = await startAndConfirmLine(bundle);
+
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire03-qc-3', ForceRequired: true },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    expect(task.Required).toBe(true);
+    expect(task.TriggerReason).toBe('Forced');
   });
 });
