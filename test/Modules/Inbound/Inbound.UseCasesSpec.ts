@@ -797,6 +797,7 @@ const releaseInboundToPutawayUseCase = (bundle: ReturnType<typeof repoBundle>) =
     bundle.inbound,
     bundle.receiving,
     bundle.profiles as unknown as IWarehouseProfileRepository,
+    bundle.ruleGate,
     bundle.labelBlocking as never,
     bundle.coreFlows as unknown as ICoreFlowRepository,
     bundle.integrations as unknown as IIntegrationRepository,
@@ -2588,5 +2589,104 @@ describe('IRE-03 rule-driven QC trigger (real RuleResolver + seeded WT-01, Partn
     expect(task.Required).toBe(true);
     expect(task.TriggerReason).toBe('Forced');
     expect(task.TriggerPolicyJson?.RuleRequiresQc).toBe(true);
+  });
+});
+
+describe('IRE-04 rule-driven LPN required (real RuleResolver + seeded WT-01)', () => {
+  const startAndConfirmLineForRelease = async (bundle: ReturnType<typeof repoBundle>, idempotencyKey: string) => {
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: `${idempotencyKey}-line`,
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: `${idempotencyKey}-qc` },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    return { session, line };
+  };
+
+  it('rule-driven: blocks release when profile.StrategyPolicy.lpnControlled=true (new key) even though legacy inboundLpnRequired/lpnRequired are unset', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.profiles.FindById.mockResolvedValue(profile({ lpnControlled: true }));
+    const { session, line } = await startAndConfirmLineForRelease(bundle, 'ire04-lpn-rule');
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire04-lpn-rule-release' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.audited.Entries[bundle.audited.Entries.length - 1]).toMatchObject({
+      AfterJson: expect.objectContaining({ RequiredBy: 'Rule' }),
+    });
+  });
+
+  it('backward-compat: rule does not match (lpnControlled unset) but legacy inboundLpnRequired still blocks via fallback, even with a seeded rule gate', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundLpnRequired: true }));
+    const { session, line } = await startAndConfirmLineForRelease(bundle, 'ire04-lpn-fallback');
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire04-lpn-fallback-release' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.audited.Entries[bundle.audited.Entries.length - 1]).toMatchObject({
+      AfterJson: expect.objectContaining({ RequiredBy: 'WarehouseProfile' }),
+    });
+  });
+
+  it('null-profile skip: a plan with no WarehouseProfileId never calls the rule gate for LPN and is never blocked', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    const created = await createUseCase(bundle).Execute(
+      { ...createRequest(), WarehouseProfileId: null },
+      SystemAuditContext,
+    );
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'ire04-lpn-null-profile-line',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire04-lpn-null-profile-qc' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    // Spy installed only around the release call — evaluateQcTaskUseCase above legitimately calls
+    // Decide() on this same shared bundle.ruleGate for its own supplierRisk check.
+    const decideSpy = jest.spyOn(bundle.ruleGate, 'Decide');
+    const release = await releaseInboundToPutawayUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire04-lpn-null-profile-release' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(release.InventoryStatusCode).toBe('READY_FOR_PUTAWAY');
+    expect(decideSpy).not.toHaveBeenCalled();
   });
 });

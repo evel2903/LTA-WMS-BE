@@ -16,6 +16,7 @@ import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/
 import { IReceivingRepository } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
 import { ReceivingDtoMapper } from '@modules/Inbound/Application/Mappers/ReceivingDtoMapper';
 import { AssertReceiptPermission } from '@modules/Inbound/Application/Services/ReceiptPermission';
+import { InboundRuleAttributeKeys, InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRuleGate';
 import { InboundPutawayReleaseEntity } from '@modules/Inbound/Domain/Entities/InboundPutawayReleaseEntity';
 import { ReceiptEntity } from '@modules/Inbound/Domain/Entities/ReceiptEntity';
 import { ReceiptLineEntity } from '@modules/Inbound/Domain/Entities/ReceiptLineEntity';
@@ -53,6 +54,7 @@ export class ReleaseInboundToPutawayUseCase {
     private readonly inboundPlans: IInboundPlanRepository,
     private readonly receiving: IReceivingRepository,
     private readonly profiles: IWarehouseProfileRepository,
+    private readonly ruleGate: InboundRuleGate,
     private readonly labelBlocking: ValidateLabelBlockingUseCase,
     private readonly coreFlows: ICoreFlowRepository,
     private readonly integrations: IIntegrationRepository,
@@ -88,10 +90,30 @@ export class ReleaseInboundToPutawayUseCase {
       throw new BusinessRuleException('WarehouseProfile not found for release');
 
     const lpn = await this.receiving.FindInboundLpnByReceiptLineId(line.Id);
-    const lpnRequired = request.RequireLpn === true || this.ProfileRequiresLpn(profile);
+    const profileRequiresLpn = this.ProfileRequiresLpn(profile);
+    // Rule engine reads its OWN policy key (`lpnControlled`), independent of the legacy
+    // `inboundLpnRequired`/`lpnRequired` keys `ProfileRequiresLpn` reads — otherwise the rule could
+    // never fire on a case the fallback doesn't already cover, making the migration a no-op. Only a
+    // blocking/approval decision is authoritative; a matched-but-non-blocking or empty decision falls
+    // through to the previous profile key-check (ADR-5 — no loosening, same pattern since IRE-02). No
+    // profile means no scope to gate on, so skip the rule call entirely (IRE-02's null-profile
+    // divergence lesson).
+    const ruleLpnRequired = profile
+      ? await this.ruleGate
+          .Decide({
+            WarehouseId: receipt.WarehouseId,
+            OwnerId: receipt.OwnerId,
+            Attributes: {
+              [InboundRuleAttributeKeys.LpnControlled]: this.BoolPolicy(profile.StrategyPolicy.lpnControlled),
+              [InboundRuleAttributeKeys.HasLpn]: lpn !== null,
+            },
+          })
+          .then((decision) => decision.Blocked || decision.ApprovalRequired)
+      : false;
+    const lpnRequired = request.RequireLpn === true || ruleLpnRequired || profileRequiresLpn;
     if (lpnRequired && !lpn) {
       await this.AuditBlocked(context, receipt, line, 'LPN/SSCC is required before release to putaway', {
-        RequiredBy: request.RequireLpn === true ? 'Request' : 'WarehouseProfile',
+        RequiredBy: request.RequireLpn === true ? 'Request' : ruleLpnRequired ? 'Rule' : 'WarehouseProfile',
       });
       throw new BusinessRuleException('LPN/SSCC is required before release to putaway');
     }
