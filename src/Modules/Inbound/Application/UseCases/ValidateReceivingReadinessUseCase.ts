@@ -160,19 +160,24 @@ export class ValidateReceivingReadinessUseCase {
   }
 
   /**
-   * Whether gate-in evidence is required before receiving. The rule engine (InboundRuleGate) is the
-   * primary source: a matched blocking/approval decision means gate-in is gated. When no rule
-   * matches (empty decision — includes plans with no WarehouseProfile / unknown warehouse), fall
-   * back to the previous StrategyPolicy key-check (ADR-5 backward-compat).
+   * Whether gate-in evidence is required before receiving. Gate-in gating is governed by the plan's
+   * WarehouseProfile: a plan with no linked profile was never gated pre-migration, so we do NOT let
+   * a scope-resolved rule newly gate it (ADR-5 backward-compat — and it also keeps the override path,
+   * which reads the plan-linked profile, reachable). When a linked profile exists, the rule engine is
+   * the primary source: a BLOCKING/APPROVAL decision means gate-in is required. A matched but
+   * non-blocking decision (SoftWarning/AutoSuggestion) carries no required signal, so it falls
+   * through to the StrategyPolicy key-check rather than suppressing a policy-required gate (no
+   * loosening). An empty decision also falls through to the policy (ADR-5).
    */
   private async GateInRequired(plan: InboundPlanEntity, profile: WarehouseProfileEntity | null): Promise<boolean> {
+    if (!profile) return false;
     const decision = await this.ruleGate.Decide({
       WarehouseId: plan.WarehouseId,
       OwnerId: plan.OwnerId,
       Attributes: { [InboundRuleAttributeKeys.HasAppointment]: plan.ExpectedArrivalAt != null },
     });
-    if (decision.Matched) return decision.Blocked || decision.ApprovalRequired;
-    return this.GateInRequiredFromPolicy(profile?.StrategyPolicy as Record<string, unknown> | undefined);
+    if (decision.Blocked || decision.ApprovalRequired) return true;
+    return this.GateInRequiredFromPolicy(profile.StrategyPolicy as Record<string, unknown> | undefined);
   }
 
   private GateInRequiredFromPolicy(policy?: Record<string, unknown>): boolean {

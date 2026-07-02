@@ -581,6 +581,13 @@ const seededInboundRuleGate = async (): Promise<InboundRuleGate> => {
   );
   const seed = await SeedInboundRuleBaseline(groups, definitions, bindings, profiles);
   expect(seed.DefinitionsCreated).toBe(6);
+  // Make seeded rules clock-independent: SeedInboundRuleBaseline stamps EffectiveFrom=2026-07-01,
+  // but Decide() sets no EvaluatedAt so the resolver defaults to the wall clock. Pin the seeded
+  // definitions to a safely-past date so these parity tests never flip on a machine/CI clock.
+  const seededDefs = await definitions.List(0, 100, {});
+  for (const def of seededDefs.Items) {
+    def.EffectiveFrom = new Date('2020-01-01T00:00:00.000Z');
+  }
   const warehouses = new InMemoryWarehouseRepository();
   warehouses.Seed(warehouse());
   const resolver = new RuleResolver(profiles, definitions, bindings, groups, new ConditionEvaluator());
@@ -2410,9 +2417,12 @@ describe('IRE-02 rule-driven gate-in + tolerance (real RuleResolver + seeded WT-
     expect(discrepancy.Status).toBe(InboundDiscrepancyStatus.Routed);
   });
 
-  it('tolerance boundary expectedQuantity=0: overUnderPct formula yields 100 (no divide-by-zero) → over-tolerance', async () => {
-    const bundle = repoBundle();
-    bundle.ruleGate = await seededInboundRuleGate();
+  it('tolerance boundary expectedQuantity=0: overUnderPct formula yields exactly 100 (guarded via fallback threshold 50)', async () => {
+    // Run on the FALLBACK path (empty gate) with threshold=50 so the exact computed overUnderPct is
+    // what the comparison hinges on: 100 > 50 → over-tolerance. A wrong expected===0 branch (e.g. 6)
+    // would give 6 <= 50 → WithinTolerance and fail this test — so it truly guards the formula.
+    const bundle = repoBundle(); // default empty gate → fallback threshold path
+    bundle.profiles.FindById.mockResolvedValue(profile({}, { receivingOverTolerancePercent: 50 }));
     const { session, line } = await startAndConfirmLine(bundle, 14);
     // Force the stored receipt line to the expected=0 boundary (actual > expected still holds).
     const storedLine = bundle.receiving.Lines.find((item) => item.Id === line.Id)!;
@@ -2422,6 +2432,22 @@ describe('IRE-02 rule-driven gate-in + tolerance (real RuleResolver + seeded WT-
     const discrepancy = await captureQuantityVariance(bundle, session.ReceiptId, line.Id);
 
     expect(discrepancy.ToleranceDecision).toBe(InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval);
+  });
+
+  it('gate-in: a plan with no linked WarehouseProfile is NOT newly gated by a scope-matching rule (ADR-5, override stays reachable)', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    // No plan-linked profile: pre-migration this plan was never gated; the scope rule must not gate it.
+    const created = await createUseCase(bundle).Execute(
+      { ...createRequest(), WarehouseProfileId: undefined },
+      SystemAuditContext,
+    );
+    bundle.inbound.Plans[0].ExpectedArrivalAt = null; // would satisfy RULE-IN-GATE-01 if consulted
+
+    const readiness = await readinessUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    expect(readiness.Allowed).toBe(true);
+    expect(readiness.GateInRequired).toBe(false);
   });
 
   it('gate-in: seeded RULE-IN-GATE-01 (no appointment) forces gate-in required even when policy does not', async () => {

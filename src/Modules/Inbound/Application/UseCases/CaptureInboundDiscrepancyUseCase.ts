@@ -278,19 +278,20 @@ export class CaptureInboundDiscrepancyUseCase {
     // Same formula as the previous hardcoded path — the expectedQuantity===0 boundary yields 100.
     const overUnderPct = expectedQuantity === 0 ? 100 : ((actualQuantity - expectedQuantity) / expectedQuantity) * 100;
 
-    // Rule engine is the primary source (R-IN-TOL). A matched decision drives the tolerance outcome.
+    // Rule engine is the primary source (R-IN-TOL). Only a BLOCKING/APPROVAL decision is
+    // authoritative for the tolerance escalation. A matched but non-blocking decision
+    // (SoftWarning/AutoSuggestion) carries no escalation signal, so — like an empty decision — it
+    // falls through to the profile ThresholdPolicy path rather than collapsing to WithinTolerance
+    // (ADR-5: no loosening of the pre-migration threshold behavior).
     const decision = await this.ruleGate.Decide({
       WarehouseId: warehouseId,
       OwnerId: ownerId,
       Attributes: { [InboundRuleAttributeKeys.OverUnderPct]: overUnderPct },
     });
-    if (decision.Matched) {
-      if (decision.Blocked) return InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked;
-      if (decision.ApprovalRequired) return InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval;
-      return InboundDiscrepancyToleranceDecision.WithinTolerance;
-    }
+    if (decision.Blocked) return InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked;
+    if (decision.ApprovalRequired) return InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval;
 
-    // Backward-compat (ADR-5): no rule matched → previous hardcoded threshold logic, unchanged.
+    // Backward-compat (ADR-5): no blocking rule → previous hardcoded threshold logic, unchanged.
     const profile = warehouseProfileId ? await this.profiles.FindById(warehouseProfileId) : null;
     const thresholdPercent = this.NumberPolicy(profile?.ThresholdPolicy?.receivingOverTolerancePercent) ?? 0;
     if (overUnderPct <= thresholdPercent) return InboundDiscrepancyToleranceDecision.WithinTolerance;
