@@ -105,6 +105,10 @@ import {
   IItemCoverageRepository,
   ITEM_COVERAGE_REPOSITORY,
 } from '@modules/MasterData/Application/Interfaces/IItemCoverageRepository';
+import {
+  IWarehouseRepository,
+  WAREHOUSE_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
 import { InventoryDimensionKeyService } from '@modules/MasterData/Application/Services/InventoryDimensionKeyService';
 import { MasterDataModule } from '@modules/MasterData/MasterDataModule';
 import {
@@ -112,6 +116,9 @@ import {
   TASK_EXECUTION_REPOSITORY,
 } from '@modules/TaskExecution/Application/Interfaces/ITaskExecutionRepository';
 import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule';
+import { IRuleResolver, RULE_RESOLVER } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
+import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfileModule';
+import { PutawayRuleGate } from '@modules/InventoryExecution/Application/Services/PutawayRuleGate';
 
 @Module({
   imports: [
@@ -127,6 +134,7 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
     InboundModule,
     IntegrationModule,
     TaskExecutionModule,
+    WarehouseProfileModule,
   ],
   controllers: [
     PutawayTaskController,
@@ -139,6 +147,12 @@ import { TaskExecutionModule } from '@modules/TaskExecution/TaskExecutionModule'
     { provide: INVENTORY_TRANSACTION_REPOSITORY, useClass: InventoryTransactionRepository },
     { provide: CYCLE_COUNT_WORK_REPOSITORY, useClass: CycleCountWorkRepository },
     { provide: REPLENISHMENT_TASK_REPOSITORY, useClass: ReplenishmentTaskRepository },
+    {
+      provide: PutawayRuleGate,
+      useFactory: (resolver: IRuleResolver, warehouses: IWarehouseRepository) =>
+        new PutawayRuleGate(resolver, warehouses),
+      inject: [RULE_RESOLVER, WAREHOUSE_REPOSITORY],
+    },
     {
       provide: ListPutawayTasksUseCase,
       useFactory: (tasks: IPutawayTaskRepository, checker: IPermissionChecker) =>

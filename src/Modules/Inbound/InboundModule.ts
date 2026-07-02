@@ -93,7 +93,9 @@ import {
   IWarehouseProfileRepository,
   WAREHOUSE_PROFILE_REPOSITORY,
 } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
+import { IRuleResolver, RULE_RESOLVER } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
 import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfileModule';
+import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRuleGate';
 
 @Module({
   imports: [
@@ -122,6 +124,12 @@ import { WarehouseProfileModule } from '@modules/WarehouseProfile/WarehouseProfi
   providers: [
     { provide: INBOUND_PLAN_REPOSITORY, useClass: InboundPlanRepository },
     { provide: RECEIVING_REPOSITORY, useClass: ReceivingRepository },
+    {
+      provide: InboundRuleGate,
+      useFactory: (resolver: IRuleResolver, warehouses: IWarehouseRepository) =>
+        new InboundRuleGate(resolver, warehouses),
+      inject: [RULE_RESOLVER, WAREHOUSE_REPOSITORY],
+    },
     {
       provide: CreateInboundPlanUseCase,
       useFactory: (
