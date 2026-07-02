@@ -12,8 +12,9 @@ export type RuleGroupCatalogEntry = {
 };
 
 /**
- * V0 rule group catalog. The four core groups are ACTIVE; V1+ business groups
- * (inbound/outbound/transfer) are PLACEHOLDER until their epics ship.
+ * V0 rule group catalog. The four core groups are ACTIVE. R-INBOUND and R-PUT are ACTIVE as of
+ * Epic 24 (IN-RULE-24), which wires the inbound/putaway flow into the rule engine. Remaining
+ * V1+ business groups (outbound/transfer) stay PLACEHOLDER until their own epics ship.
  */
 export const RuleGroupCatalogEntries: ReadonlyArray<RuleGroupCatalogEntry> = [
   {
@@ -47,9 +48,16 @@ export const RuleGroupCatalogEntries: ReadonlyArray<RuleGroupCatalogEntry> = [
   {
     GroupCode: 'R-INBOUND',
     GroupName: 'Inbound Rules',
-    Description: 'Inbound process rule group (V1+ placeholder).',
-    CatalogState: RuleGroupCatalogState.Placeholder,
+    Description: 'Inbound receiving process rule group (gate-in, tolerance, QC, LPN).',
+    CatalogState: RuleGroupCatalogState.Active,
     DisplayOrder: 100,
+  },
+  {
+    GroupCode: 'R-PUT',
+    GroupName: 'Putaway Rules',
+    Description: 'Directed putaway / storage-strategy rule group.',
+    CatalogState: RuleGroupCatalogState.Active,
+    DisplayOrder: 105,
   },
   {
     GroupCode: 'R-OUTBOUND',
@@ -68,13 +76,28 @@ export const RuleGroupCatalogEntries: ReadonlyArray<RuleGroupCatalogEntry> = [
 ];
 
 /**
- * Idempotent seed: existing groups (matched by GroupCode) are skipped, so re-running never
- * creates duplicates and never throws.
+ * Idempotent upsert seed: existing groups (matched by GroupCode) are updated in place when their
+ * CatalogState/GroupName/Description/DisplayOrder drift from the catalog (e.g. a group promoted
+ * from PLACEHOLDER to ACTIVE by a later epic); an exact match is a no-op. Re-running never creates
+ * duplicates and never throws.
  */
 export async function SeedRuleGroupCatalog(groupRepository: IRuleGroupRepository): Promise<void> {
   for (const entry of RuleGroupCatalogEntries) {
     const existing = await groupRepository.FindByCode(entry.GroupCode);
     if (existing) {
+      const driftsFromCatalog =
+        existing.CatalogState !== entry.CatalogState ||
+        existing.GroupName !== entry.GroupName ||
+        existing.Description !== entry.Description ||
+        existing.DisplayOrder !== entry.DisplayOrder;
+      if (driftsFromCatalog) {
+        existing.CatalogState = entry.CatalogState;
+        existing.GroupName = entry.GroupName;
+        existing.Description = entry.Description;
+        existing.DisplayOrder = entry.DisplayOrder;
+        existing.UpdatedAt = new Date();
+        await groupRepository.Update(existing);
+      }
       continue;
     }
     const now = new Date();

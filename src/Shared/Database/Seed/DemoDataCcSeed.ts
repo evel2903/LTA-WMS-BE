@@ -11,6 +11,15 @@ import {
   AssertDemoDataCcLocalTarget,
   FormatDemoDataCcTargetSummary,
 } from '@shared/Database/Seed/DemoDataCcTargetGuard';
+import { SeedInboundRuleBaseline } from '@modules/WarehouseProfile/Application/Services/InboundRuleBaselineSeed';
+import { RuleGroupRepository } from '@modules/WarehouseProfile/Infrastructure/Persistence/Repositories/RuleGroupRepository';
+import { RuleGroupOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/RuleGroupOrmEntity';
+import { RuleDefinitionRepository } from '@modules/WarehouseProfile/Infrastructure/Persistence/Repositories/RuleDefinitionRepository';
+import { RuleDefinitionOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/RuleDefinitionOrmEntity';
+import { WarehouseProfileRuleRepository } from '@modules/WarehouseProfile/Infrastructure/Persistence/Repositories/WarehouseProfileRuleRepository';
+import { WarehouseProfileRuleOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileRuleOrmEntity';
+import { WarehouseProfileRepository } from '@modules/WarehouseProfile/Infrastructure/Persistence/Repositories/WarehouseProfileRepository';
+import { WarehouseProfileOrmEntity } from '@modules/WarehouseProfile/Infrastructure/Persistence/Entities/WarehouseProfileOrmEntity';
 
 export const RunDemoDataCcSeed = async (): Promise<void> => {
   const target = AssertDemoDataCcLocalTarget(GetEnv(), 'process.env + .env');
@@ -22,6 +31,18 @@ export const RunDemoDataCcSeed = async (): Promise<void> => {
       await CleanupLegacyDemoDataCcRows(manager);
     });
     const foundation = await SeedDemoDataCcFoundation(dataSource);
+
+    // Epic 24 (IN-RULE-24): now that the WT-01 demo profile exists, bind the baseline inbound/
+    // putaway rules to it. Idempotent — safe even if `yarn seed:run` already bound these earlier
+    // against a pre-existing profile (SeedInboundRuleBaseline skips already-bound rules).
+    const inboundRuleBaseline = await SeedInboundRuleBaseline(
+      new RuleGroupRepository(dataSource.getRepository(RuleGroupOrmEntity)),
+      new RuleDefinitionRepository(dataSource.getRepository(RuleDefinitionOrmEntity)),
+      new WarehouseProfileRuleRepository(dataSource.getRepository(WarehouseProfileRuleOrmEntity)),
+      new WarehouseProfileRepository(dataSource.getRepository(WarehouseProfileOrmEntity)),
+    );
+    console.log(`[DEMO-DATA-LTA] Inbound rule baseline ensured: ${JSON.stringify(inboundRuleBaseline)}`);
+
     const locationTree = await SeedDemoDataCcLocationTree(dataSource);
     const inventory = await SeedDemoDataCcInventory(dataSource);
     const flow = await SeedDemoDataCcFlow(dataSource);
