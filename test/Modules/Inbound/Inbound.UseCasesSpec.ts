@@ -2510,6 +2510,18 @@ describe('IRE-02 rule-driven gate-in + tolerance (real RuleResolver + seeded WT-
     expect(readiness.Allowed).toBe(true);
     expect(readiness.GateInRequired).toBe(false);
   });
+
+  it('IRE-07: ruleGate.Decide() is called with SkuId for the tolerance check — a future SKU-scoped RULE-IN-TOL-01 variant would be able to match', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.profiles.FindById.mockResolvedValue(profile({}, { receivingOverTolerancePercent: 50 }));
+    const { session, line } = await startAndConfirmLine(bundle, 14); // expected 12 → 16.7%
+
+    const decideSpy = jest.spyOn(bundle.ruleGate, 'Decide');
+    await captureQuantityVariance(bundle, session.ReceiptId, line.Id);
+
+    expect(decideSpy).toHaveBeenCalledWith(expect.objectContaining({ SkuId: 'sku-1' }));
+  });
 });
 
 describe('IRE-03 rule-driven QC trigger (real RuleResolver + seeded WT-01, Partner.RiskLevel)', () => {
@@ -2737,5 +2749,22 @@ describe('IRE-04 rule-driven LPN required (real RuleResolver + seeded WT-01)', (
 
     expect(release.InventoryStatusCode).toBe('READY_FOR_PUTAWAY');
     expect(decideSpy).not.toHaveBeenCalled();
+  });
+
+  it('IRE-07: ruleGate.Decide() is called with SkuId — a future SKU-scoped RULE-LPN-REQ-01 variant would be able to match', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.profiles.FindById.mockResolvedValue(profile({ lpnControlled: true }));
+    const { session, line } = await startAndConfirmLineForRelease(bundle, 'ire07-lpn-skuid');
+
+    const decideSpy = jest.spyOn(bundle.ruleGate, 'Decide');
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire07-lpn-skuid-release' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(decideSpy).toHaveBeenCalledWith(expect.objectContaining({ SkuId: 'sku-1' }));
   });
 });

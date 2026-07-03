@@ -104,6 +104,7 @@ export class CaptureInboundDiscrepancyUseCase {
       aggregate.Plan.WarehouseProfileId,
       receipt.WarehouseId,
       receipt.OwnerId,
+      line.SkuId,
     );
     const status = this.StatusFromTolerance(toleranceDecision);
     const severity = this.SeverityFromTolerance(toleranceDecision, catalogEntry.Severity);
@@ -271,6 +272,7 @@ export class CaptureInboundDiscrepancyUseCase {
     warehouseProfileId: string | null,
     warehouseId: string,
     ownerId: string,
+    skuId: string,
   ): Promise<InboundDiscrepancyToleranceDecision> {
     if (request.DiscrepancyType !== InboundDiscrepancyType.QuantityVariance || actualQuantity <= expectedQuantity) {
       return InboundDiscrepancyToleranceDecision.NotApplicable;
@@ -286,6 +288,7 @@ export class CaptureInboundDiscrepancyUseCase {
     const decision = await this.ruleGate.Decide({
       WarehouseId: warehouseId,
       OwnerId: ownerId,
+      SkuId: skuId,
       Attributes: { [InboundRuleAttributeKeys.OverUnderPct]: overUnderPct },
     });
     if (decision.Blocked) return InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked;

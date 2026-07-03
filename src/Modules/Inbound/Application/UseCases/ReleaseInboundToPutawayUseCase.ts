@@ -104,6 +104,7 @@ export class ReleaseInboundToPutawayUseCase {
       const decision = await this.ruleGate.Decide({
         WarehouseId: receipt.WarehouseId,
         OwnerId: receipt.OwnerId,
+        SkuId: line.SkuId,
         Attributes: {
           [InboundRuleAttributeKeys.LpnControlled]: this.BoolPolicy(profile.StrategyPolicy.lpnControlled),
           [InboundRuleAttributeKeys.HasLpn]: lpn !== null,
