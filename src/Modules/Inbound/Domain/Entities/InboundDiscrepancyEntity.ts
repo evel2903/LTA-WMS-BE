@@ -27,6 +27,7 @@ export class InboundDiscrepancyEntity {
   public ReasonNote: string | null;
   public EvidenceRefs: string[];
   public EvidenceJson: Record<string, unknown> | null;
+  public RuleCode: string | null;
   public ExceptionCaseId: string;
   public ExceptionState: ExceptionState;
   public IdempotencyKey: string;
@@ -57,6 +58,7 @@ export class InboundDiscrepancyEntity {
     ReasonNote?: string | null;
     EvidenceRefs?: string[];
     EvidenceJson?: Record<string, unknown> | null;
+    RuleCode?: string | null;
     ExceptionCaseId: string;
     ExceptionState: ExceptionState;
     IdempotencyKey: string;
@@ -86,6 +88,7 @@ export class InboundDiscrepancyEntity {
     this.ReasonNote = params.ReasonNote ?? null;
     this.EvidenceRefs = params.EvidenceRefs ?? [];
     this.EvidenceJson = params.EvidenceJson ?? null;
+    this.RuleCode = params.RuleCode ?? null;
     this.ExceptionCaseId = params.ExceptionCaseId;
     this.ExceptionState = params.ExceptionState;
     this.IdempotencyKey = params.IdempotencyKey;

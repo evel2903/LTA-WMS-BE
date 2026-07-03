@@ -70,6 +70,9 @@ export class InboundDiscrepancyOrmEntity {
   @Column({ name: 'evidence_json', type: 'jsonb', nullable: true })
   public EvidenceJson!: Record<string, unknown> | null;
 
+  @Column({ name: 'rule_code', type: 'varchar', length: 80, nullable: true })
+  public RuleCode!: string | null;
+
   @Column({ name: 'exception_case_id', type: 'char', length: 36 })
   public ExceptionCaseId!: string;
 

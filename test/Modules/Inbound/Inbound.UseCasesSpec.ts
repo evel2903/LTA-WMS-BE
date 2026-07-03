@@ -2445,6 +2445,8 @@ describe('IRE-02 rule-driven gate-in + tolerance (real RuleResolver + seeded WT-
 
     expect(discrepancy.ToleranceDecision).toBe(InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval);
     expect(discrepancy.Status).toBe(InboundDiscrepancyStatus.PendingApproval);
+    // IRE-09: the winning rule's code must be persisted on the discrepancy record for audit.
+    expect(discrepancy.RuleCode).toBe('RULE-IN-TOL-01');
   });
 
   it('tolerance backward-compat: empty decision → previous threshold logic (16.7% <= 50%) → WithinTolerance/Routed', async () => {
@@ -2456,6 +2458,8 @@ describe('IRE-02 rule-driven gate-in + tolerance (real RuleResolver + seeded WT-
 
     expect(discrepancy.ToleranceDecision).toBe(InboundDiscrepancyToleranceDecision.WithinTolerance);
     expect(discrepancy.Status).toBe(InboundDiscrepancyStatus.Routed);
+    // IRE-09: no rule consulted on the fallback path, so RuleCode must be null (not stale/omitted).
+    expect(discrepancy.RuleCode).toBeNull();
   });
 
   it('tolerance boundary expectedQuantity=0: overUnderPct formula yields exactly 100 (guarded via fallback threshold 50)', async () => {
@@ -2515,6 +2519,33 @@ describe('IRE-02 rule-driven gate-in + tolerance (real RuleResolver + seeded WT-
 
     expect(readiness.Allowed).toBe(true);
     expect(readiness.GateInRequired).toBe(false);
+  });
+
+  it('IRE-09: gate-in Decision is ApprovalRequired (not Blocked) and persists RuleCode when RULE-IN-GATE-01 (ApprovalRequired mode) fires', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.profiles.FindById.mockResolvedValue(profile({})); // no inboundGateInRequired policy
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    // No appointment → hasAppointment=false → RULE-IN-GATE-01 (ApprovalRequired mode) fires.
+    bundle.inbound.Plans[0].ExpectedArrivalAt = null;
+
+    const readiness = await readinessUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    expect(readiness.Blocked).toBe(true); // not Allowed — approval is still required before receiving
+    expect(readiness.Decision).toBe('ApprovalRequired');
+    expect(readiness.RuleCode).toBe('RULE-IN-GATE-01');
+  });
+
+  it('IRE-09: gate-in Decision is Blocked with RuleCode null when the policy-fallback path gates (no rule matched)', async () => {
+    const bundle = repoBundle(); // default empty gate — no rule ever matches
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundGateInRequired: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+
+    const readiness = await readinessUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    expect(readiness.Blocked).toBe(true);
+    expect(readiness.Decision).toBe('Blocked');
+    expect(readiness.RuleCode).toBeNull();
   });
 
   it('IRE-07: ruleGate.Decide() is called with SkuId for the tolerance check — a future SKU-scoped RULE-IN-TOL-01 variant would be able to match', async () => {
@@ -2905,5 +2936,83 @@ describe('IRE-04 rule-driven LPN required (real RuleResolver + seeded WT-01)', (
     ).rejects.toThrow(BusinessRuleException);
 
     expect(decideSpy).toHaveBeenCalledWith(expect.objectContaining({ SkuId: 'sku-1' }));
+  });
+
+  it('IRE-09: RuleCode is persisted on the release record for a matched rule even when it is non-blocking (Matched does not require Blocked/ApprovalRequired)', async () => {
+    // RULE-LPN-REQ-01 (the baseline seed rule) requires hasLpn=false to fire, so it can never match on
+    // a successful (LPN-present) release — a custom AutoSuggestion rule proves RuleCode is captured
+    // from any winning rule, not just a blocking one (same pattern as IRE-07's SKU-scoped test rule).
+    const groups = new InMemoryRuleGroupRepository();
+    await SeedRuleGroupCatalog(groups);
+    const rInboundGroup = await groups.FindByCode('R-INBOUND');
+    const definitions = new InMemoryRuleDefinitionRepository();
+    const bindings = new InMemoryWarehouseProfileRuleRepository();
+    const profiles = new InMemoryWarehouseProfileRepository();
+    const lpnScopedProfile = new WarehouseProfileEntity({
+      Id: 'wp-demo-ire09-lpn',
+      ProfileCode: InboundBaselineProfileCode,
+      ProfileName: 'Demo WT-01 (IRE-09 LPN RuleCode test)',
+      WarehouseTypeCode: InboundBaselineWarehouseTypeCode,
+      WarehouseId: 'warehouse-1',
+      OwnerId: 'owner-1',
+      Version: 1,
+      Status: WarehouseProfileStatus.Active,
+      ScopeKey: 'warehouse-1:owner-1',
+      EffectiveFrom: new Date('2020-01-01T00:00:00.000Z'),
+      CreatedAt: now,
+      UpdatedAt: now,
+    });
+    await profiles.Create(lpnScopedProfile);
+    const nonBlockingLpnRule = new RuleDefinitionEntity({
+      Id: randomUUID(),
+      RuleCode: 'RULE-IN-LPN-SUGGEST-TEST',
+      RuleName: 'Non-blocking LPN suggestion test rule (IRE-09)',
+      RuleGroupId: rInboundGroup!.Id,
+      PrecedenceTier: RulePrecedenceTier.Operation,
+      ControlMode: RuleControlMode.AutoSuggestion,
+      WarehouseTypeCode: InboundBaselineWarehouseTypeCode,
+      ScopeKey: 'warehouse-1:owner-1',
+      ConditionJson: { Operator: 'ALL', Predicates: [{ Field: 'hasLpn', Comparator: 'EQ', Value: true }] },
+      ActionJson: { Type: 'SUGGEST', Params: { Message: 'IRE-09 non-blocking LPN test rule' } },
+      Status: RuleStatus.Active,
+      EffectiveFrom: new Date('2020-01-01T00:00:00.000Z'),
+      CreatedAt: now,
+      UpdatedAt: now,
+    });
+    await definitions.Create(nonBlockingLpnRule);
+    await bindings.Create(
+      new WarehouseProfileRuleEntity({
+        Id: randomUUID(),
+        WarehouseProfileId: lpnScopedProfile.Id,
+        RuleDefinitionId: nonBlockingLpnRule.Id,
+        CreatedAt: now,
+        UpdatedAt: now,
+      }),
+    );
+    const warehouses = new InMemoryWarehouseRepository();
+    warehouses.Seed(warehouse());
+    const resolver = new RuleResolver(profiles, definitions, bindings, groups, new ConditionEvaluator());
+    const ruleGate = new InboundRuleGate(resolver, warehouses);
+
+    const bundle = repoBundle();
+    bundle.ruleGate = ruleGate;
+    bundle.profiles.FindById.mockResolvedValue(profile({}));
+    const { session, line } = await startAndConfirmLineForRelease(bundle, 'ire09-lpn-suggest-rulecode');
+    await confirmInboundLpnUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        LpnCode: 'LPN-IRE09',
+        IdempotencyKey: 'ire09-lpn-suggest-rulecode-lpn',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const release = await releaseInboundToPutawayUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire09-lpn-suggest-rulecode-release' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(release.RuleCode).toBe('RULE-IN-LPN-SUGGEST-TEST');
   });
 });

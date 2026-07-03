@@ -104,11 +104,12 @@ export interface ValidateReceivingReadinessDto {
 export interface ReceivingReadinessDto {
   Allowed: boolean;
   Blocked: boolean;
-  Decision: 'Allowed' | 'Blocked' | 'OverrideAccepted';
+  Decision: 'Allowed' | 'Blocked' | 'ApprovalRequired' | 'OverrideAccepted';
   GateInRequired: boolean;
   GateInRecorded: boolean;
   OverrideAccepted: boolean;
   Reason: string;
+  RuleCode: string | null;
   InboundPlanId: string;
   BusinessReference: string;
 }
@@ -296,6 +297,7 @@ export interface InboundPutawayReleaseDto {
   LabelReason: string | null;
   MatchedPrintJobId: string | null;
   ConstraintJson: Record<string, unknown> | null;
+  RuleCode: string | null;
   OutboxMessageId: string | null;
   CoreFlowMilestoneId: string | null;
   ReasonCode: string | null;
@@ -354,6 +356,7 @@ export interface InboundDiscrepancyDto {
   ReasonNote: string | null;
   EvidenceRefs: string[];
   EvidenceJson: Record<string, unknown> | null;
+  RuleCode: string | null;
   ExceptionCaseId: string;
   ExceptionState: ExceptionState;
   IdempotencyKey: string;

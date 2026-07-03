@@ -81,6 +81,9 @@ export class InboundPutawayReleaseOrmEntity {
   @Column({ name: 'constraint_json', type: 'jsonb', nullable: true })
   public ConstraintJson!: Record<string, unknown> | null;
 
+  @Column({ name: 'rule_code', type: 'varchar', length: 80, nullable: true })
+  public RuleCode!: string | null;
+
   @Column({ name: 'outbox_message_id', type: 'char', length: 36, nullable: true })
   public OutboxMessageId!: string | null;
 
