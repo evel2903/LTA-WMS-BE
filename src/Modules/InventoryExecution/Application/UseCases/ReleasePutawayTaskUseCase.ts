@@ -78,7 +78,14 @@ export class ReleasePutawayTaskUseCase {
       OwnerId: release.OwnerId,
     });
 
-    const duplicate = await this.putawayTasks.FindByIdempotencyKey(release.Id, request.IdempotencyKey);
+    // SKU fetched once (not per-candidate — its compliance classification doesn't change between
+    // candidates, only the target location does) and in parallel with the idempotency lookup —
+    // both only need release.Id/release.SkuId, which are already in hand, so there's no reason to
+    // pay the round-trip sequentially behind a lookup that doesn't depend on it.
+    const [duplicate, sku] = await Promise.all([
+      this.putawayTasks.FindByIdempotencyKey(release.Id, request.IdempotencyKey),
+      this.skus.FindById(release.SkuId),
+    ]);
     if (duplicate) {
       this.AssertDuplicateMatchesRequest(duplicate, request);
       return PutawayTaskDtoMapper.ToDto(duplicate, true);
@@ -94,11 +101,8 @@ export class ReleasePutawayTaskUseCase {
       throw new BusinessRuleException(reason);
     }
 
-    // Fetched once (not per-candidate) — the SKU's compliance classification doesn't change
-    // between candidates, only the target location does. Fail-closed: an unresolvable SkuId
-    // (orphaned/deleted SKU) must not silently bypass every RULE-COM-* compliance check by
-    // reading as "no requirement" — abort instead.
-    const sku = await this.skus.FindById(release.SkuId);
+    // Fail-closed: an unresolvable SkuId (orphaned/deleted SKU) must not silently bypass every
+    // RULE-COM-* compliance check by reading as "no requirement" — abort instead.
     if (!sku) {
       const reason = 'SKU not found for inbound putaway release';
       await this.AuditBlocked(context, release, reason, { SkuId: release.SkuId });
