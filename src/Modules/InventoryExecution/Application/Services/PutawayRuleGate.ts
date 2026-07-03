@@ -1,5 +1,6 @@
 import { BusinessRuleException } from '@common/Exceptions/AppException';
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
+import { WarehouseEntity } from '@modules/MasterData/Domain/Entities/WarehouseEntity';
 import { IRuleResolver } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
 import {
   EvaluateRuleGate,
@@ -42,8 +43,10 @@ export type PutawayRuleGateOutcome = RuleGateOutcome;
  * WarehouseProfile rule engine (IRuleResolver). This is the ONLY place in the InventoryExecution
  * module allowed to know about the rule engine — use cases call this gate, they never inject
  * RULE_RESOLVER directly. The context-build + resolve + decision-mapping logic itself lives in
- * the shared EvaluateRuleGate (WarehouseProfile module) so it can't drift between InboundRuleGate
- * and PutawayRuleGate.
+ * the shared EvaluateRuleGate/ResolveRuleGate (WarehouseProfile module) so it can't drift between
+ * InboundRuleGate and PutawayRuleGate — with ONE deliberate exception (IRE-06, see EnsureWarehouseResolvable):
+ * this gate also evaluates Compliance hard-blocks (#5, RULE-COM-COLD/DG/BONDED-01), so it fails closed
+ * on an unresolvable WarehouseId instead of the ADR-5 empty-decision fallback InboundRuleGate keeps.
  */
 export class PutawayRuleGate {
   constructor(
@@ -52,7 +55,8 @@ export class PutawayRuleGate {
   ) {}
 
   public async Evaluate(input: PutawayRuleGateInput): Promise<PutawayRuleGateOutcome> {
-    return EvaluateRuleGate(this.resolver, this.warehouses, input);
+    const warehouse = await this.EnsureWarehouseResolvable(input.WarehouseId);
+    return EvaluateRuleGate(this.resolver, this.warehouses, input, warehouse);
   }
 
   /**
@@ -60,23 +64,28 @@ export class PutawayRuleGate {
    * its own return shape (e.g. per-candidate eligibility) instead of aborting. `Matched === false`
    * means an empty decision — the caller falls back to its previous hardcoded behavior (ADR-5
    * backward-compat). Resolver failures still propagate (R5 fail-closed).
-   *
-   * Diverges from InboundRuleGate.Decide() on ONE failure mode: an unresolvable WarehouseId (the id
-   * is set but doesn't resolve to a real warehouse — a data-integrity gap, not "no WarehouseId
-   * given"). The shared ResolveRuleGate treats that as an empty decision (correct ADR-5 backward-compat
-   * for #1-#4, which are non-safety). This gate also evaluates Compliance hard-blocks (#5,
-   * RULE-COM-COLD/DG/BONDED-01) — silently falling through there would bypass a cold-chain/DG/bonded
-   * check instead of blocking, so this gate fails closed instead (IRE-06).
    */
   public async Decide(input: PutawayRuleGateInput): Promise<RuleGateDecision> {
-    if (input.WarehouseId) {
-      const warehouse = await this.warehouses.FindById(input.WarehouseId);
-      if (!warehouse) {
-        throw new BusinessRuleException('Warehouse not found for putaway rule evaluation', {
-          WarehouseId: input.WarehouseId,
-        });
-      }
+    const warehouse = await this.EnsureWarehouseResolvable(input.WarehouseId);
+    return ResolveRuleGate(this.resolver, this.warehouses, input, warehouse);
+  }
+
+  /**
+   * Fail-closed guard shared by Evaluate()/Decide() (IRE-06): a WarehouseId that's set but doesn't
+   * resolve to a real warehouse (data-integrity gap — the column has no FK constraint) must not
+   * silently read as "no requirement" the way ADR-5's EmptyDecision does for #1-#4 — it would bypass
+   * a cold-chain/DG/bonded compliance check instead of blocking. Returns the resolved warehouse so
+   * the caller can pass it straight into ResolveRuleGate/EvaluateRuleGate, avoiding a second
+   * identical FindById for the same id.
+   */
+  private async EnsureWarehouseResolvable(
+    warehouseId: string | null | undefined,
+  ): Promise<WarehouseEntity | undefined> {
+    if (!warehouseId) return undefined;
+    const warehouse = await this.warehouses.FindById(warehouseId);
+    if (!warehouse) {
+      throw new BusinessRuleException('Warehouse not found for putaway rule evaluation', { WarehouseId: warehouseId });
     }
-    return ResolveRuleGate(this.resolver, this.warehouses, input);
+    return warehouse;
   }
 }

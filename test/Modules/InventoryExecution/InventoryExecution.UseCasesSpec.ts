@@ -971,7 +971,7 @@ describe('IRE-05 compliance hard-block coverage (RULE-COM-COLD-01/DG-01/BONDED-0
     expect(audited.entries[0]).toMatchObject({ Result: AuditResult.Failed });
   });
 
-  it('IRE-06: end-to-end through Execute() — an unresolvable release.WarehouseId aborts putaway instead of silently skipping compliance checks', async () => {
+  it('IRE-06: end-to-end through Execute() (suggested-target path) — an unresolvable release.WarehouseId aborts putaway instead of silently skipping compliance checks, and the specific reason threads through Rejections[]', async () => {
     const release = makeRelease();
     const sku = MakeSku({ Id: release.SkuId, TemperatureClass: 'FROZEN' });
     const locations = new MemoryLocationRepository([
@@ -989,12 +989,53 @@ describe('IRE-05 compliance hard-block coverage (RULE-COM-COLD-01/DG-01/BONDED-0
     const ruleGate = new PutawayRuleGate(resolver, new InMemoryWarehouseRepository());
 
     const { useCase, putawayTasks } = buildUseCase({ release, sku, locations, ruleGate });
-    await expect(
-      useCase.Execute(
+    let caught: unknown;
+    try {
+      await useCase.Execute(
         { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire06-warehouse-not-found-key' },
         contextFor('operator-1'),
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    // The per-candidate loop folds the new throw into its existing Rejections[] mechanism (same
+    // pattern as any other structural rejection) rather than a distinct top-level abort — proves
+    // the SPECIFIC reason (not just "no eligible location") is what actually blocked the candidate.
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    expect((caught as BusinessRuleException).message).toBe('No eligible putaway target location found');
+    const details = (caught as BusinessRuleException).Details as { Rejections: Array<{ Reason: string }> };
+    expect(details.Rejections).toHaveLength(1);
+    expect(details.Rejections[0].Reason).toBe('Warehouse not found for putaway rule evaluation');
+    expect(putawayTasks.tasks).toHaveLength(0);
+  });
+
+  it('IRE-06: end-to-end through Execute() (explicit TargetLocationId path) — same fail-closed guard, Details.WarehouseId preserved on the propagated exception', async () => {
+    const release = makeRelease();
+    const sku = MakeSku({ Id: release.SkuId, TemperatureClass: 'FROZEN' });
+    const locations = new MemoryLocationRepository([
+      MakeLocation({
+        Id: 'loc-1',
+        LocationCode: 'A-01',
+        CapacityQty: 10,
+        PutawaySequence: 10,
+        TemperatureClass: 'AMBIENT',
+      }),
+    ]);
+    const { resolver } = await BuildSeededPutawayRuleGate(release.WarehouseId, release.OwnerId);
+    const ruleGate = new PutawayRuleGate(resolver, new InMemoryWarehouseRepository());
+
+    const { useCase, putawayTasks } = buildUseCase({ release, sku, locations, ruleGate });
+    await expect(
+      useCase.Execute(
+        {
+          InboundPutawayReleaseId: release.Id,
+          TargetLocationId: 'loc-1',
+          IdempotencyKey: 'ire06-warehouse-not-found-explicit-target-key',
+        },
+        contextFor('operator-1'),
       ),
-    ).rejects.toThrow('No eligible putaway target location found');
+    ).rejects.toThrow('Warehouse not found for putaway rule evaluation');
 
     expect(putawayTasks.tasks).toHaveLength(0);
   });
