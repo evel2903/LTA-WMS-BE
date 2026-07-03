@@ -95,8 +95,15 @@ export class ReleasePutawayTaskUseCase {
     }
 
     // Fetched once (not per-candidate) — the SKU's compliance classification doesn't change
-    // between candidates, only the target location does.
+    // between candidates, only the target location does. Fail-closed: an unresolvable SkuId
+    // (orphaned/deleted SKU) must not silently bypass every RULE-COM-* compliance check by
+    // reading as "no requirement" — abort instead.
     const sku = await this.skus.FindById(release.SkuId);
+    if (!sku) {
+      const reason = 'SKU not found for inbound putaway release';
+      await this.AuditBlocked(context, release, reason, { SkuId: release.SkuId });
+      throw new BusinessRuleException(reason);
+    }
     const eligibility = await this.ResolveTarget(request, release, context, sku);
     const now = new Date();
     const taskId = randomUUID();
@@ -217,7 +224,7 @@ export class ReleasePutawayTaskUseCase {
     request: ReleasePutawayTaskDto,
     release: InboundPutawayReleaseEntity,
     context: AuditContext,
-    sku: SkuEntity | null,
+    sku: SkuEntity,
   ): Promise<EligibilityDecision> {
     if (request.TargetLocationId) {
       const target = await this.locations.FindById(request.TargetLocationId);
@@ -270,7 +277,7 @@ export class ReleasePutawayTaskUseCase {
     location: LocationEntity,
     release: InboundPutawayReleaseEntity,
     selectedBy: string,
-    sku: SkuEntity | null,
+    sku: SkuEntity,
   ): Promise<EligibilityDecision> {
     const failures: string[] = [];
     if (location.WarehouseId !== release.WarehouseId) failures.push('TARGET_WAREHOUSE_MISMATCH');
@@ -321,12 +328,10 @@ export class ReleasePutawayTaskUseCase {
           [PutawayRuleAttributeKeys.CapacityAvailable]:
             location.CapacityQty === null || release.Quantity <= location.CapacityQty,
           [PutawayRuleAttributeKeys.TempOutOfRange]:
-            sku?.TemperatureClass !== null &&
-            sku?.TemperatureClass !== undefined &&
-            sku.TemperatureClass !== location.TemperatureClass,
+            sku.TemperatureClass !== null && sku.TemperatureClass !== location.TemperatureClass,
           [PutawayRuleAttributeKeys.DgIncompatible]:
-            sku?.DgClass !== null && sku?.DgClass !== undefined && sku.DgClass !== location.DgCompatibilityGroup,
-          [PutawayRuleAttributeKeys.BondedMismatch]: sku?.BondedFlag === true && location.BondedFlag !== true,
+            sku.DgClass !== null && sku.DgClass !== location.DgCompatibilityGroup,
+          [PutawayRuleAttributeKeys.BondedMismatch]: sku.BondedFlag === true && location.BondedFlag !== true,
         },
       });
       if (decision.Blocked) failures.push(`RULE_BLOCKED:${decision.RuleCode ?? 'unknown'}`);

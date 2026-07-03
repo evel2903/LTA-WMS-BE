@@ -765,12 +765,27 @@ describe('IRE-05 compliance hard-block coverage (RULE-COM-COLD-01/DG-01/BONDED-0
     const ruleGate = await seededPutawayRuleGate(release.WarehouseId, release.OwnerId);
 
     const { useCase, putawayTasks } = buildUseCase({ release, sku, locations, ruleGate });
-    await expect(
-      useCase.Execute(
-        { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire05-compliance-wins-key' },
+    let caught: unknown;
+    try {
+      await useCase.Execute(
+        {
+          InboundPutawayReleaseId: release.Id,
+          TargetLocationId: 'loc-1',
+          IdempotencyKey: 'ire05-compliance-wins-key',
+        },
         contextFor('operator-1'),
-      ),
-    ).rejects.toThrow('No eligible putaway target location found');
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    // Asserts the WINNING rule specifically is RULE-COM-COLD-01, not just "something blocked it" —
+    // proves compliance is the RuleResolver's actual Winner over the simultaneously-matching
+    // AutoSuggestion, per AC3 ("compliance HARD_BLOCK luôn Winner").
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    expect((caught as BusinessRuleException).Details).toMatchObject({
+      Failures: ['RULE_BLOCKED:RULE-COM-COLD-01'],
+    });
     expect(putawayTasks.tasks).toHaveLength(0);
   });
 
@@ -931,5 +946,25 @@ describe('IRE-05 compliance hard-block coverage (RULE-COM-COLD-01/DG-01/BONDED-0
         ],
       }),
     });
+  });
+
+  it('[Review][Patch] fail-closed: an unresolvable SkuId (release.SkuId not found in ISkuRepository) aborts the release instead of silently treating the SKU as having no compliance requirement', async () => {
+    const release = makeRelease();
+    const locations = new MemoryLocationRepository([
+      MakeLocation({ Id: 'loc-1', LocationCode: 'A-01', CapacityQty: 10, PutawaySequence: 10 }),
+    ]);
+    const ruleGate = await seededPutawayRuleGate(release.WarehouseId, release.OwnerId);
+
+    const { useCase, putawayTasks, audited } = buildUseCase({ release, sku: null, locations, ruleGate });
+    await expect(
+      useCase.Execute(
+        { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire05-sku-not-found-key' },
+        contextFor('operator-1'),
+      ),
+    ).rejects.toThrow('SKU not found for inbound putaway release');
+
+    expect(putawayTasks.tasks).toHaveLength(0);
+    expect(audited.entries).toHaveLength(1);
+    expect(audited.entries[0]).toMatchObject({ Result: AuditResult.Failed });
   });
 });
