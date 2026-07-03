@@ -101,6 +101,7 @@ export class ReleaseInboundToPutawayUseCase {
     // RequiredBy priority below), so skip the rule call in that case too — wasted work otherwise.
     // SkuId is the received line's SKU — matches decision point #5's convention (IRE-07).
     let ruleLpnRequired = false;
+    let ruleCode: string | null = null;
     if (profile && request.RequireLpn !== true) {
       const decision = await this.ruleGate.Decide({
         WarehouseId: receipt.WarehouseId,
@@ -112,6 +113,8 @@ export class ReleaseInboundToPutawayUseCase {
         },
       });
       ruleLpnRequired = decision.Blocked || decision.ApprovalRequired;
+      // IRE-09: surface which rule fired on the persisted release record for audit/investigation.
+      ruleCode = decision.RuleCode;
     }
     const lpnRequired = request.RequireLpn === true || ruleLpnRequired || profileRequiresLpn;
     if (lpnRequired && !lpn) {
@@ -181,6 +184,7 @@ export class ReleaseInboundToPutawayUseCase {
         ReadinessSourceType: readiness.SourceType,
         ReadinessSourceId: readiness.SourceId,
       },
+      RuleCode: ruleCode,
       OutboxMessageId: outboxId,
       CoreFlowMilestoneId: milestoneId,
       ReasonCode: request.ReasonCode?.trim() || null,

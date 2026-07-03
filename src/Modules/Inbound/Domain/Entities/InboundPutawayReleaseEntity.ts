@@ -24,6 +24,7 @@ export class InboundPutawayReleaseEntity {
   public LabelReason: string | null;
   public MatchedPrintJobId: string | null;
   public ConstraintJson: Record<string, unknown> | null;
+  public RuleCode: string | null;
   public OutboxMessageId: string | null;
   public CoreFlowMilestoneId: string | null;
   public ReasonCode: string | null;
@@ -62,6 +63,7 @@ export class InboundPutawayReleaseEntity {
     LabelReason?: string | null;
     MatchedPrintJobId?: string | null;
     ConstraintJson?: Record<string, unknown> | null;
+    RuleCode?: string | null;
     OutboxMessageId?: string | null;
     CoreFlowMilestoneId?: string | null;
     ReasonCode?: string | null;
@@ -99,6 +101,7 @@ export class InboundPutawayReleaseEntity {
     this.LabelReason = params.LabelReason ?? null;
     this.MatchedPrintJobId = params.MatchedPrintJobId ?? null;
     this.ConstraintJson = params.ConstraintJson ?? null;
+    this.RuleCode = params.RuleCode ?? null;
     this.OutboxMessageId = params.OutboxMessageId ?? null;
     this.CoreFlowMilestoneId = params.CoreFlowMilestoneId ?? null;
     this.ReasonCode = params.ReasonCode ?? null;

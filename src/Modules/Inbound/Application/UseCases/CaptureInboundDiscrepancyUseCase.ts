@@ -97,7 +97,7 @@ export class CaptureInboundDiscrepancyUseCase {
       ObjectType: ObjectType.Receipt,
     });
     const catalogEntry = await this.controlExceptionCatalog.ValidateExceptionType(INBOUND_DISCREPANCY_EXCEPTION_TYPE);
-    const toleranceDecision = await this.DecideTolerance(
+    const tolerance = await this.DecideTolerance(
       request,
       line.ActualQuantity,
       line.ExpectedQuantity,
@@ -106,6 +106,7 @@ export class CaptureInboundDiscrepancyUseCase {
       receipt.OwnerId,
       line.SkuId,
     );
+    const toleranceDecision = tolerance.Decision;
     const status = this.StatusFromTolerance(toleranceDecision);
     const severity = this.SeverityFromTolerance(toleranceDecision, catalogEntry.Severity);
     const now = new Date();
@@ -146,6 +147,7 @@ export class CaptureInboundDiscrepancyUseCase {
       ReasonNote: request.ReasonNote ?? null,
       EvidenceRefs: request.EvidenceRefs ?? [],
       EvidenceJson: request.EvidenceJson ?? null,
+      RuleCode: tolerance.RuleCode,
       ExceptionCaseId: exception.Id,
       ExceptionState: exception.State,
       IdempotencyKey: request.IdempotencyKey,
@@ -273,9 +275,9 @@ export class CaptureInboundDiscrepancyUseCase {
     warehouseId: string,
     ownerId: string,
     skuId: string,
-  ): Promise<InboundDiscrepancyToleranceDecision> {
+  ): Promise<{ Decision: InboundDiscrepancyToleranceDecision; RuleCode: string | null }> {
     if (request.DiscrepancyType !== InboundDiscrepancyType.QuantityVariance || actualQuantity <= expectedQuantity) {
-      return InboundDiscrepancyToleranceDecision.NotApplicable;
+      return { Decision: InboundDiscrepancyToleranceDecision.NotApplicable, RuleCode: null };
     }
     // Same formula as the previous hardcoded path — the expectedQuantity===0 boundary yields 100.
     const overUnderPct = expectedQuantity === 0 ? 100 : ((actualQuantity - expectedQuantity) / expectedQuantity) * 100;
@@ -300,18 +302,31 @@ export class CaptureInboundDiscrepancyUseCase {
         SkuId: skuId,
         Attributes: { [InboundRuleAttributeKeys.OverUnderPct]: overUnderPct },
       });
-      if (decision.Blocked) return InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked;
-      if (decision.ApprovalRequired) return InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval;
+      if (decision.Blocked) {
+        return { Decision: InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked, RuleCode: decision.RuleCode };
+      }
+      if (decision.ApprovalRequired) {
+        return {
+          Decision: InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval,
+          RuleCode: decision.RuleCode,
+        };
+      }
     }
 
     // Backward-compat (ADR-5): no blocking rule (or no linked profile) → previous hardcoded threshold
-    // logic, unchanged.
+    // logic, unchanged. No rule fired here, so RuleCode is null (IRE-09).
     const thresholdPercent = this.NumberPolicy(profile?.ThresholdPolicy?.receivingOverTolerancePercent) ?? 0;
-    if (overUnderPct <= thresholdPercent) return InboundDiscrepancyToleranceDecision.WithinTolerance;
+    if (overUnderPct <= thresholdPercent) {
+      return { Decision: InboundDiscrepancyToleranceDecision.WithinTolerance, RuleCode: null };
+    }
     const mode = String(profile?.StrategyPolicy?.receivingOverToleranceMode ?? 'approval').toLowerCase();
-    return mode === 'hard_block'
-      ? InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked
-      : InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval;
+    return {
+      Decision:
+        mode === 'hard_block'
+          ? InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked
+          : InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval,
+      RuleCode: null,
+    };
   }
 
   private NumberPolicy(value: unknown): number | null {

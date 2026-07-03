@@ -39,7 +39,8 @@ export class ValidateReceivingReadinessUseCase {
     await AssertInboundPlanPermission(this.permissionChecker, context.ActorUserId, ActionCode.Read, aggregate.Plan);
 
     const profile = await this.ResolveProfile(aggregate.Plan);
-    const gateInRequired = await this.GateInRequired(aggregate.Plan, profile);
+    const gateIn = await this.GateInRequired(aggregate.Plan, profile);
+    const gateInRequired = gateIn.Required;
     const gateInRecorded = aggregate.Plan.GateInStatus === InboundGateInStatus.Recorded;
     const overrideAccepted = aggregate.Plan.GateInStatus === InboundGateInStatus.OverrideAccepted;
 
@@ -55,17 +56,23 @@ export class ValidateReceivingReadinessUseCase {
           : gateInRequired
             ? 'Gate-in evidence is recorded.'
             : 'Gate-in is not required by WarehouseProfile.',
+        RuleCode: gateIn.RuleCode,
       });
     }
 
-    if (request.AttemptOverride) return this.HandleOverride(request, context, aggregate.Plan, profile);
+    if (request.AttemptOverride) {
+      return this.HandleOverride(request, context, aggregate.Plan, profile, gateIn.RuleCode);
+    }
 
     return this.BuildResult(aggregate.Plan.Id, aggregate.Plan.BusinessReference, {
       Allowed: false,
-      Decision: 'Blocked',
+      Decision: gateIn.ApprovalRequired ? 'ApprovalRequired' : 'Blocked',
       GateInRequired: true,
       GateInRecorded: false,
-      Reason: 'Gate-in is required before receiving.',
+      Reason: gateIn.ApprovalRequired
+        ? 'Gate-in requires approval before receiving.'
+        : 'Gate-in is required before receiving.',
+      RuleCode: gateIn.RuleCode,
     });
   }
 
@@ -74,6 +81,7 @@ export class ValidateReceivingReadinessUseCase {
     context: AuditContext,
     plan: InboundPlanEntity,
     profile: WarehouseProfileEntity | null,
+    ruleCode: string | null,
   ): Promise<ReceivingReadinessDto> {
     if (!request.ReasonCode?.trim()) {
       throw new BusinessRuleException('Readiness override reason is required');
@@ -115,6 +123,7 @@ export class ValidateReceivingReadinessUseCase {
       GateInRecorded: false,
       OverrideAccepted: true,
       Reason: 'Gate-in readiness override accepted with reason/audit evidence.',
+      RuleCode: ruleCode,
     });
 
     const before = { GateInStatus: plan.GateInStatus, EvidenceRefs: plan.EvidenceRefs };
@@ -167,17 +176,33 @@ export class ValidateReceivingReadinessUseCase {
    * the primary source: a BLOCKING/APPROVAL decision means gate-in is required. A matched but
    * non-blocking decision (SoftWarning/AutoSuggestion) carries no required signal, so it falls
    * through to the StrategyPolicy key-check rather than suppressing a policy-required gate (no
-   * loosening). An empty decision also falls through to the policy (ADR-5).
+   * loosening). An empty decision also falls through to the policy (ADR-5). RuleCode/ApprovalRequired
+   * are surfaced alongside Required so the caller can persist which rule fired and distinguish a hard
+   * block from an approval-only decision (IRE-09) — a policy-fallback gate carries neither, since no
+   * rule matched.
    */
-  private async GateInRequired(plan: InboundPlanEntity, profile: WarehouseProfileEntity | null): Promise<boolean> {
-    if (!profile) return false;
+  private async GateInRequired(
+    plan: InboundPlanEntity,
+    profile: WarehouseProfileEntity | null,
+  ): Promise<{ Required: boolean; RuleCode: string | null; ApprovalRequired: boolean }> {
+    if (!profile) return { Required: false, RuleCode: null, ApprovalRequired: false };
     const decision = await this.ruleGate.Decide({
       WarehouseId: plan.WarehouseId,
       OwnerId: plan.OwnerId,
       Attributes: { [InboundRuleAttributeKeys.HasAppointment]: plan.ExpectedArrivalAt != null },
     });
-    if (decision.Blocked || decision.ApprovalRequired) return true;
-    return this.GateInRequiredFromPolicy(profile.StrategyPolicy as Record<string, unknown> | undefined);
+    if (decision.Blocked || decision.ApprovalRequired) {
+      return {
+        Required: true,
+        RuleCode: decision.RuleCode,
+        ApprovalRequired: decision.ApprovalRequired && !decision.Blocked,
+      };
+    }
+    return {
+      Required: this.GateInRequiredFromPolicy(profile.StrategyPolicy as Record<string, unknown> | undefined),
+      RuleCode: null,
+      ApprovalRequired: false,
+    };
   }
 
   private GateInRequiredFromPolicy(policy?: Record<string, unknown>): boolean {
@@ -204,6 +229,7 @@ export class ValidateReceivingReadinessUseCase {
       GateInRequired: boolean;
       GateInRecorded: boolean;
       Reason: string;
+      RuleCode: string | null;
       OverrideAccepted?: boolean;
     },
   ): ReceivingReadinessDto {
@@ -215,6 +241,7 @@ export class ValidateReceivingReadinessUseCase {
       GateInRecorded: overrides.GateInRecorded,
       OverrideAccepted: overrides.OverrideAccepted ?? false,
       Reason: overrides.Reason,
+      RuleCode: overrides.RuleCode,
       InboundPlanId: inboundPlanId,
       BusinessReference: businessReference,
     };
