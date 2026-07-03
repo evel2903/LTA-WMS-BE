@@ -71,7 +71,7 @@ import { IUomRepository } from '@modules/MasterData/Application/Interfaces/IUomR
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
 import { IPartnerRepository } from '@modules/PartnerMaster/Application/Interfaces/IPartnerRepository';
 import { IWarehouseProfileRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
-import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRuleGate';
+import { InboundRuleAttributeKeys, InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRuleGate';
 import { RuleResolver } from '@modules/WarehouseProfile/Application/Services/RuleResolver';
 import { SeedRuleGroupCatalog } from '@modules/WarehouseProfile/Application/Services/RuleGroupCatalogSeed';
 import {
@@ -80,6 +80,9 @@ import {
   InboundBaselineWarehouseTypeCode,
 } from '@modules/WarehouseProfile/Application/Services/InboundRuleBaselineSeed';
 import { ConditionEvaluator } from '@modules/WarehouseProfile/Domain/Services/ConditionEvaluator';
+import { IRuleResolver } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
+import { RuleDecision } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleDecision';
+import { RuleEvaluationContext } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleEvaluationContext';
 import {
   InMemoryRuleGroupRepository,
   InMemoryRuleDefinitionRepository,
@@ -554,6 +557,34 @@ const emptyInboundRuleGate = (): InboundRuleGate => {
 };
 
 /**
+ * Stub IRuleResolver that returns ApprovalRequired=true ONLY when the LPN-specific Attributes
+ * (lpnControlled/hasLpn) are present in the context — every other decision point sharing this same
+ * bundle.ruleGate (gate-in, tolerance, QC) gets an empty decision so their own fallback paths stay
+ * unaffected. No seeded R-INBOUND rule has ApprovalRequired ControlMode for LPN, so this stub is the
+ * only way to exercise the `|| decision.ApprovalRequired` half of IRE-04's ruleLpnRequired OR
+ * without inventing new seed data (out of scope for IRE-04).
+ */
+class ApprovalRequiredRuleResolver implements IRuleResolver {
+  public async Resolve(context: RuleEvaluationContext): Promise<RuleDecision> {
+    const isLpnContext = context.Attributes?.[InboundRuleAttributeKeys.LpnControlled] !== undefined;
+    return {
+      Winner: null,
+      Allowed: true,
+      ApprovalRequired: isLpnContext,
+      OrderedCandidates: [],
+      EffectivePriorities: {},
+      ReasonReadiness: null,
+    };
+  }
+}
+
+const approvalRequiredInboundRuleGate = (): InboundRuleGate => {
+  const warehouses = new InMemoryWarehouseRepository();
+  warehouses.Seed(warehouse());
+  return new InboundRuleGate(new ApprovalRequiredRuleResolver(), warehouses);
+};
+
+/**
  * Real InboundRuleGate over a RuleResolver with the WT-01 baseline rules seeded (IRE-00), bound to
  * a demo profile whose WarehouseId/OwnerId match the plans built by createRequest ('warehouse-1' /
  * 'owner-1'). Used by the IRE-02 rule-driven parity tests.
@@ -797,6 +828,7 @@ const releaseInboundToPutawayUseCase = (bundle: ReturnType<typeof repoBundle>) =
     bundle.inbound,
     bundle.receiving,
     bundle.profiles as unknown as IWarehouseProfileRepository,
+    bundle.ruleGate,
     bundle.labelBlocking as never,
     bundle.coreFlows as unknown as ICoreFlowRepository,
     bundle.integrations as unknown as IIntegrationRepository,
@@ -2588,5 +2620,122 @@ describe('IRE-03 rule-driven QC trigger (real RuleResolver + seeded WT-01, Partn
     expect(task.Required).toBe(true);
     expect(task.TriggerReason).toBe('Forced');
     expect(task.TriggerPolicyJson?.RuleRequiresQc).toBe(true);
+  });
+});
+
+describe('IRE-04 rule-driven LPN required (real RuleResolver + seeded WT-01)', () => {
+  const startAndConfirmLineForRelease = async (bundle: ReturnType<typeof repoBundle>, idempotencyKey: string) => {
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: `${idempotencyKey}-line`,
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: `${idempotencyKey}-qc` },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    return { session, line };
+  };
+
+  it('rule-driven: blocks release when profile.StrategyPolicy.lpnControlled=true (new key) even though legacy inboundLpnRequired/lpnRequired are unset', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.profiles.FindById.mockResolvedValue(profile({ lpnControlled: true }));
+    const { session, line } = await startAndConfirmLineForRelease(bundle, 'ire04-lpn-rule');
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire04-lpn-rule-release' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.audited.Entries[bundle.audited.Entries.length - 1]).toMatchObject({
+      AfterJson: expect.objectContaining({ RequiredBy: 'Rule' }),
+    });
+  });
+
+  it('rule-driven: an ApprovalRequired (not just Blocked) decision also drives ruleLpnRequired', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = approvalRequiredInboundRuleGate();
+    bundle.profiles.FindById.mockResolvedValue(profile({}));
+    const { session, line } = await startAndConfirmLineForRelease(bundle, 'ire04-lpn-approval');
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire04-lpn-approval-release' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.audited.Entries[bundle.audited.Entries.length - 1]).toMatchObject({
+      AfterJson: expect.objectContaining({ RequiredBy: 'Rule' }),
+    });
+  });
+
+  it('backward-compat: rule does not match (lpnControlled unset) but legacy inboundLpnRequired still blocks via fallback, even with a seeded rule gate', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundLpnRequired: true }));
+    const { session, line } = await startAndConfirmLineForRelease(bundle, 'ire04-lpn-fallback');
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire04-lpn-fallback-release' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.audited.Entries[bundle.audited.Entries.length - 1]).toMatchObject({
+      AfterJson: expect.objectContaining({ RequiredBy: 'WarehouseProfile' }),
+    });
+  });
+
+  it('null-profile skip: a plan with no WarehouseProfileId never calls the rule gate for LPN and is never blocked', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    const created = await createUseCase(bundle).Execute(
+      { ...createRequest(), WarehouseProfileId: null },
+      SystemAuditContext,
+    );
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'ire04-lpn-null-profile-line',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire04-lpn-null-profile-qc' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    // Spy installed only around the release call — evaluateQcTaskUseCase above legitimately calls
+    // Decide() on this same shared bundle.ruleGate for its own supplierRisk check.
+    const decideSpy = jest.spyOn(bundle.ruleGate, 'Decide');
+    const release = await releaseInboundToPutawayUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire04-lpn-null-profile-release' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(release.InventoryStatusCode).toBe('READY_FOR_PUTAWAY');
+    expect(decideSpy).not.toHaveBeenCalled();
   });
 });

@@ -15,6 +15,7 @@ import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/Outbox
 import { IPutawayTaskRepository } from '@modules/InventoryExecution/Application/Interfaces/IPutawayTaskRepository';
 import { ListPutawayTasksUseCase } from '@modules/InventoryExecution/Application/UseCases/ListPutawayTasksUseCase';
 import { ReleasePutawayTaskUseCase } from '@modules/InventoryExecution/Application/UseCases/ReleasePutawayTaskUseCase';
+import { PutawayRuleGate } from '@modules/InventoryExecution/Application/Services/PutawayRuleGate';
 import { PutawayTaskEntity } from '@modules/InventoryExecution/Domain/Entities/PutawayTaskEntity';
 import { PutawayTaskStatus } from '@modules/InventoryExecution/Domain/Enums/PutawayTaskStatus';
 import { ILocationProfileRepository } from '@modules/MasterData/Application/Interfaces/ILocationProfileRepository';
@@ -25,6 +26,15 @@ import { MakeLocation, MemoryLocationRepository } from '@test/Modules/MasterData
 import { ITaskExecutionRepository } from '@modules/TaskExecution/Application/Interfaces/ITaskExecutionRepository';
 import { MobileScanEventEntity } from '@modules/TaskExecution/Domain/Entities/MobileScanEventEntity';
 import { MobileTaskEntity } from '@modules/TaskExecution/Domain/Entities/MobileTaskEntity';
+import { IRuleResolver } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
+import { RuleDecision } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleDecision';
+import { RuleEvaluationContext } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleEvaluationContext';
+import { InMemoryWarehouseRepository } from '@test/TestDoubles/MasterData/MasterDataTestDoubles';
+import {
+  BuildEmptyPutawayRuleGate,
+  BuildSeededPutawayRuleGate,
+  MakePutawayDemoWarehouse,
+} from '@test/TestDoubles/InventoryExecution/PutawayRuleGateTestDoubles';
 import { EntityManager } from 'typeorm';
 
 const now = new Date('2026-06-23T03:00:00.000Z');
@@ -81,6 +91,21 @@ const makeProfile = (overrides: Partial<ConstructorParameters<typeof LocationPro
     UpdatedAt: now,
     ...overrides,
   });
+
+/**
+ * Real PutawayRuleGate over a RuleResolver with NO rules seeded — every Decide() returns an empty
+ * decision (Matched=false), so the caller falls back to structural eligibility only. This is the
+ * default gate in buildUseCase: existing tests keep exercising the backward-compat path (ADR-5).
+ */
+const emptyPutawayRuleGate = (warehouseId: string): PutawayRuleGate => BuildEmptyPutawayRuleGate(warehouseId);
+
+/**
+ * Real PutawayRuleGate over a RuleResolver with the WT-01 baseline rules seeded (IRE-00), bound to
+ * a demo profile whose WarehouseId/OwnerId match the given release. Used by the IRE-04 rule-driven
+ * putaway eligibility tests.
+ */
+const seededPutawayRuleGate = async (warehouseId: string, ownerId: string): Promise<PutawayRuleGate> =>
+  (await BuildSeededPutawayRuleGate(warehouseId, ownerId)).gate;
 
 class MemoryPutawayTaskRepository implements IPutawayTaskRepository {
   public tasks: PutawayTaskEntity[] = [];
@@ -226,6 +251,7 @@ function buildUseCase(input?: {
   putawayTasks?: MemoryPutawayTaskRepository;
   locations?: MemoryLocationRepository;
   profile?: LocationProfileEntity | null;
+  ruleGate?: PutawayRuleGate;
 }) {
   const release = input?.release ?? makeRelease();
   const putawayTasks = input?.putawayTasks ?? new MemoryPutawayTaskRepository();
@@ -239,18 +265,20 @@ function buildUseCase(input?: {
   const taskExecution = new FakeTaskExecutionRepository();
   const audited = new FakeAuditedTransaction();
   const permission = new FakePermissionChecker();
+  const ruleGate = input?.ruleGate ?? emptyPutawayRuleGate(release.WarehouseId);
   const useCase = new ReleasePutawayTaskUseCase(
     putawayTasks,
     new FakeReceivingRepository(release) as unknown as IReceivingRepository,
     locations,
     profiles as unknown as ILocationProfileRepository,
+    ruleGate,
     integrations as unknown as IIntegrationRepository,
     taskExecution as unknown as ITaskExecutionRepository,
     new FakeReasonCatalog(),
     audited as unknown as AuditedTransaction,
     permission,
   );
-  return { useCase, putawayTasks, locations, integrations, taskExecution, audited, permission };
+  return { useCase, putawayTasks, locations, integrations, taskExecution, audited, permission, ruleGate, release };
 }
 
 describe('InventoryExecution putaway release use case', () => {
@@ -450,5 +478,169 @@ describe('InventoryExecution putaway release use case', () => {
     expect(result.Meta.PageSize).toBe(100);
     expect(tailPage.Items).toHaveLength(50);
     expect(tailPage.Meta.TotalItems).toBe(1050);
+  });
+});
+
+describe('IRE-04 rule-driven putaway eligibility (real RuleResolver + seeded WT-01)', () => {
+  /**
+   * Deterministic stub resolver: blocks any candidate whose ZoneId matches `blockedZoneId`,
+   * otherwise returns an empty decision. Used to test the PLUMBING (a Blocked decision folds into
+   * the existing `failures`/`Rejections[]` mechanism and the loop moves to the next candidate) —
+   * independent of whether a real seeded rule's condition happens to match, since IRE-04 does not
+   * wire a temp/DG/bonded Attribute (that's IRE-05's scope).
+   */
+  class ZoneBlockingRuleResolver implements IRuleResolver {
+    constructor(private readonly blockedZoneId: string) {}
+    public async Resolve(context: RuleEvaluationContext): Promise<RuleDecision> {
+      const blocked = context.ZoneId === this.blockedZoneId;
+      return {
+        Winner: null,
+        Allowed: !blocked,
+        ApprovalRequired: false,
+        OrderedCandidates: [],
+        EffectivePriorities: {},
+        ReasonReadiness: null,
+      };
+    }
+  }
+
+  it('rule-driven: a Blocked decision on one candidate folds into the existing failures/Rejections[] mechanism and the loop tries the next candidate', async () => {
+    const release = makeRelease();
+    const warehouses = new InMemoryWarehouseRepository();
+    warehouses.Seed(MakePutawayDemoWarehouse(release.WarehouseId));
+    const ruleGate = new PutawayRuleGate(new ZoneBlockingRuleResolver('zone-blocked'), warehouses);
+    const locations = new MemoryLocationRepository([
+      MakeLocation({ Id: 'loc-blocked', LocationCode: 'A-01', ZoneId: 'zone-blocked', PutawaySequence: 10 }),
+      MakeLocation({ Id: 'loc-ok', LocationCode: 'A-02', ZoneId: 'zone-active', PutawaySequence: 20 }),
+    ]);
+
+    const { useCase, putawayTasks, audited } = buildUseCase({ release, locations, ruleGate });
+    const result = await useCase.Execute(
+      { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire04-rule-block-key' },
+      contextFor('operator-1'),
+    );
+
+    expect(result.TargetLocationId).toBe('loc-ok');
+    expect(putawayTasks.tasks).toHaveLength(1);
+    expect(audited.entries).toHaveLength(1);
+    expect(audited.entries[0]).toMatchObject({ Result: AuditResult.Success });
+  });
+
+  it('rule-driven: all candidates Blocked → terminal exception with Rejections[] naming the rule-driven reason, exactly like an all-structural-failure case', async () => {
+    const release = makeRelease();
+    const warehouses = new InMemoryWarehouseRepository();
+    warehouses.Seed(MakePutawayDemoWarehouse(release.WarehouseId));
+    const ruleGate = new PutawayRuleGate(new ZoneBlockingRuleResolver('zone-active'), warehouses);
+    const locations = new MemoryLocationRepository([
+      MakeLocation({ Id: 'loc-1', LocationCode: 'A-01', ZoneId: 'zone-active', PutawaySequence: 10 }),
+    ]);
+
+    const { useCase, putawayTasks } = buildUseCase({ release, locations, ruleGate });
+    await expect(
+      useCase.Execute(
+        { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire04-rule-block-all-key' },
+        contextFor('operator-1'),
+      ),
+    ).rejects.toThrow('No eligible putaway target location found');
+
+    expect(putawayTasks.tasks).toHaveLength(0);
+  });
+
+  class ApprovalRequiredRuleResolver implements IRuleResolver {
+    public async Resolve(context: RuleEvaluationContext): Promise<RuleDecision> {
+      void context;
+      return {
+        Winner: null,
+        Allowed: true,
+        ApprovalRequired: true,
+        OrderedCandidates: [],
+        EffectivePriorities: {},
+        ReasonReadiness: null,
+      };
+    }
+  }
+
+  it('rule-driven: an ApprovalRequired (not just Blocked) decision also excludes a candidate, and RuleCode=null renders as "unknown" not "null" in the failure reason', async () => {
+    const release = makeRelease();
+    const warehouses = new InMemoryWarehouseRepository();
+    warehouses.Seed(MakePutawayDemoWarehouse(release.WarehouseId));
+    const ruleGate = new PutawayRuleGate(new ApprovalRequiredRuleResolver(), warehouses);
+    const locations = new MemoryLocationRepository([
+      MakeLocation({ Id: 'loc-1', LocationCode: 'A-01', PutawaySequence: 10 }),
+    ]);
+
+    const { useCase, putawayTasks } = buildUseCase({ release, locations, ruleGate });
+    let caught: unknown;
+    try {
+      await useCase.Execute(
+        { InboundPutawayReleaseId: release.Id, TargetLocationId: 'loc-1', IdempotencyKey: 'ire04-approval-key' },
+        contextFor('operator-1'),
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    expect((caught as BusinessRuleException).Details).toMatchObject({
+      Failures: ['RULE_APPROVAL_REQUIRED:unknown'],
+    });
+    expect(putawayTasks.tasks).toHaveLength(0);
+  });
+
+  it('AutoSuggestion (RULE-PUT-ELIG-01) does not change candidate selection order — PutawaySequence sort is unchanged', async () => {
+    const release = makeRelease({ Quantity: 5 });
+    const ruleGate = await seededPutawayRuleGate(release.WarehouseId, release.OwnerId);
+    const locations = new MemoryLocationRepository([
+      MakeLocation({ Id: 'loc-first', LocationCode: 'A-01', CapacityQty: 10, PutawaySequence: 10 }),
+      MakeLocation({ Id: 'loc-second', LocationCode: 'A-02', CapacityQty: 10, PutawaySequence: 20 }),
+    ]);
+
+    const { useCase } = buildUseCase({ release, locations, ruleGate });
+    const result = await useCase.Execute(
+      { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire04-autosuggestion-key' },
+      contextFor('operator-1'),
+    );
+
+    // capacityAvailable=true for both candidates (Quantity=5 <= CapacityQty=10), so RULE-PUT-ELIG-01
+    // (AutoSuggestion) matches on both — non-authoritative, so the first-by-PutawaySequence candidate
+    // still wins, exactly as it would with an empty decision.
+    expect(result.TargetLocationId).toBe('loc-first');
+  });
+
+  it('per-candidate call: Decide() is called once per eligible-checked candidate, not once for the whole set', async () => {
+    const release = makeRelease();
+    const ruleGate = await seededPutawayRuleGate(release.WarehouseId, release.OwnerId);
+    const decideSpy = jest.spyOn(ruleGate, 'Decide');
+    const locations = new MemoryLocationRepository([
+      MakeLocation({ Id: 'loc-a', LocationCode: 'A-01', CapacityQty: 10, PutawaySequence: 10 }),
+      MakeLocation({ Id: 'loc-b', LocationCode: 'A-02', CapacityQty: 10, PutawaySequence: 20 }),
+    ]);
+
+    const { useCase } = buildUseCase({ release, locations, ruleGate });
+    await useCase.Execute(
+      { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire04-per-candidate-key' },
+      contextFor('operator-1'),
+    );
+
+    // Only loc-a is checked (first eligible wins, ResolveTarget returns early) — proves Decide() is
+    // invoked from inside the per-candidate AssertLocationEligible loop, not once for the whole set.
+    expect(decideSpy).toHaveBeenCalledTimes(1);
+    expect(decideSpy).toHaveBeenCalledWith(expect.objectContaining({ ZoneId: 'zone-active', LocationType: 'Storage' }));
+  });
+
+  it('backward-compat: empty decision (default gate) never blocks or changes eligibility', async () => {
+    const release = makeRelease();
+    const locations = new MemoryLocationRepository([
+      MakeLocation({ Id: 'loc-1', LocationCode: 'A-01', CapacityQty: 10, PutawaySequence: 10 }),
+    ]);
+
+    const { useCase, putawayTasks } = buildUseCase({ release, locations });
+    const result = await useCase.Execute(
+      { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire04-backward-compat-key' },
+      contextFor('operator-1'),
+    );
+
+    expect(result.TargetLocationId).toBe('loc-1');
+    expect(putawayTasks.tasks).toHaveLength(1);
   });
 });

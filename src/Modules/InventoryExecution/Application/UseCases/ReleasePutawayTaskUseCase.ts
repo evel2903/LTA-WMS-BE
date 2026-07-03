@@ -22,6 +22,11 @@ import { PutawayTaskDto, ReleasePutawayTaskDto } from '@modules/InventoryExecuti
 import { IPutawayTaskRepository } from '@modules/InventoryExecution/Application/Interfaces/IPutawayTaskRepository';
 import { PutawayTaskDtoMapper } from '@modules/InventoryExecution/Application/Mappers/PutawayTaskDtoMapper';
 import {
+  PutawayRuleAttributeKeys,
+  PutawayRuleGate,
+} from '@modules/InventoryExecution/Application/Services/PutawayRuleGate';
+import { RuleGateDecision } from '@modules/WarehouseProfile/Application/Services/RuleGateEvaluator';
+import {
   BuildPutawayTaskAudit,
   PutawayTaskToAuditJson,
 } from '@modules/InventoryExecution/Application/UseCases/PutawayTaskAudit';
@@ -39,6 +44,8 @@ interface EligibilityDecision {
   Target: LocationEntity;
   TargetProfile: LocationProfileEntity | null;
   Constraints: Record<string, unknown>;
+  RuleCode: string | null;
+  RuleSuggestion: { Message: string; RuleCode: string } | null;
 }
 
 export class ReleasePutawayTaskUseCase {
@@ -47,6 +54,7 @@ export class ReleasePutawayTaskUseCase {
     private readonly receiving: IReceivingRepository,
     private readonly locations: ILocationRepository,
     private readonly locationProfiles: ILocationProfileRepository,
+    private readonly ruleGate: PutawayRuleGate,
     private readonly integrations: IIntegrationRepository,
     private readonly taskExecution: ITaskExecutionRepository,
     private readonly reasonCatalog: IReasonCodeCatalog,
@@ -139,6 +147,8 @@ export class ReleasePutawayTaskUseCase {
         Decision: 'Released',
         SelectedBy: request.TargetLocationId ? 'requested_target' : 'suggested_target',
         LocationProfileStatus: eligibility.TargetProfile?.Status ?? null,
+        RuleCode: eligibility.RuleCode,
+        RuleSuggestion: eligibility.RuleSuggestion,
       },
       OutboxMessageId: outboxId,
       MobileTaskId: mobileTaskId,
@@ -277,6 +287,31 @@ export class ReleasePutawayTaskUseCase {
     if (profile && profile.OperationPolicy.putawayAllowed === false)
       failures.push('TARGET_PROFILE_PUTAWAY_NOT_ALLOWED');
 
+    // Rule engine is consulted PER-CANDIDATE (each location has its own ZoneId/LocationType, so
+    // context differs per candidate — not one call for the whole candidate set, R-PUT-ELIG-01+),
+    // but only when the candidate hasn't already failed a structural check — a doomed candidate
+    // throws either way, so skip the wasted resolver round-trip. Only a blocking/approval decision
+    // is authoritative; a matched-but-non-blocking (AutoSuggestion) or empty decision does NOT
+    // change eligibility or candidate selection order (ADR-5 — no loosening, same pattern applied
+    // since IRE-02). A rule-driven failure is appended to the SAME `failures` array as structural
+    // checks so it flows through the existing throw/Rejections[] accumulation unchanged.
+    let decision: RuleGateDecision | null = null;
+    if (failures.length === 0) {
+      decision = await this.ruleGate.Decide({
+        WarehouseId: release.WarehouseId,
+        OwnerId: release.OwnerId,
+        ZoneId: location.ZoneId,
+        LocationType: location.LocationType,
+        SkuId: release.SkuId,
+        Attributes: {
+          [PutawayRuleAttributeKeys.CapacityAvailable]:
+            location.CapacityQty === null || release.Quantity <= location.CapacityQty,
+        },
+      });
+      if (decision.Blocked) failures.push(`RULE_BLOCKED:${decision.RuleCode ?? 'unknown'}`);
+      else if (decision.ApprovalRequired) failures.push(`RULE_APPROVAL_REQUIRED:${decision.RuleCode ?? 'unknown'}`);
+    }
+
     if (failures.length > 0) {
       throw new BusinessRuleException('Target location is not eligible for putaway', {
         LocationId: location.Id,
@@ -288,6 +323,8 @@ export class ReleasePutawayTaskUseCase {
     return {
       Target: location,
       TargetProfile: profile,
+      RuleCode: decision?.RuleCode ?? null,
+      RuleSuggestion: decision?.Suggestion ?? null,
       Constraints: {
         SelectedBy: selectedBy,
         LocationId: location.Id,
