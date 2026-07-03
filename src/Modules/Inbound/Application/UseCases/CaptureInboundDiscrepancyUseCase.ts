@@ -279,28 +279,33 @@ export class CaptureInboundDiscrepancyUseCase {
     }
     // Same formula as the previous hardcoded path — the expectedQuantity===0 boundary yields 100.
     const overUnderPct = expectedQuantity === 0 ? 100 : ((actualQuantity - expectedQuantity) / expectedQuantity) * 100;
+    const profile = warehouseProfileId ? await this.profiles.FindById(warehouseProfileId) : null;
 
-    // Rule engine is the primary source (R-IN-TOL). Only a BLOCKING/APPROVAL decision is
-    // authoritative for the tolerance escalation. A matched but non-blocking decision
-    // (SoftWarning/AutoSuggestion) carries no escalation signal, so — like an empty decision — it
-    // falls through to the profile ThresholdPolicy path rather than collapsing to WithinTolerance
-    // (ADR-5: no loosening of the pre-migration threshold behavior).
+    // Rule engine is the primary source (R-IN-TOL), but ONLY when a WarehouseProfile is linked — a
+    // plan with no linked profile was never gated pre-migration, so we do NOT let a scope-resolved
+    // rule newly gate it (ADR-5, IRE-08 — matches decision point #1's identical guard). When a profile
+    // exists, only a BLOCKING/APPROVAL decision is authoritative for the tolerance escalation. A
+    // matched but non-blocking decision (SoftWarning/AutoSuggestion) carries no escalation signal, so
+    // — like an empty decision — it falls through to the profile ThresholdPolicy path rather than
+    // collapsing to WithinTolerance (ADR-5: no loosening of the pre-migration threshold behavior).
     // SkuId is the RECEIVED line's SKU (line.SkuId), not the originally planned SKU (planLine.SkuId)
     // — a discrepancy exception exists precisely because the two can diverge, and the rule should
     // scope against the real-world item on hand. Matches the same "received SKU" convention decision
     // point #5 already uses (ReleasePutawayTaskUseCase reads release.SkuId, itself sourced from
     // line.SkuId at release time — IRE-07).
-    const decision = await this.ruleGate.Decide({
-      WarehouseId: warehouseId,
-      OwnerId: ownerId,
-      SkuId: skuId,
-      Attributes: { [InboundRuleAttributeKeys.OverUnderPct]: overUnderPct },
-    });
-    if (decision.Blocked) return InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked;
-    if (decision.ApprovalRequired) return InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval;
+    if (profile) {
+      const decision = await this.ruleGate.Decide({
+        WarehouseId: warehouseId,
+        OwnerId: ownerId,
+        SkuId: skuId,
+        Attributes: { [InboundRuleAttributeKeys.OverUnderPct]: overUnderPct },
+      });
+      if (decision.Blocked) return InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked;
+      if (decision.ApprovalRequired) return InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval;
+    }
 
-    // Backward-compat (ADR-5): no blocking rule → previous hardcoded threshold logic, unchanged.
-    const profile = warehouseProfileId ? await this.profiles.FindById(warehouseProfileId) : null;
+    // Backward-compat (ADR-5): no blocking rule (or no linked profile) → previous hardcoded threshold
+    // logic, unchanged.
     const thresholdPercent = this.NumberPolicy(profile?.ThresholdPolicy?.receivingOverTolerancePercent) ?? 0;
     if (overUnderPct <= thresholdPercent) return InboundDiscrepancyToleranceDecision.WithinTolerance;
     const mode = String(profile?.StrategyPolicy?.receivingOverToleranceMode ?? 'approval').toLowerCase();

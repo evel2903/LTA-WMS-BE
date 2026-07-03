@@ -2595,6 +2595,38 @@ describe('IRE-02 rule-driven gate-in + tolerance (real RuleResolver + seeded WT-
 
     expect(discrepancy.ToleranceDecision).toBe(InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked);
   });
+
+  it('IRE-08 null-profile skip: a plan with no WarehouseProfileId never calls the rule gate for tolerance and falls back to the (default 0%) threshold unchanged', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    const created = await createUseCase(bundle).Execute(
+      { ...createRequest(), WarehouseProfileId: undefined },
+      SystemAuditContext,
+    );
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 14, // expected 12 → 16.7% over, would satisfy RULE-IN-TOL-01 (>5%) if consulted
+        IdempotencyKey: 'ire08-tol-null-profile-line',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const decideSpy = jest.spyOn(bundle.ruleGate, 'Decide');
+    const discrepancy = await captureQuantityVariance(bundle, session.ReceiptId, line.Id);
+
+    // profiles.FindById is never mocked to resolve for this plan, so the fallback threshold defaults
+    // to 0% — WithinTolerance would be wrong (16.7% > 0%); the pre-migration default-approval
+    // fallback fires instead, exactly as it would have before the rule engine existed.
+    expect(discrepancy.ToleranceDecision).toBe(InboundDiscrepancyToleranceDecision.OverTolerancePendingApproval);
+    expect(decideSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('IRE-03 rule-driven QC trigger (real RuleResolver + seeded WT-01, Partner.RiskLevel)', () => {
@@ -2705,6 +2737,40 @@ describe('IRE-03 rule-driven QC trigger (real RuleResolver + seeded WT-01, Partn
     expect(task.Required).toBe(true);
     expect(task.TriggerReason).toBe('Forced');
     expect(task.TriggerPolicyJson?.RuleRequiresQc).toBe(true);
+  });
+
+  it('IRE-08 null-profile skip: a plan with no WarehouseProfileId never calls the rule gate for QC trigger and falls back to SKU/discrepancy signals unchanged', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.partners.FindById.mockResolvedValue(highRiskSupplier()); // would satisfy RULE-QC-TRIG-01 if consulted
+    const created = await createUseCase(bundle).Execute(
+      { ...createRequest(), WarehouseProfileId: undefined },
+      SystemAuditContext,
+    );
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'ire08-qc-null-profile-line',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const decideSpy = jest.spyOn(bundle.ruleGate, 'Decide');
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire08-qc-null-profile' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    expect(task.Required).toBe(false);
+    expect(task.TriggerReason).toBe('NotRequired');
+    expect(decideSpy).not.toHaveBeenCalled();
   });
 });
 
