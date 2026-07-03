@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { BusinessRuleException, ConflictException } from '@common/Exceptions/AppException';
 import { AuditContext, SystemAuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { AuditEntry } from '@modules/AccessControl/Application/DTOs/AuditEntry';
@@ -22,11 +23,18 @@ import { ILocationProfileRepository } from '@modules/MasterData/Application/Inte
 import { LocationProfileEntity } from '@modules/MasterData/Domain/Entities/LocationProfileEntity';
 import { LocationStatus } from '@modules/MasterData/Domain/Enums/LocationStatus';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
-import { MakeLocation, MemoryLocationRepository } from '@test/Modules/MasterData/InventoryTestDoubles';
+import {
+  MakeLocation,
+  MakeSku,
+  MemoryLocationRepository,
+  MemorySkuRepository,
+} from '@test/Modules/MasterData/InventoryTestDoubles';
+import { SkuEntity } from '@modules/MasterData/Domain/Entities/SkuEntity';
 import { ITaskExecutionRepository } from '@modules/TaskExecution/Application/Interfaces/ITaskExecutionRepository';
 import { MobileScanEventEntity } from '@modules/TaskExecution/Domain/Entities/MobileScanEventEntity';
 import { MobileTaskEntity } from '@modules/TaskExecution/Domain/Entities/MobileTaskEntity';
 import { IRuleResolver } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
+import { InboundBaselineWarehouseTypeCode } from '@modules/WarehouseProfile/Application/Services/InboundRuleBaselineSeed';
 import { RuleDecision } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleDecision';
 import { RuleEvaluationContext } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleEvaluationContext';
 import { InMemoryWarehouseRepository } from '@test/TestDoubles/MasterData/MasterDataTestDoubles';
@@ -250,6 +258,7 @@ function buildUseCase(input?: {
   release?: InboundPutawayReleaseEntity;
   putawayTasks?: MemoryPutawayTaskRepository;
   locations?: MemoryLocationRepository;
+  sku?: SkuEntity | null;
   profile?: LocationProfileEntity | null;
   ruleGate?: PutawayRuleGate;
 }) {
@@ -260,6 +269,11 @@ function buildUseCase(input?: {
     new MemoryLocationRepository([
       MakeLocation({ Id: 'loc-1', LocationCode: 'A-01', CapacityQty: 10, PutawaySequence: 10 }),
     ]);
+  // Default SKU has no compliance requirement set (TemperatureClass/DgClass=null, BondedFlag=false)
+  // — matches backward-compat: no rule can match on a candidate with no SKU compliance need.
+  const skus = new MemorySkuRepository(
+    input?.sku === undefined ? [MakeSku({ Id: release.SkuId })] : input.sku ? [input.sku] : [],
+  );
   const profiles = new MemoryLocationProfileRepository(input?.profile ?? makeProfile());
   const integrations = new FakeIntegrationRepository();
   const taskExecution = new FakeTaskExecutionRepository();
@@ -270,6 +284,7 @@ function buildUseCase(input?: {
     putawayTasks,
     new FakeReceivingRepository(release) as unknown as IReceivingRepository,
     locations,
+    skus,
     profiles as unknown as ILocationProfileRepository,
     ruleGate,
     integrations as unknown as IIntegrationRepository,
@@ -278,7 +293,18 @@ function buildUseCase(input?: {
     audited as unknown as AuditedTransaction,
     permission,
   );
-  return { useCase, putawayTasks, locations, integrations, taskExecution, audited, permission, ruleGate, release };
+  return {
+    useCase,
+    putawayTasks,
+    locations,
+    skus,
+    integrations,
+    taskExecution,
+    audited,
+    permission,
+    ruleGate,
+    release,
+  };
 }
 
 describe('InventoryExecution putaway release use case', () => {
@@ -642,5 +668,268 @@ describe('IRE-04 rule-driven putaway eligibility (real RuleResolver + seeded WT-
 
     expect(result.TargetLocationId).toBe('loc-1');
     expect(putawayTasks.tasks).toHaveLength(1);
+  });
+});
+
+describe('IRE-05 compliance hard-block coverage (RULE-COM-COLD-01/DG-01/BONDED-01, real RuleResolver + seeded WT-01)', () => {
+  it('AC5-1: SKU TemperatureClass mismatch vs candidate Location → RULE-COM-COLD-01 hard-blocks it', async () => {
+    const release = makeRelease();
+    const sku = MakeSku({ Id: release.SkuId, TemperatureClass: 'FROZEN' });
+    const locations = new MemoryLocationRepository([
+      MakeLocation({
+        Id: 'loc-1',
+        LocationCode: 'A-01',
+        CapacityQty: 10,
+        PutawaySequence: 10,
+        TemperatureClass: 'AMBIENT',
+      }),
+    ]);
+    const ruleGate = await seededPutawayRuleGate(release.WarehouseId, release.OwnerId);
+
+    const { useCase, putawayTasks } = buildUseCase({ release, sku, locations, ruleGate });
+    await expect(
+      useCase.Execute(
+        { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire05-temp-mismatch-key' },
+        contextFor('operator-1'),
+      ),
+    ).rejects.toThrow('No eligible putaway target location found');
+    expect(putawayTasks.tasks).toHaveLength(0);
+  });
+
+  it('AC5-2: SKU DgClass mismatch vs candidate Location → RULE-COM-DG-01 hard-blocks it', async () => {
+    const release = makeRelease();
+    const sku = MakeSku({ Id: release.SkuId, DgClass: 'CLASS_3' });
+    const locations = new MemoryLocationRepository([
+      MakeLocation({ Id: 'loc-1', LocationCode: 'A-01', CapacityQty: 10, PutawaySequence: 10 }),
+    ]);
+    const ruleGate = await seededPutawayRuleGate(release.WarehouseId, release.OwnerId);
+
+    const { useCase, putawayTasks } = buildUseCase({ release, sku, locations, ruleGate });
+    await expect(
+      useCase.Execute(
+        { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire05-dg-mismatch-key' },
+        contextFor('operator-1'),
+      ),
+    ).rejects.toThrow('No eligible putaway target location found');
+    expect(putawayTasks.tasks).toHaveLength(0);
+  });
+
+  it('AC5-3: SKU BondedFlag=true vs a non-bonded candidate Location → RULE-COM-BONDED-01 hard-blocks it', async () => {
+    const release = makeRelease();
+    const sku = MakeSku({ Id: release.SkuId, BondedFlag: true });
+    const locations = new MemoryLocationRepository([
+      MakeLocation({ Id: 'loc-1', LocationCode: 'A-01', CapacityQty: 10, PutawaySequence: 10, BondedFlag: false }),
+    ]);
+    const ruleGate = await seededPutawayRuleGate(release.WarehouseId, release.OwnerId);
+
+    const { useCase, putawayTasks } = buildUseCase({ release, sku, locations, ruleGate });
+    await expect(
+      useCase.Execute(
+        { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire05-bonded-mismatch-key' },
+        contextFor('operator-1'),
+      ),
+    ).rejects.toThrow('No eligible putaway target location found');
+    expect(putawayTasks.tasks).toHaveLength(0);
+  });
+
+  it('AC5-4: RULE-COM-DG-01 does not match before its own EffectiveFrom (2026-07-01) — evaluating earlier falls through (Allowed=true)', async () => {
+    const warehouseId = randomUUID();
+    const ownerId = randomUUID();
+    const { resolver } = await BuildSeededPutawayRuleGate(warehouseId, ownerId);
+
+    const decision = await resolver.Resolve({
+      WarehouseTypeCode: InboundBaselineWarehouseTypeCode,
+      WarehouseId: warehouseId,
+      OwnerId: ownerId,
+      EvaluatedAt: new Date('2026-06-30T00:00:00.000Z'),
+      Attributes: { dgIncompatible: true },
+    });
+
+    expect(decision.Allowed).toBe(true);
+    expect(decision.Winner).toBeNull();
+  });
+
+  it('AC5-5: a compliance mismatch on a candidate that ALSO matches AutoSuggestion (RULE-PUT-ELIG-01) still blocks — compliance wins over a simultaneous non-blocking match', async () => {
+    const release = makeRelease({ Quantity: 5 });
+    const sku = MakeSku({ Id: release.SkuId, TemperatureClass: 'FROZEN' });
+    const locations = new MemoryLocationRepository([
+      // CapacityQty=10 >= Quantity=5 → capacityAvailable=true (RULE-PUT-ELIG-01 AutoSuggestion matches too).
+      MakeLocation({
+        Id: 'loc-1',
+        LocationCode: 'A-01',
+        CapacityQty: 10,
+        PutawaySequence: 10,
+        TemperatureClass: 'AMBIENT',
+      }),
+    ]);
+    const ruleGate = await seededPutawayRuleGate(release.WarehouseId, release.OwnerId);
+
+    const { useCase, putawayTasks } = buildUseCase({ release, sku, locations, ruleGate });
+    await expect(
+      useCase.Execute(
+        { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire05-compliance-wins-key' },
+        contextFor('operator-1'),
+      ),
+    ).rejects.toThrow('No eligible putaway target location found');
+    expect(putawayTasks.tasks).toHaveLength(0);
+  });
+
+  it('AC5-6: backward-compat — SKU/Location with no compliance classification set never trips a compliance Attribute (all three read as false)', async () => {
+    const release = makeRelease();
+    const ruleGate = await seededPutawayRuleGate(release.WarehouseId, release.OwnerId);
+    const decideSpy = jest.spyOn(ruleGate, 'Decide');
+    const locations = new MemoryLocationRepository([
+      MakeLocation({ Id: 'loc-1', LocationCode: 'A-01', CapacityQty: 10, PutawaySequence: 10 }),
+    ]);
+
+    const { useCase, putawayTasks } = buildUseCase({ release, locations, ruleGate });
+    const result = await useCase.Execute(
+      { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire05-backward-compat-key' },
+      contextFor('operator-1'),
+    );
+
+    expect(result.TargetLocationId).toBe('loc-1');
+    expect(putawayTasks.tasks).toHaveLength(1);
+    expect(decideSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Attributes: expect.objectContaining({
+          tempOutOfRange: false,
+          dgIncompatible: false,
+          bondedMismatch: false,
+        }),
+      }),
+    );
+  });
+
+  it('AC5-7: compliance rules bound to a DIFFERENT profile scope do not leak into this release — no bound profile for this WarehouseId/OwnerId falls back to structural eligibility only', async () => {
+    const release = makeRelease();
+    const sku = MakeSku({ Id: release.SkuId, TemperatureClass: 'FROZEN' });
+    const locations = new MemoryLocationRepository([
+      MakeLocation({
+        Id: 'loc-1',
+        LocationCode: 'A-01',
+        CapacityQty: 10,
+        PutawaySequence: 10,
+        TemperatureClass: 'AMBIENT',
+      }),
+    ]);
+    // Seeded against a DIFFERENT warehouse/owner scope than the release — no profile is bound for
+    // release.WarehouseId/OwnerId, so the gate must return an empty decision (ADR-5 backward-compat),
+    // not leak the other profile's RULE-COM-COLD-01 into this release's eligibility check.
+    const ruleGate = await seededPutawayRuleGate(randomUUID(), randomUUID());
+
+    const { useCase, putawayTasks } = buildUseCase({ release, sku, locations, ruleGate });
+    const result = await useCase.Execute(
+      { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire05-scope-no-leak-key' },
+      contextFor('operator-1'),
+    );
+
+    expect(result.TargetLocationId).toBe('loc-1');
+    expect(putawayTasks.tasks).toHaveLength(1);
+  });
+
+  it('AC5-8: Failures[] names the real compliance RuleCode (RULE-COM-DG-01), not "unknown"', async () => {
+    const release = makeRelease();
+    const sku = MakeSku({ Id: release.SkuId, DgClass: 'CLASS_3' });
+    const locations = new MemoryLocationRepository([
+      MakeLocation({ Id: 'loc-1', LocationCode: 'A-01', CapacityQty: 10, PutawaySequence: 10 }),
+    ]);
+    const ruleGate = await seededPutawayRuleGate(release.WarehouseId, release.OwnerId);
+
+    const { useCase } = buildUseCase({ release, sku, locations, ruleGate });
+    let caught: unknown;
+    try {
+      await useCase.Execute(
+        {
+          InboundPutawayReleaseId: release.Id,
+          TargetLocationId: 'loc-1',
+          IdempotencyKey: 'ire05-rulecode-audit-ref-key',
+        },
+        contextFor('operator-1'),
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    expect((caught as BusinessRuleException).Details).toMatchObject({
+      Failures: ['RULE_BLOCKED:RULE-COM-DG-01'],
+    });
+  });
+
+  it('AC5-9: a candidate matching BOTH RULE-COM-COLD-01 and RULE-COM-DG-01 simultaneously still yields exactly one winner in Failures[]', async () => {
+    const release = makeRelease();
+    const sku = MakeSku({ Id: release.SkuId, TemperatureClass: 'FROZEN', DgClass: 'CLASS_3' });
+    const locations = new MemoryLocationRepository([
+      MakeLocation({
+        Id: 'loc-1',
+        LocationCode: 'A-01',
+        CapacityQty: 10,
+        PutawaySequence: 10,
+        TemperatureClass: 'AMBIENT',
+      }),
+    ]);
+    const ruleGate = await seededPutawayRuleGate(release.WarehouseId, release.OwnerId);
+
+    const { useCase } = buildUseCase({ release, sku, locations, ruleGate });
+    let caught: unknown;
+    try {
+      await useCase.Execute(
+        {
+          InboundPutawayReleaseId: release.Id,
+          TargetLocationId: 'loc-1',
+          IdempotencyKey: 'ire05-multi-mismatch-one-winner-key',
+        },
+        contextFor('operator-1'),
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    const details = (caught as BusinessRuleException).Details as { Failures: string[] };
+    expect(details.Failures).toHaveLength(1);
+    expect(details.Failures[0]).toMatch(/^RULE_BLOCKED:RULE-COM-(COLD|DG|BONDED)-01$/);
+  });
+
+  it('AC5-10: end-to-end through Execute() — a compliance block leaves no PutawayTask/mobile task/outbox created and records a Failed audit entry with Rejections[] naming the rule', async () => {
+    const release = makeRelease();
+    const sku = MakeSku({ Id: release.SkuId, BondedFlag: true });
+    const locations = new MemoryLocationRepository([
+      MakeLocation({ Id: 'loc-1', LocationCode: 'A-01', CapacityQty: 10, PutawaySequence: 10, BondedFlag: false }),
+    ]);
+    const ruleGate = await seededPutawayRuleGate(release.WarehouseId, release.OwnerId);
+
+    const { useCase, putawayTasks, integrations, taskExecution, audited } = buildUseCase({
+      release,
+      sku,
+      locations,
+      ruleGate,
+    });
+    await expect(
+      useCase.Execute(
+        { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire05-e2e-execute-key' },
+        contextFor('operator-1'),
+      ),
+    ).rejects.toBeInstanceOf(BusinessRuleException);
+
+    expect(putawayTasks.tasks).toHaveLength(0);
+    expect(taskExecution.mobileTasks).toHaveLength(0);
+    expect(integrations.outboxMessages).toHaveLength(0);
+    expect(audited.entries).toHaveLength(1);
+    expect(audited.entries[0]).toMatchObject({
+      ObjectType: ObjectType.PutawayTask,
+      Result: AuditResult.Failed,
+      AfterJson: expect.objectContaining({
+        Decision: 'Blocked',
+        Reason: 'No eligible putaway target location found',
+        Rejections: [
+          expect.objectContaining({
+            LocationId: 'loc-1',
+            Reason: 'Target location is not eligible for putaway',
+          }),
+        ],
+      }),
+    });
   });
 });

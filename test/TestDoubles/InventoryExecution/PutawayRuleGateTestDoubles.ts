@@ -53,7 +53,12 @@ export const BuildEmptyPutawayRuleGate = (warehouseId: string): PutawayRuleGate 
 export const BuildSeededPutawayRuleGate = async (
   warehouseId: string = randomUUID(),
   ownerId: string = randomUUID(),
-): Promise<{ gate: PutawayRuleGate; profile: WarehouseProfileEntity }> => {
+): Promise<{
+  gate: PutawayRuleGate;
+  profile: WarehouseProfileEntity;
+  definitions: InMemoryRuleDefinitionRepository;
+  resolver: RuleResolver;
+}> => {
   const groups = new InMemoryRuleGroupRepository();
   await SeedRuleGroupCatalog(groups);
   const definitions = new InMemoryRuleDefinitionRepository();
@@ -76,11 +81,11 @@ export const BuildSeededPutawayRuleGate = async (
   });
   await profiles.Create(profile);
   const seedResult = await SeedInboundRuleBaseline(groups, definitions, bindings, profiles);
-  if (seedResult.DefinitionsCreated !== 6) {
-    throw new Error(`Expected 6 seeded rule definitions, got ${seedResult.DefinitionsCreated}`);
+  if (seedResult.DefinitionsCreated !== 8) {
+    throw new Error(`Expected 8 seeded rule definitions, got ${seedResult.DefinitionsCreated}`);
   }
   const warehouses = new InMemoryWarehouseRepository();
   warehouses.Seed(MakePutawayDemoWarehouse(warehouseId));
   const resolver = new RuleResolver(profiles, definitions, bindings, groups, new ConditionEvaluator());
-  return { gate: new PutawayRuleGate(resolver, warehouses), profile };
+  return { gate: new PutawayRuleGate(resolver, warehouses), profile, definitions, resolver };
 };

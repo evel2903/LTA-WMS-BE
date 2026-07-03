@@ -20,6 +20,14 @@ import {
 export const PutawayRuleAttributeKeys = {
   /** #5 Directed putaway eligibility — RULE-PUT-ELIG-01 */
   CapacityAvailable: 'capacityAvailable',
+  /**
+   * #6 Compliance (cross-cut, IRE-05) — RULE-COM-COLD-01/RULE-COM-DG-01/RULE-COM-BONDED-01.
+   * Same string values as InboundRuleAttributeKeys.TempOutOfRange where shared (RULE-COM-COLD-01
+   * is cross-cutting) — declared locally per ADR-1 module boundary, not imported cross-module.
+   */
+  TempOutOfRange: 'tempOutOfRange',
+  DgIncompatible: 'dgIncompatible',
+  BondedMismatch: 'bondedMismatch',
 } as const;
 
 /** Scope axes + actor/object metadata + business Attributes a caller supplies to PutawayRuleGate.Evaluate. */

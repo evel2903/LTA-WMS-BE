@@ -79,7 +79,7 @@ describe('InboundRuleGate (real RuleResolver, seeded WT-01 baseline — AC1/AC2/
     const profile = BuildDemoProfile();
     await profiles.Create(profile);
     const seedResult = await SeedInboundRuleBaseline(groups, definitions, bindings, profiles);
-    expect(seedResult.DefinitionsCreated).toBe(6);
+    expect(seedResult.DefinitionsCreated).toBe(8);
 
     const warehouses = new InMemoryWarehouseRepository();
     warehouses.Seed(BuildWarehouse(profile.WarehouseId!));

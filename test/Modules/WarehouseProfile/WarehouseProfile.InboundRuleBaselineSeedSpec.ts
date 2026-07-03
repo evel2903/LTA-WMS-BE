@@ -48,12 +48,12 @@ const BuildDemoProfile = (): WarehouseProfileEntity => {
 };
 
 describe('Inbound rule baseline seed', () => {
-  it('defines one baseline entry for each of the six decision points, covering R-INBOUND, R-PUT and R-COM', () => {
+  it('defines baseline entries for the six decision points, covering R-INBOUND, R-PUT and R-COM (IRE-05: R-COM has 3 compliance rules — cold/DG/bonded)', () => {
     const groupCodes = InboundRuleBaselineEntries.map((e) => e.RuleGroupCode);
-    expect(InboundRuleBaselineEntries.length).toBe(6);
+    expect(InboundRuleBaselineEntries.length).toBe(8);
     expect(groupCodes.filter((c) => c === 'R-INBOUND').length).toBe(4);
     expect(groupCodes.filter((c) => c === 'R-PUT').length).toBe(1);
-    expect(groupCodes.filter((c) => c === 'R-COM').length).toBe(1);
+    expect(groupCodes.filter((c) => c === 'R-COM').length).toBe(3);
   });
 
   it('scopes every baseline rule to compliance tier for R-COM and non-compliance tiers elsewhere', () => {
@@ -113,9 +113,9 @@ describe('Inbound rule baseline seed', () => {
     const result = await SeedInboundRuleBaseline(groups, definitions, bindings, profiles);
 
     expect(result.RuleGroupMissing).toEqual(['R-PUT']);
-    // R-INBOUND (4 rules) + R-COM (1 rule) still get created; only R-PUT's rule is skipped.
-    expect(result.DefinitionsCreated).toBe(5);
-    expect(result.BindingsCreated).toBe(5);
+    // R-INBOUND (4 rules) + R-COM (3 rules) still get created; only R-PUT's rule is skipped.
+    expect(result.DefinitionsCreated).toBe(7);
+    expect(result.BindingsCreated).toBe(7);
   });
 
   it('deduplicates RuleGroupMissing when multiple entries share the same missing group (R-INBOUND has 4)', async () => {
@@ -151,8 +151,8 @@ describe('Inbound rule baseline seed', () => {
     const result = await SeedInboundRuleBaseline(groups, definitions, bindings, profiles);
 
     expect(result.RuleGroupMissing).toEqual(['R-INBOUND']);
-    expect(result.DefinitionsCreated).toBe(2);
-    expect(result.BindingsCreated).toBe(2);
+    expect(result.DefinitionsCreated).toBe(4);
+    expect(result.BindingsCreated).toBe(4);
   });
 
   it('reports RuleGroupNotActive (not RuleGroupMissing) and does not bind when a group exists but is still PLACEHOLDER', async () => {
@@ -199,9 +199,9 @@ describe('Inbound rule baseline seed', () => {
 
     expect(result.RuleGroupMissing).toEqual([]);
     expect(result.RuleGroupNotActive).toEqual(['R-INBOUND']);
-    // Only R-PUT (1) + R-COM (1) get created; the 4 R-INBOUND entries are skipped, not bound.
-    expect(result.DefinitionsCreated).toBe(2);
-    expect(result.BindingsCreated).toBe(2);
+    // Only R-PUT (1) + R-COM (3) get created; the 4 R-INBOUND entries are skipped, not bound.
+    expect(result.DefinitionsCreated).toBe(4);
+    expect(result.BindingsCreated).toBe(4);
     const definitionList = await definitions.List(0, 100, {});
     expect(
       definitionList.Items.some(
@@ -211,7 +211,7 @@ describe('Inbound rule baseline seed', () => {
     ).toBe(false);
   });
 
-  it('seeds all six baseline rule definitions and bindings into a fully-seeded repository set', async () => {
+  it('seeds all eight baseline rule definitions and bindings into a fully-seeded repository set', async () => {
     const groups = new InMemoryRuleGroupRepository();
     await SeedRuleGroupCatalog(groups);
     const definitions = new InMemoryRuleDefinitionRepository();
@@ -224,16 +224,16 @@ describe('Inbound rule baseline seed', () => {
 
     expect(result.ProfileMissing).toBe(false);
     expect(result.RuleGroupMissing).toEqual([]);
-    expect(result.DefinitionsCreated).toBe(6);
-    expect(result.BindingsCreated).toBe(6);
+    expect(result.DefinitionsCreated).toBe(8);
+    expect(result.BindingsCreated).toBe(8);
 
     const definitionList = await definitions.List(0, 100, {});
-    expect(definitionList.TotalItems).toBe(6);
+    expect(definitionList.TotalItems).toBe(8);
     expect(definitionList.Items.every((d) => d.WarehouseTypeCode === InboundBaselineWarehouseTypeCode)).toBe(true);
     expect(definitionList.Items.every((d) => d.ScopeKey.length > 0)).toBe(true);
 
     const bindingList = await bindings.ListByProfile(profile.Id, 0, 100);
-    expect(bindingList.TotalItems).toBe(6);
+    expect(bindingList.TotalItems).toBe(8);
     expect(bindingList.Items.every((b) => b.IsEnabled)).toBe(true);
   });
 
@@ -253,7 +253,7 @@ describe('Inbound rule baseline seed', () => {
     expect(second.BindingsCreated).toBe(0);
 
     const definitionList = await definitions.List(0, 100, {});
-    expect(definitionList.TotalItems).toBe(6);
+    expect(definitionList.TotalItems).toBe(8);
   });
 
   it('converges instead of throwing when Create() races a concurrent run (TOCTOU: ConflictException on the unique index)', async () => {
@@ -279,12 +279,12 @@ describe('Inbound rule baseline seed', () => {
 
     const result = await SeedInboundRuleBaseline(groups, definitions, bindings, profiles);
 
-    // Converged: the racing Create's row is picked up via FindByCode, not re-thrown, and all 6
-    // still end up created (5 by this run, 1 by the simulated concurrent run) and bound.
-    expect(result.DefinitionsCreated).toBe(5);
-    expect(result.BindingsCreated).toBe(6);
+    // Converged: the racing Create's row is picked up via FindByCode, not re-thrown, and all 8
+    // still end up created (7 by this run, 1 by the simulated concurrent run) and bound.
+    expect(result.DefinitionsCreated).toBe(7);
+    expect(result.BindingsCreated).toBe(8);
     const definitionList = await definitions.List(0, 100, {});
-    expect(definitionList.TotalItems).toBe(6);
+    expect(definitionList.TotalItems).toBe(8);
   });
 
   it('does not bind any rule to a rule group left at CatalogState=PLACEHOLDER', async () => {
@@ -316,7 +316,7 @@ describe('Inbound rule baseline seed', () => {
       await profiles.Create(profile);
 
       const seedResult = await SeedInboundRuleBaseline(groups, definitions, bindings, profiles);
-      expect(seedResult.DefinitionsCreated).toBe(6);
+      expect(seedResult.DefinitionsCreated).toBe(8);
 
       const resolver = new RuleResolver(profiles, definitions, bindings, groups, new ConditionEvaluator());
       // Real callers (IRE-01's InboundRuleGate/PutawayRuleGate) MUST resolve and pass WarehouseId

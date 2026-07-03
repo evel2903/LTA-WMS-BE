@@ -97,6 +97,24 @@ export const InboundRuleBaselineEntries: ReadonlyArray<InboundRuleBaselineEntry>
     ConditionJson: { Operator: 'ALL', Predicates: [{ Field: 'tempOutOfRange', Comparator: 'EQ', Value: true }] },
     ActionJson: { Type: 'BLOCK', Params: { Message: 'Nhiệt độ ngoài khoảng cho phép — compliance hard block' } },
   },
+  {
+    RuleCode: 'RULE-COM-DG-01',
+    RuleName: 'Dangerous goods incompatibility hard block',
+    RuleGroupCode: 'R-COM',
+    PrecedenceTier: RulePrecedenceTier.Compliance,
+    ControlMode: RuleControlMode.HardBlock,
+    ConditionJson: { Operator: 'ALL', Predicates: [{ Field: 'dgIncompatible', Comparator: 'EQ', Value: true }] },
+    ActionJson: { Type: 'BLOCK', Params: { Message: 'Vị trí không tương thích DG class — compliance hard block' } },
+  },
+  {
+    RuleCode: 'RULE-COM-BONDED-01',
+    RuleName: 'Bonded storage mismatch hard block',
+    RuleGroupCode: 'R-COM',
+    PrecedenceTier: RulePrecedenceTier.Compliance,
+    ControlMode: RuleControlMode.HardBlock,
+    ConditionJson: { Operator: 'ALL', Predicates: [{ Field: 'bondedMismatch', Comparator: 'EQ', Value: true }] },
+    ActionJson: { Type: 'BLOCK', Params: { Message: 'Vị trí không hỗ trợ bonded storage — compliance hard block' } },
+  },
 ];
 
 /**
