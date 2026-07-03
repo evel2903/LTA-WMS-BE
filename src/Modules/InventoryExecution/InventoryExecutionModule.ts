@@ -105,6 +105,7 @@ import {
   IItemCoverageRepository,
   ITEM_COVERAGE_REPOSITORY,
 } from '@modules/MasterData/Application/Interfaces/IItemCoverageRepository';
+import { ISkuRepository, SKU_REPOSITORY } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import {
   IWarehouseRepository,
   WAREHOUSE_REPOSITORY,
@@ -171,6 +172,7 @@ import { PutawayRuleGate } from '@modules/InventoryExecution/Application/Service
         putawayTasks: IPutawayTaskRepository,
         receiving: IReceivingRepository,
         locations: ILocationRepository,
+        skus: ISkuRepository,
         locationProfiles: ILocationProfileRepository,
         ruleGate: PutawayRuleGate,
         integrations: IIntegrationRepository,
@@ -183,6 +185,7 @@ import { PutawayRuleGate } from '@modules/InventoryExecution/Application/Service
           putawayTasks,
           receiving,
           locations,
+          skus,
           locationProfiles,
           ruleGate,
           integrations,
@@ -195,6 +198,7 @@ import { PutawayRuleGate } from '@modules/InventoryExecution/Application/Service
         PUTAWAY_TASK_REPOSITORY,
         RECEIVING_REPOSITORY,
         LOCATION_REPOSITORY,
+        SKU_REPOSITORY,
         LOCATION_PROFILE_REPOSITORY,
         PutawayRuleGate,
         INTEGRATION_REPOSITORY,

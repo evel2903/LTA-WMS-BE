@@ -14,8 +14,10 @@ import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/Outbox
 import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
 import { ILocationProfileRepository } from '@modules/MasterData/Application/Interfaces/ILocationProfileRepository';
 import { ILocationRepository } from '@modules/MasterData/Application/Interfaces/ILocationRepository';
+import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { LocationEntity } from '@modules/MasterData/Domain/Entities/LocationEntity';
 import { LocationProfileEntity } from '@modules/MasterData/Domain/Entities/LocationProfileEntity';
+import { SkuEntity } from '@modules/MasterData/Domain/Entities/SkuEntity';
 import { LocationStatus } from '@modules/MasterData/Domain/Enums/LocationStatus';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 import { PutawayTaskDto, ReleasePutawayTaskDto } from '@modules/InventoryExecution/Application/DTOs/PutawayTaskDto';
@@ -53,6 +55,7 @@ export class ReleasePutawayTaskUseCase {
     private readonly putawayTasks: IPutawayTaskRepository,
     private readonly receiving: IReceivingRepository,
     private readonly locations: ILocationRepository,
+    private readonly skus: ISkuRepository,
     private readonly locationProfiles: ILocationProfileRepository,
     private readonly ruleGate: PutawayRuleGate,
     private readonly integrations: IIntegrationRepository,
@@ -75,7 +78,14 @@ export class ReleasePutawayTaskUseCase {
       OwnerId: release.OwnerId,
     });
 
-    const duplicate = await this.putawayTasks.FindByIdempotencyKey(release.Id, request.IdempotencyKey);
+    // SKU fetched once (not per-candidate — its compliance classification doesn't change between
+    // candidates, only the target location does) and in parallel with the idempotency lookup —
+    // both only need release.Id/release.SkuId, which are already in hand, so there's no reason to
+    // pay the round-trip sequentially behind a lookup that doesn't depend on it.
+    const [duplicate, sku] = await Promise.all([
+      this.putawayTasks.FindByIdempotencyKey(release.Id, request.IdempotencyKey),
+      this.skus.FindById(release.SkuId),
+    ]);
     if (duplicate) {
       this.AssertDuplicateMatchesRequest(duplicate, request);
       return PutawayTaskDtoMapper.ToDto(duplicate, true);
@@ -91,7 +101,14 @@ export class ReleasePutawayTaskUseCase {
       throw new BusinessRuleException(reason);
     }
 
-    const eligibility = await this.ResolveTarget(request, release, context);
+    // Fail-closed: an unresolvable SkuId (orphaned/deleted SKU) must not silently bypass every
+    // RULE-COM-* compliance check by reading as "no requirement" — abort instead.
+    if (!sku) {
+      const reason = 'SKU not found for inbound putaway release';
+      await this.AuditBlocked(context, release, reason, { SkuId: release.SkuId });
+      throw new BusinessRuleException(reason);
+    }
+    const eligibility = await this.ResolveTarget(request, release, context, sku);
     const now = new Date();
     const taskId = randomUUID();
     const outboxId = randomUUID();
@@ -211,6 +228,7 @@ export class ReleasePutawayTaskUseCase {
     request: ReleasePutawayTaskDto,
     release: InboundPutawayReleaseEntity,
     context: AuditContext,
+    sku: SkuEntity,
   ): Promise<EligibilityDecision> {
     if (request.TargetLocationId) {
       const target = await this.locations.FindById(request.TargetLocationId);
@@ -221,7 +239,7 @@ export class ReleasePutawayTaskUseCase {
         throw new BusinessRuleException('Target location not found');
       }
       try {
-        return await this.AssertLocationEligible(target, release, 'requested_target');
+        return await this.AssertLocationEligible(target, release, 'requested_target', sku);
       } catch (error) {
         await this.AuditBlocked(context, release, 'Target location is not eligible for putaway', {
           TargetLocationId: target.Id,
@@ -246,7 +264,7 @@ export class ReleasePutawayTaskUseCase {
     const rejections: Record<string, unknown>[] = [];
     for (const candidate of sorted) {
       try {
-        return await this.AssertLocationEligible(candidate, release, 'suggested_target');
+        return await this.AssertLocationEligible(candidate, release, 'suggested_target', sku);
       } catch (error) {
         rejections.push({
           LocationId: candidate.Id,
@@ -263,6 +281,7 @@ export class ReleasePutawayTaskUseCase {
     location: LocationEntity,
     release: InboundPutawayReleaseEntity,
     selectedBy: string,
+    sku: SkuEntity,
   ): Promise<EligibilityDecision> {
     const failures: string[] = [];
     if (location.WarehouseId !== release.WarehouseId) failures.push('TARGET_WAREHOUSE_MISMATCH');
@@ -295,6 +314,12 @@ export class ReleasePutawayTaskUseCase {
     // change eligibility or candidate selection order (ADR-5 — no loosening, same pattern applied
     // since IRE-02). A rule-driven failure is appended to the SAME `failures` array as structural
     // checks so it flows through the existing throw/Rejections[] accumulation unchanged.
+    //
+    // Compliance attributes (IRE-05, RULE-COM-COLD-01/DG-01/BONDED-01) compare the SKU's required
+    // classification against the candidate location's — fail-closed: a SKU requirement (non-null/
+    // true) that isn't an EXACT location match counts as a mismatch, including a location with no
+    // class set at all (a "no special class" location is not a valid substitute for a SKU that
+    // needs one).
     let decision: RuleGateDecision | null = null;
     if (failures.length === 0) {
       decision = await this.ruleGate.Decide({
@@ -306,6 +331,11 @@ export class ReleasePutawayTaskUseCase {
         Attributes: {
           [PutawayRuleAttributeKeys.CapacityAvailable]:
             location.CapacityQty === null || release.Quantity <= location.CapacityQty,
+          [PutawayRuleAttributeKeys.TempOutOfRange]:
+            sku.TemperatureClass !== null && sku.TemperatureClass !== location.TemperatureClass,
+          [PutawayRuleAttributeKeys.DgIncompatible]:
+            sku.DgClass !== null && sku.DgClass !== location.DgCompatibilityGroup,
+          [PutawayRuleAttributeKeys.BondedMismatch]: sku.BondedFlag === true && location.BondedFlag !== true,
         },
       });
       if (decision.Blocked) failures.push(`RULE_BLOCKED:${decision.RuleCode ?? 'unknown'}`);

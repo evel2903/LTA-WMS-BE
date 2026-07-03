@@ -612,7 +612,7 @@ const seededInboundRuleGate = async (): Promise<InboundRuleGate> => {
     }),
   );
   const seed = await SeedInboundRuleBaseline(groups, definitions, bindings, profiles);
-  expect(seed.DefinitionsCreated).toBe(6);
+  expect(seed.DefinitionsCreated).toBe(8);
   // Make seeded rules clock-independent: SeedInboundRuleBaseline stamps EffectiveFrom=2026-07-01,
   // but Decide() sets no EvaluatedAt so the resolver defaults to the wall clock. Pin the seeded
   // definitions to a safely-past date so these parity tests never flip on a machine/CI clock.
