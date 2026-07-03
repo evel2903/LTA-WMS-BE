@@ -58,6 +58,7 @@ export const BuildSeededPutawayRuleGate = async (
   profile: WarehouseProfileEntity;
   definitions: InMemoryRuleDefinitionRepository;
   resolver: RuleResolver;
+  warehouses: InMemoryWarehouseRepository;
 }> => {
   const groups = new InMemoryRuleGroupRepository();
   await SeedRuleGroupCatalog(groups);
@@ -87,5 +88,5 @@ export const BuildSeededPutawayRuleGate = async (
   const warehouses = new InMemoryWarehouseRepository();
   warehouses.Seed(MakePutawayDemoWarehouse(warehouseId));
   const resolver = new RuleResolver(profiles, definitions, bindings, groups, new ConditionEvaluator());
-  return { gate: new PutawayRuleGate(resolver, warehouses), profile, definitions, resolver };
+  return { gate: new PutawayRuleGate(resolver, warehouses), profile, definitions, resolver, warehouses };
 };

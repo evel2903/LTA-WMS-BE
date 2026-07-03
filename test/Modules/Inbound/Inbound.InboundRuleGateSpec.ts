@@ -171,4 +171,12 @@ describe('InboundRuleGate (real RuleResolver, seeded WT-01 baseline — AC1/AC2/
 
     await expect(gate.Evaluate({ WarehouseId: warehouseId })).rejects.toThrow('rule engine unavailable');
   });
+
+  it('IRE-06 regression guard: Decide() still returns an empty decision (ADR-5 backward-compat) when WarehouseId does not resolve — #1-#4 must NOT fail-closed like PutawayRuleGate does', async () => {
+    const { gate } = await buildGate();
+
+    const decision = await gate.Decide({ WarehouseId: randomUUID() });
+
+    expect(decision).toMatchObject({ Matched: false, Blocked: false, ApprovalRequired: false });
+  });
 });

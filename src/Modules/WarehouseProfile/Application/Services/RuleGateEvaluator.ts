@@ -1,5 +1,6 @@
 import { BusinessRuleException } from '@common/Exceptions/AppException';
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
+import { WarehouseEntity } from '@modules/MasterData/Domain/Entities/WarehouseEntity';
 import { IRuleResolver } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
 import { ReasonReadiness } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleDecision';
 import { RuleEvaluationContext } from '@modules/WarehouseProfile/Domain/ValueObjects/RuleEvaluationContext';
@@ -56,14 +57,19 @@ function EmptyDecision(): RuleGateDecision {
  * (WarehouseId AND OwnerId both included — IRE-00's critical scope-match lesson), calls Resolve,
  * and returns the decision WITHOUT throwing. An unresolvable WarehouseId yields an empty decision
  * (ADR-5 backward-compat). Resolver failures propagate (R5 fail-closed).
+ *
+ * `preResolvedWarehouse` (IRE-06) lets a caller that already fetched+validated the warehouse itself
+ * (PutawayRuleGate's fail-closed guard) pass it through instead of triggering a second identical
+ * FindById. Omitted by every InboundRuleGate call site — their behavior is untouched.
  */
 export async function ResolveRuleGate(
   resolver: IRuleResolver,
   warehouses: IWarehouseRepository,
   input: RuleGateInput,
+  preResolvedWarehouse?: WarehouseEntity,
 ): Promise<RuleGateDecision> {
   if (!input.WarehouseId) return EmptyDecision();
-  const warehouse = await warehouses.FindById(input.WarehouseId);
+  const warehouse = preResolvedWarehouse ?? (await warehouses.FindById(input.WarehouseId));
   if (!warehouse) return EmptyDecision();
 
   const context: RuleEvaluationContext = {
@@ -110,8 +116,9 @@ export async function EvaluateRuleGate(
   resolver: IRuleResolver,
   warehouses: IWarehouseRepository,
   input: RuleGateInput,
+  preResolvedWarehouse?: WarehouseEntity,
 ): Promise<RuleGateOutcome> {
-  const decision = await ResolveRuleGate(resolver, warehouses, input);
+  const decision = await ResolveRuleGate(resolver, warehouses, input, preResolvedWarehouse);
 
   if (decision.Blocked) {
     throw new BusinessRuleException(decision.RuleCode ?? 'Rule blocked the transaction', {
