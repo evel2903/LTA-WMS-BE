@@ -830,8 +830,11 @@ describe('IRE-05 compliance hard-block coverage (RULE-COM-COLD-01/DG-01/BONDED-0
     ]);
     // Seeded against a DIFFERENT warehouse/owner scope than the release — no profile is bound for
     // release.WarehouseId/OwnerId, so the gate must return an empty decision (ADR-5 backward-compat),
-    // not leak the other profile's RULE-COM-COLD-01 into this release's eligibility check.
-    const ruleGate = await seededPutawayRuleGate(randomUUID(), randomUUID());
+    // not leak the other profile's RULE-COM-COLD-01 into this release's eligibility check. The
+    // release's own WarehouseId is ALSO seeded into the warehouse repo (IRE-06) so this test proves
+    // scope isolation specifically — not the separate "WarehouseId doesn't resolve at all" case.
+    const { gate: ruleGate, warehouses } = await BuildSeededPutawayRuleGate(randomUUID(), randomUUID());
+    warehouses.Seed(MakePutawayDemoWarehouse(release.WarehouseId));
 
     const { useCase, putawayTasks } = buildUseCase({ release, sku, locations, ruleGate });
     const result = await useCase.Execute(
@@ -966,5 +969,33 @@ describe('IRE-05 compliance hard-block coverage (RULE-COM-COLD-01/DG-01/BONDED-0
     expect(putawayTasks.tasks).toHaveLength(0);
     expect(audited.entries).toHaveLength(1);
     expect(audited.entries[0]).toMatchObject({ Result: AuditResult.Failed });
+  });
+
+  it('IRE-06: end-to-end through Execute() — an unresolvable release.WarehouseId aborts putaway instead of silently skipping compliance checks', async () => {
+    const release = makeRelease();
+    const sku = MakeSku({ Id: release.SkuId, TemperatureClass: 'FROZEN' });
+    const locations = new MemoryLocationRepository([
+      MakeLocation({
+        Id: 'loc-1',
+        LocationCode: 'A-01',
+        CapacityQty: 10,
+        PutawaySequence: 10,
+        TemperatureClass: 'AMBIENT',
+      }),
+    ]);
+    // Real seeded resolver, but the warehouse repo the gate uses never seeds release.WarehouseId —
+    // simulates the data-integrity gap IRE-06 fixes (warehouse_id has no FK constraint).
+    const { resolver } = await BuildSeededPutawayRuleGate(release.WarehouseId, release.OwnerId);
+    const ruleGate = new PutawayRuleGate(resolver, new InMemoryWarehouseRepository());
+
+    const { useCase, putawayTasks } = buildUseCase({ release, sku, locations, ruleGate });
+    await expect(
+      useCase.Execute(
+        { InboundPutawayReleaseId: release.Id, IdempotencyKey: 'ire06-warehouse-not-found-key' },
+        contextFor('operator-1'),
+      ),
+    ).rejects.toThrow('No eligible putaway target location found');
+
+    expect(putawayTasks.tasks).toHaveLength(0);
   });
 });

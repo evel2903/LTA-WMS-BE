@@ -1,3 +1,4 @@
+import { BusinessRuleException } from '@common/Exceptions/AppException';
 import { IWarehouseRepository } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
 import { IRuleResolver } from '@modules/WarehouseProfile/Application/Interfaces/IRuleResolver';
 import {
@@ -59,8 +60,23 @@ export class PutawayRuleGate {
    * its own return shape (e.g. per-candidate eligibility) instead of aborting. `Matched === false`
    * means an empty decision — the caller falls back to its previous hardcoded behavior (ADR-5
    * backward-compat). Resolver failures still propagate (R5 fail-closed).
+   *
+   * Diverges from InboundRuleGate.Decide() on ONE failure mode: an unresolvable WarehouseId (the id
+   * is set but doesn't resolve to a real warehouse — a data-integrity gap, not "no WarehouseId
+   * given"). The shared ResolveRuleGate treats that as an empty decision (correct ADR-5 backward-compat
+   * for #1-#4, which are non-safety). This gate also evaluates Compliance hard-blocks (#5,
+   * RULE-COM-COLD/DG/BONDED-01) — silently falling through there would bypass a cold-chain/DG/bonded
+   * check instead of blocking, so this gate fails closed instead (IRE-06).
    */
   public async Decide(input: PutawayRuleGateInput): Promise<RuleGateDecision> {
+    if (input.WarehouseId) {
+      const warehouse = await this.warehouses.FindById(input.WarehouseId);
+      if (!warehouse) {
+        throw new BusinessRuleException('Warehouse not found for putaway rule evaluation', {
+          WarehouseId: input.WarehouseId,
+        });
+      }
+    }
     return ResolveRuleGate(this.resolver, this.warehouses, input);
   }
 }

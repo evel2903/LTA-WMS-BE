@@ -116,4 +116,19 @@ describe('PutawayRuleGate (real RuleResolver, seeded WT-01 baseline — AC1/AC2/
 
     await expect(gate.Evaluate({ WarehouseId: warehouseId })).rejects.toThrow('rule engine unavailable');
   });
+
+  it('IRE-06 AC1: Decide() throws when WarehouseId is set but does not resolve to a warehouse — fail-closed, not an empty decision', async () => {
+    const { gate } = await buildGate();
+
+    await expect(gate.Decide({ WarehouseId: randomUUID() })).rejects.toThrow(
+      'Warehouse not found for putaway rule evaluation',
+    );
+  });
+
+  it('IRE-06 AC1: Decide() still returns an empty decision (Matched=false) when WarehouseId itself is null/undefined — regression guard, distinct from "does not resolve"', async () => {
+    const { gate } = await buildGate();
+
+    expect(await gate.Decide({ WarehouseId: null })).toMatchObject({ Matched: false, Blocked: false });
+    expect(await gate.Decide({ WarehouseId: undefined })).toMatchObject({ Matched: false, Blocked: false });
+  });
 });
