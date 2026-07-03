@@ -285,6 +285,11 @@ export class CaptureInboundDiscrepancyUseCase {
     // (SoftWarning/AutoSuggestion) carries no escalation signal, so — like an empty decision — it
     // falls through to the profile ThresholdPolicy path rather than collapsing to WithinTolerance
     // (ADR-5: no loosening of the pre-migration threshold behavior).
+    // SkuId is the RECEIVED line's SKU (line.SkuId), not the originally planned SKU (planLine.SkuId)
+    // — a discrepancy exception exists precisely because the two can diverge, and the rule should
+    // scope against the real-world item on hand. Matches the same "received SKU" convention decision
+    // point #5 already uses (ReleasePutawayTaskUseCase reads release.SkuId, itself sourced from
+    // line.SkuId at release time — IRE-07).
     const decision = await this.ruleGate.Decide({
       WarehouseId: warehouseId,
       OwnerId: ownerId,
