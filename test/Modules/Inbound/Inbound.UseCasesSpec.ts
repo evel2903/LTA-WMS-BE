@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { BusinessRuleException, ConflictException, ForbiddenAppException } from '@common/Exceptions/AppException';
 import { SystemAuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import {
@@ -62,6 +63,11 @@ import { UomEntity } from '@modules/MasterData/Domain/Entities/UomEntity';
 import { WarehouseEntity } from '@modules/MasterData/Domain/Entities/WarehouseEntity';
 import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileEntity';
 import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/WarehouseProfileStatus';
+import { RuleDefinitionEntity } from '@modules/WarehouseProfile/Domain/Entities/RuleDefinitionEntity';
+import { WarehouseProfileRuleEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileRuleEntity';
+import { RulePrecedenceTier } from '@modules/WarehouseProfile/Domain/Enums/RulePrecedenceTier';
+import { RuleControlMode } from '@modules/WarehouseProfile/Domain/Enums/RuleControlMode';
+import { RuleStatus } from '@modules/WarehouseProfile/Domain/Enums/RuleStatus';
 import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
 import { ICoreFlowRepository } from '@modules/CoreFlow/Application/Interfaces/ICoreFlowRepository';
 import { IIntegrationRepository } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
@@ -2510,6 +2516,85 @@ describe('IRE-02 rule-driven gate-in + tolerance (real RuleResolver + seeded WT-
     expect(readiness.Allowed).toBe(true);
     expect(readiness.GateInRequired).toBe(false);
   });
+
+  it('IRE-07: ruleGate.Decide() is called with SkuId for the tolerance check — a future SKU-scoped RULE-IN-TOL-01 variant would be able to match', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.profiles.FindById.mockResolvedValue(profile({}, { receivingOverTolerancePercent: 50 }));
+    const { session, line } = await startAndConfirmLine(bundle, 14); // expected 12 → 16.7%
+
+    const decideSpy = jest.spyOn(bundle.ruleGate, 'Decide');
+    await captureQuantityVariance(bundle, session.ReceiptId, line.Id);
+
+    expect(decideSpy).toHaveBeenCalledWith(expect.objectContaining({ SkuId: 'sku-1' }));
+  });
+
+  it('IRE-07: a SKU-scoped rule variant genuinely fires when line.SkuId matches its scope — proves the threaded value is load-bearing, not just plumbing', async () => {
+    const groups = new InMemoryRuleGroupRepository();
+    await SeedRuleGroupCatalog(groups);
+    const rInboundGroup = await groups.FindByCode('R-INBOUND');
+    const definitions = new InMemoryRuleDefinitionRepository();
+    const bindings = new InMemoryWarehouseProfileRuleRepository();
+    const profiles = new InMemoryWarehouseProfileRepository();
+    const skuScopedProfile = new WarehouseProfileEntity({
+      Id: 'wp-demo-ire07',
+      ProfileCode: InboundBaselineProfileCode,
+      ProfileName: 'Demo WT-01 (IRE-07 SKU-scoped test)',
+      WarehouseTypeCode: InboundBaselineWarehouseTypeCode,
+      WarehouseId: 'warehouse-1',
+      OwnerId: 'owner-1',
+      Version: 1,
+      Status: WarehouseProfileStatus.Active,
+      ScopeKey: 'warehouse-1:owner-1',
+      EffectiveFrom: new Date('2020-01-01T00:00:00.000Z'),
+      CreatedAt: now,
+      UpdatedAt: now,
+    });
+    await profiles.Create(skuScopedProfile);
+    // Scoped to SkuId='sku-1' (matches createRequest()'s line) — a mismatching SKU could never
+    // reach this assertion at all, so a HardBlock firing here can ONLY be explained by the SkuId
+    // this diff now threads through actually driving the rule's scope match.
+    const skuScopedRule = new RuleDefinitionEntity({
+      Id: randomUUID(),
+      RuleCode: 'RULE-IN-TOL-SKU-TEST',
+      RuleName: 'SKU-scoped tolerance test rule (IRE-07)',
+      RuleGroupId: rInboundGroup!.Id,
+      PrecedenceTier: RulePrecedenceTier.Operation,
+      ControlMode: RuleControlMode.HardBlock,
+      WarehouseTypeCode: InboundBaselineWarehouseTypeCode,
+      SkuId: 'sku-1',
+      ScopeKey: 'warehouse-1:owner-1:sku-1',
+      ConditionJson: { Operator: 'ALL', Predicates: [{ Field: 'overUnderPct', Comparator: 'GT', Value: 0 }] },
+      ActionJson: { Type: 'BLOCK', Params: { Message: 'IRE-07 SKU-scoped test rule' } },
+      Status: RuleStatus.Active,
+      EffectiveFrom: new Date('2020-01-01T00:00:00.000Z'),
+      CreatedAt: now,
+      UpdatedAt: now,
+    });
+    await definitions.Create(skuScopedRule);
+    await bindings.Create(
+      new WarehouseProfileRuleEntity({
+        Id: randomUUID(),
+        WarehouseProfileId: skuScopedProfile.Id,
+        RuleDefinitionId: skuScopedRule.Id,
+        CreatedAt: now,
+        UpdatedAt: now,
+      }),
+    );
+    const warehouses = new InMemoryWarehouseRepository();
+    warehouses.Seed(warehouse());
+    const resolver = new RuleResolver(profiles, definitions, bindings, groups, new ConditionEvaluator());
+    const ruleGate = new InboundRuleGate(resolver, warehouses);
+
+    const bundle = repoBundle();
+    bundle.ruleGate = ruleGate;
+    bundle.profiles.FindById.mockResolvedValue(profile({}, { receivingOverTolerancePercent: 50 }));
+    const { session, line } = await startAndConfirmLine(bundle, 14); // expected 12 → line.SkuId='sku-1'
+
+    const discrepancy = await captureQuantityVariance(bundle, session.ReceiptId, line.Id);
+
+    expect(discrepancy.ToleranceDecision).toBe(InboundDiscrepancyToleranceDecision.OverToleranceHardBlocked);
+  });
 });
 
 describe('IRE-03 rule-driven QC trigger (real RuleResolver + seeded WT-01, Partner.RiskLevel)', () => {
@@ -2737,5 +2822,22 @@ describe('IRE-04 rule-driven LPN required (real RuleResolver + seeded WT-01)', (
 
     expect(release.InventoryStatusCode).toBe('READY_FOR_PUTAWAY');
     expect(decideSpy).not.toHaveBeenCalled();
+  });
+
+  it('IRE-07: ruleGate.Decide() is called with SkuId — a future SKU-scoped RULE-LPN-REQ-01 variant would be able to match', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.profiles.FindById.mockResolvedValue(profile({ lpnControlled: true }));
+    const { session, line } = await startAndConfirmLineForRelease(bundle, 'ire07-lpn-skuid');
+
+    const decideSpy = jest.spyOn(bundle.ruleGate, 'Decide');
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire07-lpn-skuid-release' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(decideSpy).toHaveBeenCalledWith(expect.objectContaining({ SkuId: 'sku-1' }));
   });
 });

@@ -99,11 +99,13 @@ export class ReleaseInboundToPutawayUseCase {
     // profile means no scope to gate on, so skip the rule call entirely (IRE-02's null-profile
     // divergence lesson). request.RequireLpn already forces the outcome on its own (and wins
     // RequiredBy priority below), so skip the rule call in that case too — wasted work otherwise.
+    // SkuId is the received line's SKU — matches decision point #5's convention (IRE-07).
     let ruleLpnRequired = false;
     if (profile && request.RequireLpn !== true) {
       const decision = await this.ruleGate.Decide({
         WarehouseId: receipt.WarehouseId,
         OwnerId: receipt.OwnerId,
+        SkuId: line.SkuId,
         Attributes: {
           [InboundRuleAttributeKeys.LpnControlled]: this.BoolPolicy(profile.StrategyPolicy.lpnControlled),
           [InboundRuleAttributeKeys.HasLpn]: lpn !== null,
