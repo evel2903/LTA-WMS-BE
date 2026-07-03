@@ -77,13 +77,17 @@ export class EvaluateQcTaskUseCase {
       this.skus.FindById(line.SkuId),
       this.partners.FindById(aggregate.Plan.SupplierId),
     ]);
-    const ruleDecision = await this.ruleGate.Decide({
-      WarehouseId: receipt.WarehouseId,
-      OwnerId: receipt.OwnerId,
-      SkuId: line.SkuId,
-      SupplierId: aggregate.Plan.SupplierId,
-      Attributes: { [InboundRuleAttributeKeys.SupplierRisk]: supplier?.RiskLevel?.toLowerCase() ?? null },
-    });
+    // ADR-5 (IRE-08): a plan with no linked WarehouseProfile was never gated pre-migration, so we do
+    // NOT let a scope-resolved rule newly gate it — matches decision point #1's identical guard.
+    const ruleDecision = profile
+      ? await this.ruleGate.Decide({
+          WarehouseId: receipt.WarehouseId,
+          OwnerId: receipt.OwnerId,
+          SkuId: line.SkuId,
+          SupplierId: aggregate.Plan.SupplierId,
+          Attributes: { [InboundRuleAttributeKeys.SupplierRisk]: supplier?.RiskLevel?.toLowerCase() ?? null },
+        })
+      : { Matched: false, Blocked: false, ApprovalRequired: false, RuleCode: null, ReasonReadiness: null };
     const decision = this.DecideRequirement(
       request,
       line.DiscrepancySignals.length > 0,
