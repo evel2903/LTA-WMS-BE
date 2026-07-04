@@ -618,7 +618,7 @@ const seededInboundRuleGate = async (): Promise<InboundRuleGate> => {
     }),
   );
   const seed = await SeedInboundRuleBaseline(groups, definitions, bindings, profiles);
-  expect(seed.DefinitionsCreated).toBe(8);
+  expect(seed.DefinitionsCreated).toBe(9);
   // Make seeded rules clock-independent: SeedInboundRuleBaseline stamps EffectiveFrom=2026-07-01,
   // but Decide() sets no EvaluatedAt so the resolver defaults to the wall clock. Pin the seeded
   // definitions to a safely-past date so these parity tests never flip on a machine/CI clock.
@@ -2663,6 +2663,8 @@ describe('IRE-02 rule-driven gate-in + tolerance (real RuleResolver + seeded WT-
 describe('IRE-03 rule-driven QC trigger (real RuleResolver + seeded WT-01, Partner.RiskLevel)', () => {
   const highRiskSupplier = () => Object.assign(supplier(), { RiskLevel: PartnerRiskLevel.High });
 
+  const mediumRiskSupplier = () => Object.assign(supplier(), { RiskLevel: PartnerRiskLevel.Medium });
+
   const lowRiskSupplier = () => Object.assign(supplier(), { RiskLevel: PartnerRiskLevel.Low });
 
   const startAndConfirmLine = async (bundle: ReturnType<typeof repoBundle>) => {
@@ -2802,6 +2804,75 @@ describe('IRE-03 rule-driven QC trigger (real RuleResolver + seeded WT-01, Partn
     expect(task.Required).toBe(false);
     expect(task.TriggerReason).toBe('NotRequired');
     expect(decideSpy).not.toHaveBeenCalled();
+  });
+
+  it('IRE-10 rule-driven sampling: seeded RULE-QC-SAMPLE-01 (supplierRisk=medium) sets samplePercent=20, persists SamplingPercent and triggers QC', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.partners.FindById.mockResolvedValue(mediumRiskSupplier());
+    bundle.profiles.FindById.mockResolvedValue(profile({})); // no ThresholdPolicy.qcSamplePercent fallback
+    const { session, line } = await startAndConfirmLine(bundle);
+
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire10-qc-sample-1' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    expect(task.Required).toBe(true);
+    expect(task.TriggerReason).toBe('SamplingPolicy');
+    expect(task.TriggerPolicyJson?.RuleCode).toBe('RULE-QC-SAMPLE-01');
+    expect(task.SamplingPercent).toBe(20);
+  });
+
+  it('IRE-10 backward-compat: no rule match falls back to ThresholdPolicy.qcSamplePercent unchanged, and the fallback percent is persisted (previously discarded)', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.partners.FindById.mockResolvedValue(lowRiskSupplier()); // matches no seeded QC rule
+    bundle.profiles.FindById.mockResolvedValue(profile({}, { qcSamplePercent: 15 }));
+    const { session, line } = await startAndConfirmLine(bundle);
+
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire10-qc-sample-2' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    expect(task.Required).toBe(true);
+    expect(task.TriggerReason).toBe('SamplingPolicy');
+    expect(task.TriggerPolicyJson?.RuleCode).toBeNull();
+    expect(task.SamplingPercent).toBe(15);
+  });
+
+  it('IRE-10 regression: RULE-QC-TRIG-01 (supplierRisk=high, REQUIRE_APPROVAL) has no samplingPercent Param, so SamplingPercent stays null unaffected by the new ActionParams field', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.partners.FindById.mockResolvedValue(highRiskSupplier());
+    bundle.profiles.FindById.mockResolvedValue(profile({})); // no ThresholdPolicy.qcSamplePercent fallback
+    const { session, line } = await startAndConfirmLine(bundle);
+
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire10-qc-sample-3' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    expect(task.Required).toBe(true);
+    expect(task.TriggerPolicyJson?.RuleCode).toBe('RULE-QC-TRIG-01');
+    expect(task.SamplingPercent).toBeNull();
+  });
+
+  it('IRE-10 double-fallback: no rule matches AND no ThresholdPolicy.qcSamplePercent set → SamplingPercent stays null (not just Required=false)', async () => {
+    const bundle = repoBundle();
+    bundle.ruleGate = await seededInboundRuleGate();
+    bundle.partners.FindById.mockResolvedValue(lowRiskSupplier()); // matches no seeded QC rule
+    bundle.profiles.FindById.mockResolvedValue(profile({})); // no ThresholdPolicy.qcSamplePercent either
+    const { session, line } = await startAndConfirmLine(bundle);
+
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ire10-qc-sample-4' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    expect(task.Required).toBe(false);
+    expect(task.SamplingPercent).toBeNull();
   });
 });
 

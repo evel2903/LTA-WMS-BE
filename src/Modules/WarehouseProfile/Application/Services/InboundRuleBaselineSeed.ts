@@ -65,6 +65,18 @@ export const InboundRuleBaselineEntries: ReadonlyArray<InboundRuleBaselineEntry>
     },
   },
   {
+    RuleCode: 'RULE-QC-SAMPLE-01',
+    RuleName: 'Medium supplier risk requires QC sampling',
+    RuleGroupCode: 'R-INBOUND',
+    PrecedenceTier: RulePrecedenceTier.Operation,
+    ControlMode: RuleControlMode.AutoSuggestion,
+    ConditionJson: { Operator: 'ANY', Predicates: [{ Field: 'supplierRisk', Comparator: 'EQ', Value: 'medium' }] },
+    ActionJson: {
+      Type: 'SET_FLAG',
+      Params: { samplingPercent: 20, Message: 'Supplier rủi ro trung bình — lấy mẫu 20% QC' },
+    },
+  },
+  {
     RuleCode: 'RULE-LPN-REQ-01',
     RuleName: 'LPN required when profile controls LPN',
     RuleGroupCode: 'R-INBOUND',

@@ -60,6 +60,9 @@ export class QcTaskOrmEntity {
   @Column({ name: 'trigger_policy_json', type: 'jsonb', nullable: true })
   public TriggerPolicyJson!: Record<string, unknown> | null;
 
+  @Column({ name: 'sampling_percent', type: 'numeric', precision: 5, scale: 2, nullable: true })
+  public SamplingPercent!: number | null;
+
   @Column({ name: 'inventory_status_code', type: 'varchar', length: 80 })
   public InventoryStatusCode!: string;
 

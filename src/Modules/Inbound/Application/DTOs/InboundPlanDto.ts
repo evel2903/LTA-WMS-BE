@@ -396,6 +396,7 @@ export interface QcTaskDto {
   Required: boolean;
   TriggerReason: string;
   TriggerPolicyJson: Record<string, unknown> | null;
+  SamplingPercent: number | null;
   InventoryStatusCode: string;
   TargetInventoryStatusCode: string | null;
   ReasonCode: string | null;

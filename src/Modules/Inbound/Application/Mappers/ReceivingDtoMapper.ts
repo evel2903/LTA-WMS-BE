@@ -226,6 +226,7 @@ export class ReceivingDtoMapper {
       Required: task.Required,
       TriggerReason: task.TriggerReason,
       TriggerPolicyJson: task.TriggerPolicyJson,
+      SamplingPercent: task.SamplingPercent,
       InventoryStatusCode: task.InventoryStatusCode,
       TargetInventoryStatusCode: task.TargetInventoryStatusCode,
       ReasonCode: task.ReasonCode,

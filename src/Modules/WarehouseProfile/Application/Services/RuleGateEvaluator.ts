@@ -45,10 +45,19 @@ export interface RuleGateDecision {
   Warning?: { Message: string; RuleCode: string };
   Suggestion?: { Message: string; RuleCode: string };
   ReasonReadiness: ReasonReadiness | null;
+  /** Winning rule's ActionJson.Params, verbatim (IRE-10) — e.g. a SET_FLAG rule's numeric payload. Null when no rule won or the winning action carries no Params. */
+  ActionParams: Record<string, unknown> | null;
 }
 
 function EmptyDecision(): RuleGateDecision {
-  return { Matched: false, Blocked: false, ApprovalRequired: false, RuleCode: null, ReasonReadiness: null };
+  return {
+    Matched: false,
+    Blocked: false,
+    ApprovalRequired: false,
+    RuleCode: null,
+    ReasonReadiness: null,
+    ActionParams: null,
+  };
 }
 
 /**
@@ -95,6 +104,9 @@ export async function ResolveRuleGate(
   // failure must propagate and block the transaction, never be swallowed into a no-op decision.
   const decision = await resolver.Resolve(context);
 
+  const winnerAction = decision.Winner?.ActionJson as { Params?: Record<string, unknown> } | undefined;
+  const winnerParams = winnerAction?.Params ?? null;
+
   return {
     Matched: decision.Winner !== null,
     Blocked: !decision.Allowed,
@@ -103,6 +115,7 @@ export async function ResolveRuleGate(
     Warning: decision.Warning,
     Suggestion: decision.Suggestion,
     ReasonReadiness: decision.ReasonReadiness,
+    ActionParams: winnerParams,
   };
 }
 
