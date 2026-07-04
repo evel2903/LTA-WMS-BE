@@ -79,7 +79,7 @@ describe('InboundRuleGate (real RuleResolver, seeded WT-01 baseline — AC1/AC2/
     const profile = BuildDemoProfile();
     await profiles.Create(profile);
     const seedResult = await SeedInboundRuleBaseline(groups, definitions, bindings, profiles);
-    expect(seedResult.DefinitionsCreated).toBe(8);
+    expect(seedResult.DefinitionsCreated).toBe(9);
 
     const warehouses = new InMemoryWarehouseRepository();
     warehouses.Seed(BuildWarehouse(profile.WarehouseId!));
@@ -178,5 +178,48 @@ describe('InboundRuleGate (real RuleResolver, seeded WT-01 baseline — AC1/AC2/
     const decision = await gate.Decide({ WarehouseId: randomUUID() });
 
     expect(decision).toMatchObject({ Matched: false, Blocked: false, ApprovalRequired: false });
+  });
+
+  it('IRE-10 AC1: Decide() surfaces the winning rule ActionParams verbatim when the matched rule carries a numeric payload (RULE-QC-SAMPLE-01)', async () => {
+    const { gate, profile } = await buildGate();
+
+    const decision = await gate.Decide({
+      WarehouseId: profile.WarehouseId,
+      OwnerId: profile.OwnerId,
+      Attributes: { supplierRisk: 'medium' },
+    });
+
+    expect(decision.RuleCode).toBe('RULE-QC-SAMPLE-01');
+    expect(decision.ActionParams).toEqual({
+      samplingPercent: 20,
+      Message: 'Supplier rủi ro trung bình — lấy mẫu 20% QC',
+    });
+  });
+
+  it('IRE-10 AC1: Decide() surfaces ActionParams for a matched rule with no samplingPercent key (RULE-IN-GATE-01) without inventing one', async () => {
+    const { gate, profile } = await buildGate();
+
+    const decision = await gate.Decide({
+      WarehouseId: profile.WarehouseId,
+      OwnerId: profile.OwnerId,
+      Attributes: { hasAppointment: false },
+    });
+
+    expect(decision.RuleCode).toBe('RULE-IN-GATE-01');
+    expect(decision.ActionParams).toEqual({ Message: 'Gate-in thiếu appointment, cần duyệt' });
+    expect((decision.ActionParams as Record<string, unknown>).samplingPercent).toBeUndefined();
+  });
+
+  it('IRE-10 AC1: Decide() returns ActionParams=null when no rule matches (empty decision, not just Blocked/ApprovalRequired=false)', async () => {
+    const { gate, profile } = await buildGate();
+
+    const decision = await gate.Decide({
+      WarehouseId: profile.WarehouseId,
+      OwnerId: profile.OwnerId,
+      Attributes: {},
+    });
+
+    expect(decision.Matched).toBe(false);
+    expect(decision.ActionParams).toBeNull();
   });
 });

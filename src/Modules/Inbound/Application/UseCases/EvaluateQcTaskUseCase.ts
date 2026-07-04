@@ -87,7 +87,14 @@ export class EvaluateQcTaskUseCase {
           SupplierId: aggregate.Plan.SupplierId,
           Attributes: { [InboundRuleAttributeKeys.SupplierRisk]: supplier?.RiskLevel?.toLowerCase() ?? null },
         })
-      : { Matched: false, Blocked: false, ApprovalRequired: false, RuleCode: null, ReasonReadiness: null };
+      : {
+          Matched: false,
+          Blocked: false,
+          ApprovalRequired: false,
+          RuleCode: null,
+          ReasonReadiness: null,
+          ActionParams: null,
+        };
     const decision = this.DecideRequirement(
       request,
       line.DiscrepancySignals.length > 0,
@@ -124,6 +131,7 @@ export class EvaluateQcTaskUseCase {
       Required: decision.Required,
       TriggerReason: decision.TriggerReason,
       TriggerPolicyJson: decision.PolicySnapshot,
+      SamplingPercent: decision.SamplingPercent,
       InventoryStatusCode: decision.Required ? INVENTORY_PENDING_QC : INVENTORY_READY_FOR_PUTAWAY,
       TargetInventoryStatusCode: decision.Required ? null : INVENTORY_READY_FOR_PUTAWAY,
       ReasonCode: request.ReasonCode?.trim() || null,
@@ -211,14 +219,23 @@ export class EvaluateQcTaskUseCase {
     skuRequiresQc: boolean,
     policy: Record<string, unknown>,
     ruleDecision: RuleGateDecision,
-  ): { Required: boolean; TriggerReason: string; PolicySnapshot: Record<string, unknown> } {
+  ): {
+    Required: boolean;
+    TriggerReason: string;
+    PolicySnapshot: Record<string, unknown>;
+    SamplingPercent: number | null;
+  } {
     const forceRequired = request.ForceRequired === true;
     // Rule engine is the primary source (R-QC-TRIG). Only a blocking/approval decision is
     // authoritative; a matched-but-non-blocking or empty decision falls through to the previous
     // profile key-check (ADR-5 — no loosening, same pattern fixed during IRE-02's code review).
     const ruleRequiresQc = ruleDecision.Blocked || ruleDecision.ApprovalRequired;
     const profileRequiresQc = this.BoolPolicy(policy.inboundQcRequired) || this.BoolPolicy(policy.qcRequired);
-    const samplePercent = this.NumberPolicy(policy.qcSamplePercent);
+    // Sampling percent: rule-driven (RULE-QC-SAMPLE-01, AutoSuggestion/SET_FLAG, IRE-10) takes
+    // precedence over the legacy ThresholdPolicy.qcSamplePercent hardcode; falls back unchanged
+    // when no rule supplies a numeric samplingPercent (backward-compat, no rule = old behavior).
+    const rulePercent = this.NumberPolicy(ruleDecision.ActionParams?.samplingPercent);
+    const samplePercent = rulePercent ?? this.NumberPolicy(policy.qcSamplePercent);
     const samplingRequiresQc = samplePercent !== null && samplePercent > 0;
     const policyRequiresQc = !ruleRequiresQc && (profileRequiresQc || samplingRequiresQc);
     const required = forceRequired || hasDiscrepancy || skuRequiresQc || ruleRequiresQc || policyRequiresQc;
@@ -241,6 +258,7 @@ export class EvaluateQcTaskUseCase {
         InboundQcRequired: profileRequiresQc,
         QcSamplePercent: samplePercent,
       },
+      SamplingPercent: samplePercent,
     };
   }
 

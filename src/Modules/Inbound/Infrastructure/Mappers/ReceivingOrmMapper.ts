@@ -222,6 +222,7 @@ export class ReceivingOrmMapper {
       Required: entity.Required,
       TriggerReason: entity.TriggerReason,
       TriggerPolicyJson: entity.TriggerPolicyJson,
+      SamplingPercent: entity.SamplingPercent !== null ? Number(entity.SamplingPercent) : null,
       InventoryStatusCode: entity.InventoryStatusCode,
       TargetInventoryStatusCode: entity.TargetInventoryStatusCode,
       ReasonCode: entity.ReasonCode,

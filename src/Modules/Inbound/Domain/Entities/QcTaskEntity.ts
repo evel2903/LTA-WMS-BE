@@ -19,6 +19,7 @@ export class QcTaskEntity {
   public Required: boolean;
   public TriggerReason: string;
   public TriggerPolicyJson: Record<string, unknown> | null;
+  public SamplingPercent: number | null;
   public InventoryStatusCode: string;
   public TargetInventoryStatusCode: string | null;
   public ReasonCode: string | null;
@@ -50,6 +51,7 @@ export class QcTaskEntity {
     Required: boolean;
     TriggerReason: string;
     TriggerPolicyJson?: Record<string, unknown> | null;
+    SamplingPercent?: number | null;
     InventoryStatusCode: string;
     TargetInventoryStatusCode?: string | null;
     ReasonCode?: string | null;
@@ -80,6 +82,7 @@ export class QcTaskEntity {
     this.Required = params.Required;
     this.TriggerReason = params.TriggerReason;
     this.TriggerPolicyJson = params.TriggerPolicyJson ?? null;
+    this.SamplingPercent = params.SamplingPercent ?? null;
     this.InventoryStatusCode = params.InventoryStatusCode;
     this.TargetInventoryStatusCode = params.TargetInventoryStatusCode ?? null;
     this.ReasonCode = params.ReasonCode ?? null;

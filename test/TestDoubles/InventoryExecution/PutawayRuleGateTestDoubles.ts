@@ -82,8 +82,8 @@ export const BuildSeededPutawayRuleGate = async (
   });
   await profiles.Create(profile);
   const seedResult = await SeedInboundRuleBaseline(groups, definitions, bindings, profiles);
-  if (seedResult.DefinitionsCreated !== 8) {
-    throw new Error(`Expected 8 seeded rule definitions, got ${seedResult.DefinitionsCreated}`);
+  if (seedResult.DefinitionsCreated !== 9) {
+    throw new Error(`Expected 9 seeded rule definitions, got ${seedResult.DefinitionsCreated}`);
   }
   const warehouses = new InMemoryWarehouseRepository();
   warehouses.Seed(MakePutawayDemoWarehouse(warehouseId));
