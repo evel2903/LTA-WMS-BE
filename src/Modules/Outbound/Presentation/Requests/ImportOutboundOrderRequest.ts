@@ -31,6 +31,16 @@ export class ImportOutboundOrderLineRequest {
   @IsString()
   @MaxLength(120)
   public ExternalLineReference?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  public RequestedLotNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  public RequestedSerialNumber?: string;
 }
 
 export class ImportOutboundOrderRequest {

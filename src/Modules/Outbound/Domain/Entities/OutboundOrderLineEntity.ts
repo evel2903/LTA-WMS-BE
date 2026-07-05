@@ -8,6 +8,8 @@ export class OutboundOrderLineEntity {
   public UomCode: string | null;
   public OrderedQuantity: number;
   public ExternalLineReference: string | null;
+  public RequestedLotNumber: string | null;
+  public RequestedSerialNumber: string | null;
   public ValidationErrors: string[];
   public readonly CreatedAt: Date;
 
@@ -21,6 +23,8 @@ export class OutboundOrderLineEntity {
     UomCode?: string | null;
     OrderedQuantity: number;
     ExternalLineReference?: string | null;
+    RequestedLotNumber?: string | null;
+    RequestedSerialNumber?: string | null;
     ValidationErrors?: string[];
     CreatedAt: Date;
   }) {
@@ -33,6 +37,8 @@ export class OutboundOrderLineEntity {
     this.UomCode = params.UomCode ?? null;
     this.OrderedQuantity = params.OrderedQuantity;
     this.ExternalLineReference = params.ExternalLineReference ?? null;
+    this.RequestedLotNumber = params.RequestedLotNumber ?? null;
+    this.RequestedSerialNumber = params.RequestedSerialNumber ?? null;
     this.ValidationErrors = params.ValidationErrors ?? [];
     this.CreatedAt = params.CreatedAt;
   }

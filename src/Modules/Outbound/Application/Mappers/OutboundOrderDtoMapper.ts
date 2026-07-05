@@ -49,6 +49,8 @@ export class OutboundOrderDtoMapper {
       UomCode: line.UomCode,
       OrderedQuantity: line.OrderedQuantity,
       ExternalLineReference: line.ExternalLineReference,
+      RequestedLotNumber: line.RequestedLotNumber,
+      RequestedSerialNumber: line.RequestedSerialNumber,
       ValidationErrors: line.ValidationErrors,
     };
   }

@@ -9,6 +9,8 @@ export interface AllocationInventoryCandidateFilter {
   OwnerId: string;
   SkuId: string;
   UomId: string;
+  RequestedLotNumber?: string | null;
+  RequestedSerialNumber?: string | null;
 }
 
 export interface AllocationInventoryCandidate {

@@ -275,6 +275,8 @@ export class AllocationLifecycleService {
           OwnerId: ownerId,
           SkuId: line.SkuId,
           UomId: line.UomId,
+          RequestedLotNumber: line.RequestedLotNumber,
+          RequestedSerialNumber: line.RequestedSerialNumber,
         },
         manager,
       );

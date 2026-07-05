@@ -9,6 +9,8 @@ export interface OutboundOrderLineDto {
   UomCode: string | null;
   OrderedQuantity: number;
   ExternalLineReference: string | null;
+  RequestedLotNumber: string | null;
+  RequestedSerialNumber: string | null;
   ValidationErrors: string[];
 }
 
@@ -51,6 +53,8 @@ export interface ImportOutboundOrderLineDto {
   UomId: string;
   OrderedQuantity: number;
   ExternalLineReference?: string | null;
+  RequestedLotNumber?: string | null;
+  RequestedSerialNumber?: string | null;
 }
 
 export interface ImportOutboundOrderDto {
