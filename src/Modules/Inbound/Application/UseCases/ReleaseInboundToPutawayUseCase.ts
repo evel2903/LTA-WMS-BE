@@ -34,6 +34,7 @@ import { LabelBlockingValidationResultDto } from '@modules/BarcodeLabel/Applicat
 import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/OutboxMessageEntity';
 import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
 import { IIntegrationRepository } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
+import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { IWarehouseProfileRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
 import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileEntity';
 
@@ -59,6 +60,7 @@ export class ReleaseInboundToPutawayUseCase {
     private readonly coreFlows: ICoreFlowRepository,
     private readonly integrations: IIntegrationRepository,
     private readonly reasonCatalog: IReasonCodeCatalog,
+    private readonly skus: ISkuRepository,
     private readonly audited: AuditedTransaction,
     private readonly permissionChecker?: IPermissionChecker,
   ) {}
@@ -90,6 +92,13 @@ export class ReleaseInboundToPutawayUseCase {
       throw new BusinessRuleException('WarehouseProfile not found for release');
 
     const lpn = await this.receiving.FindInboundLpnByReceiptLineId(line.Id);
+    // IDC-02: SKU.LpnControlled is a SEPARATE source from the profile-level lpnControlled key the
+    // rule gate/ProfileRequiresLpn read below -- OR-combined into lpnRequired, never replacing
+    // either. Fail-closed on an unresolvable SkuId (same IRE-06 lesson as the compliance path in
+    // ReleasePutawayTaskUseCase): an orphaned SkuId must not silently read as "no requirement".
+    const sku = await this.skus.FindById(line.SkuId);
+    if (!sku) throw new BusinessRuleException('SKU not found for release', { SkuId: line.SkuId });
+    const skuRequiresLpn = sku.LpnControlled === true;
     const profileRequiresLpn = this.ProfileRequiresLpn(profile);
     // Rule engine reads its OWN policy key (`lpnControlled`), independent of the legacy
     // `inboundLpnRequired`/`lpnRequired` keys `ProfileRequiresLpn` reads — otherwise the rule could
@@ -116,10 +125,17 @@ export class ReleaseInboundToPutawayUseCase {
       // IRE-09: surface which rule fired on the persisted release record for audit/investigation.
       ruleCode = decision.RuleCode;
     }
-    const lpnRequired = request.RequireLpn === true || ruleLpnRequired || profileRequiresLpn;
+    const lpnRequired = request.RequireLpn === true || ruleLpnRequired || profileRequiresLpn || skuRequiresLpn;
     if (lpnRequired && !lpn) {
       await this.AuditBlocked(context, receipt, line, 'LPN/SSCC is required before release to putaway', {
-        RequiredBy: request.RequireLpn === true ? 'Request' : ruleLpnRequired ? 'Rule' : 'WarehouseProfile',
+        RequiredBy:
+          request.RequireLpn === true
+            ? 'Request'
+            : ruleLpnRequired
+              ? 'Rule'
+              : profileRequiresLpn
+                ? 'WarehouseProfile'
+                : 'Sku',
       });
       throw new BusinessRuleException('LPN/SSCC is required before release to putaway');
     }

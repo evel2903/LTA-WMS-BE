@@ -514,7 +514,7 @@ const uom = () =>
     UpdatedAt: now,
   });
 
-const sku = () =>
+const sku = (overrides: Partial<ConstructorParameters<typeof SkuEntity>[0]> = {}) =>
   new SkuEntity({
     Id: 'sku-1',
     SkuCode: 'SKU-A',
@@ -525,6 +525,7 @@ const sku = () =>
     InventoryUomId: 'uom-1',
     CreatedAt: now,
     UpdatedAt: now,
+    ...overrides,
   });
 
 const profile = (strategyPolicy: Record<string, unknown> = {}, thresholdPolicy: Record<string, unknown> = {}) =>
@@ -651,7 +652,7 @@ const repoBundle = () => {
   const partners = { FindById: jest.fn<Promise<PartnerEntity | null>, [string]>(async () => supplier()) };
   const owners = { FindById: jest.fn(async () => owner()) };
   const warehouses = { FindById: jest.fn(async () => warehouse()) };
-  const skus = { FindById: jest.fn(async () => sku()) };
+  const skus = { FindById: jest.fn<Promise<SkuEntity | null>, [string]>(async () => sku()) };
   const uoms = { FindById: jest.fn(async () => uom()) };
   const coreFlows = {
     Instances: [] as unknown[],
@@ -786,6 +787,7 @@ const confirmReceiptLineUseCase = (bundle: ReturnType<typeof repoBundle>) =>
     bundle.integrations as unknown as IIntegrationRepository,
     bundle.reasonCatalog,
     readinessUseCase(bundle),
+    bundle.skus as unknown as ISkuRepository,
     bundle.audited as unknown as AuditedTransaction,
     bundle.permissionChecker,
   );
@@ -839,6 +841,7 @@ const releaseInboundToPutawayUseCase = (bundle: ReturnType<typeof repoBundle>) =
     bundle.coreFlows as unknown as ICoreFlowRepository,
     bundle.integrations as unknown as IIntegrationRepository,
     bundle.reasonCatalog,
+    bundle.skus as unknown as ISkuRepository,
     bundle.audited as unknown as AuditedTransaction,
     bundle.permissionChecker,
   );
@@ -1380,6 +1383,184 @@ describe('Inbound plan use cases', () => {
         { ...SystemAuditContext, ActorUserId: 'user-1' },
       ),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it('blocks receipt line confirm missing SerialNumber when the SKU has SerialControlled=true (IDC-02)', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await expect(
+      confirmReceiptLineUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          InboundPlanLineId: created.Lines[0].Id,
+          ActualQuantity: 12,
+          IdempotencyKey: 'idc02-missing-serial-1',
+          ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('blocks receipt line confirm missing LotNumber when the SKU has LotControlled=true (IDC-02)', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ LotControlled: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await expect(
+      confirmReceiptLineUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          InboundPlanLineId: created.Lines[0].Id,
+          ActualQuantity: 12,
+          IdempotencyKey: 'idc02-missing-lot-1',
+          ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('blocks receipt line confirm missing ExpiryDate when the SKU has ExpiryControlled=true (IDC-02)', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ ExpiryControlled: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await expect(
+      confirmReceiptLineUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          InboundPlanLineId: created.Lines[0].Id,
+          ActualQuantity: 12,
+          IdempotencyKey: 'idc02-missing-expiry-1',
+          ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('allows receipt line confirm when the SKU has no control flags set — regression guard (IDC-02)', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'idc02-no-flags-1',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(line.Status).toBe(ReceiptLineStatus.Received);
+  });
+
+  it('rejects receipt line confirm when the SKU cannot be resolved — fail-closed (IDC-02)', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    // Plan/line creation above needs the SKU to resolve normally; only the confirm-line call itself
+    // exercises the fail-closed path.
+    bundle.skus.FindById.mockResolvedValue(null);
+
+    await expect(
+      confirmReceiptLineUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          InboundPlanLineId: created.Lines[0].Id,
+          ActualQuantity: 12,
+          IdempotencyKey: 'idc02-sku-not-found-1',
+          ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('requires LPN at release when the SKU has LpnControlled=true, even though profile/rule do not require it (IDC-02)', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ LpnControlled: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'idc02-sku-lpn-required-line',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'idc02-sku-lpn-required-qc' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'idc02-sku-lpn-required-release' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects release when the SKU cannot be resolved — fail-closed (IDC-02)', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'idc02-release-sku-not-found-line',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'idc02-release-sku-not-found-qc' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    bundle.skus.FindById.mockResolvedValue(null);
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'idc02-release-sku-not-found-rel' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
   });
 
   it('rejects receipt line confirm when Receipt Update permission is denied without side effects', async () => {
