@@ -25,7 +25,7 @@ export class PutawayTaskOrmMapper {
       LpnCode: entity.LpnCode,
       SsccCode: entity.SsccCode,
       LotNumber: entity.LotNumber,
-      ExpiryDate: entity.ExpiryDate,
+      ExpiryDate: entity.ExpiryDate ? new Date(entity.ExpiryDate) : null,
       SerialNumber: entity.SerialNumber,
       InventoryStatusCode: entity.InventoryStatusCode,
       SourceLocationId: entity.SourceLocationId,
