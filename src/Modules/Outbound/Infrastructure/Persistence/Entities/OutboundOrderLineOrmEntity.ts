@@ -32,6 +32,12 @@ export class OutboundOrderLineOrmEntity {
   @Column({ name: 'external_line_reference', type: 'varchar', length: 120, nullable: true })
   public ExternalLineReference!: string | null;
 
+  @Column({ name: 'requested_lot_number', type: 'varchar', length: 100, nullable: true })
+  public RequestedLotNumber!: string | null;
+
+  @Column({ name: 'requested_serial_number', type: 'varchar', length: 100, nullable: true })
+  public RequestedSerialNumber!: string | null;
+
   @Column({ name: 'validation_errors', type: 'jsonb', default: () => `'[]'::jsonb` })
   public ValidationErrors!: string[];
 

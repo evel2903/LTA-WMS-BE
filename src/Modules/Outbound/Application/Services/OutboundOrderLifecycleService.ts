@@ -177,6 +177,8 @@ export class OutboundOrderLifecycleService {
           UomCode: resolution.LineRefs[index]?.UomCode ?? null,
           OrderedQuantity: line.OrderedQuantity,
           ExternalLineReference: line.ExternalLineReference,
+          RequestedLotNumber: line.RequestedLotNumber,
+          RequestedSerialNumber: line.RequestedSerialNumber,
           ValidationErrors: resolution.LineRefs[index]?.ValidationErrors ?? [],
           CreatedAt: now,
         }),
@@ -817,6 +819,8 @@ export class OutboundOrderLifecycleService {
         UomId: line.UomId,
         OrderedQuantity: line.OrderedQuantity,
         ExternalLineReference: line.ExternalLineReference,
+        RequestedLotNumber: line.RequestedLotNumber,
+        RequestedSerialNumber: line.RequestedSerialNumber,
       })),
     };
   }
@@ -838,6 +842,8 @@ export class OutboundOrderLifecycleService {
       UomId: line.UomId?.trim() ?? '',
       OrderedQuantity: Number(line.OrderedQuantity),
       ExternalLineReference: line.ExternalLineReference?.trim() || null,
+      RequestedLotNumber: line.RequestedLotNumber?.trim() || null,
+      RequestedSerialNumber: line.RequestedSerialNumber?.trim() || null,
     }));
     const normalized: ImportOutboundOrderDto = {
       SourceSystem: request.SourceSystem?.trim() ?? '',

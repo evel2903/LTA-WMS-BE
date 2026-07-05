@@ -22,7 +22,7 @@ export class AllocationInventoryRepository implements IAllocationInventoryReposi
     manager?: EntityManager,
   ): Promise<AllocationInventoryCandidate[]> {
     const repo = manager ? manager.getRepository(InventoryBalanceOrmEntity) : this.balances;
-    const entities = await repo
+    let qb = repo
       .createQueryBuilder('balance')
       .innerJoinAndSelect('balance.Dimension', 'dimension')
       .innerJoinAndSelect('dimension.InventoryStatus', 'status')
@@ -33,7 +33,18 @@ export class AllocationInventoryRepository implements IAllocationInventoryReposi
       .andWhere('status.allows_allocation = true')
       .andWhere('status.is_terminal = false')
       .andWhere('status.is_milestone = false')
-      .andWhere('balance.qty_available > 0')
+      .andWhere('balance.qty_available > 0');
+    if (filter.RequestedLotNumber) {
+      qb = qb.andWhere('dimension.lot_number = :requestedLotNumber', {
+        requestedLotNumber: filter.RequestedLotNumber,
+      });
+    }
+    if (filter.RequestedSerialNumber) {
+      qb = qb.andWhere('dimension.serial_number = :requestedSerialNumber', {
+        requestedSerialNumber: filter.RequestedSerialNumber,
+      });
+    }
+    const entities = await qb
       .orderBy('dimension.expiry_date', 'ASC', 'NULLS LAST')
       .addOrderBy('dimension.production_date', 'ASC', 'NULLS LAST')
       .addOrderBy('balance.created_at', 'ASC')

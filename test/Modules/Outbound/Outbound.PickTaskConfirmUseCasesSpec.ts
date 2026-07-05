@@ -366,8 +366,12 @@ function fakeInventoryResult(): InventoryControlResultDto {
   } as InventoryControlResultDto;
 }
 
-function buildHarness(input?: { mobileTask?: MobileTaskEntity; scans?: MobileScanEventEntity[] }) {
-  const pickReleases = new MemoryPickReleaseRepository();
+function buildHarness(input?: {
+  mobileTask?: MobileTaskEntity;
+  scans?: MobileScanEventEntity[];
+  pickTask?: PickTaskEntity;
+}) {
+  const pickReleases = new MemoryPickReleaseRepository(input?.pickTask);
   const taskExecution = new MemoryTaskExecutionRepository(input?.mobileTask, input?.scans);
   const audited = new MemoryAuditedTransaction();
   const integrations = new MemoryIntegrationRepository();
@@ -615,5 +619,49 @@ describe('PickTaskConfirmationService', () => {
         expect.objectContaining({ ObjectType: ObjectType.MobileTask, Result: AuditResult.Failed }),
       ]),
     );
+  });
+
+  it('rejects pick confirmation when the operator scans a different serial than the allocated dimension (IDC-05 AC5)', async () => {
+    const { service, inventoryControl } = buildHarness({
+      pickTask: makePickTask({ SerialNumber: 'SN-1' }),
+      scans: [
+        makeScan({ id: 'scan-location', scanType: MobileScanType.Location, rawValue: 'loc-source' }),
+        makeScan({
+          id: 'scan-item',
+          scanType: MobileScanType.Item,
+          rawValue: '(01)00000000000001(21)SN-WRONG(30)5',
+          normalizedValue: '00000000000001',
+          resolvedObjectId: 'sku-1',
+          parsed: { Lot: 'LOT-1', Serial: 'SN-WRONG', Quantity: 5 },
+        }),
+      ],
+    });
+
+    await expect(service.Confirm('pick-task-1', { IdempotencyKey: 'pick-confirm-serial' }, context)).rejects.toThrow(
+      'Pick scan confirmation failed',
+    );
+    expect(inventoryControl.ChangeStatusInTransaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects pick confirmation when the operator scans a different lot than the allocated dimension (IDC-05 AC5)', async () => {
+    const { service, inventoryControl } = buildHarness({
+      pickTask: makePickTask({ LotNumber: 'LOT-REQUESTED' }),
+      scans: [
+        makeScan({ id: 'scan-location', scanType: MobileScanType.Location, rawValue: 'loc-source' }),
+        makeScan({
+          id: 'scan-item',
+          scanType: MobileScanType.Item,
+          rawValue: '(01)00000000000001(10)LOT-OTHER(30)5',
+          normalizedValue: '00000000000001',
+          resolvedObjectId: 'sku-1',
+          parsed: { Lot: 'LOT-OTHER', Quantity: 5 },
+        }),
+      ],
+    });
+
+    await expect(service.Confirm('pick-task-1', { IdempotencyKey: 'pick-confirm-lot' }, context)).rejects.toThrow(
+      'Pick scan confirmation failed',
+    );
+    expect(inventoryControl.ChangeStatusInTransaction).not.toHaveBeenCalled();
   });
 });

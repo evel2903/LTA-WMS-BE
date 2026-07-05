@@ -68,6 +68,8 @@ export class OutboundOrmMapper {
       UomCode: entity.UomCode,
       OrderedQuantity: Number(entity.OrderedQuantity),
       ExternalLineReference: entity.ExternalLineReference,
+      RequestedLotNumber: entity.RequestedLotNumber,
+      RequestedSerialNumber: entity.RequestedSerialNumber,
       ValidationErrors: entity.ValidationErrors ?? [],
       CreatedAt: entity.CreatedAt,
     });

@@ -83,15 +83,28 @@ class MemoryAllocationInventoryRepository implements IAllocationInventoryReposit
   constructor(public candidates: AllocationInventoryCandidate[]) {}
 
   async ListCandidates(filter: AllocationInventoryCandidateFilter): Promise<AllocationInventoryCandidate[]> {
-    return this.candidates.filter(
-      (item) =>
-        item.Dimension.WarehouseId === filter.WarehouseId &&
-        item.Dimension.OwnerId === filter.OwnerId &&
-        item.Dimension.SkuId === filter.SkuId &&
-        item.Dimension.UomId === filter.UomId &&
-        item.InventoryStatusCode === 'AVAILABLE' &&
-        item.Balance.QtyAvailable > 0,
-    );
+    // Mirrors AllocationInventoryRepository's real SQL: ORDER BY expiry_date ASC NULLS LAST,
+    // production_date ASC NULLS LAST, created_at ASC (IDC-05 regression coverage needs this
+    // to actually exercise FEFO ordering across multiple candidates, not just insertion order).
+    const nullsLast = (value: Date | null) => value?.getTime() ?? Number.POSITIVE_INFINITY;
+    return this.candidates
+      .filter(
+        (item) =>
+          item.Dimension.WarehouseId === filter.WarehouseId &&
+          item.Dimension.OwnerId === filter.OwnerId &&
+          item.Dimension.SkuId === filter.SkuId &&
+          item.Dimension.UomId === filter.UomId &&
+          item.InventoryStatusCode === 'AVAILABLE' &&
+          item.Balance.QtyAvailable > 0 &&
+          (!filter.RequestedLotNumber || item.Dimension.LotNumber === filter.RequestedLotNumber) &&
+          (!filter.RequestedSerialNumber || item.Dimension.SerialNumber === filter.RequestedSerialNumber),
+      )
+      .sort(
+        (left, right) =>
+          nullsLast(left.Dimension.ExpiryDate) - nullsLast(right.Dimension.ExpiryDate) ||
+          nullsLast(left.Dimension.ProductionDate) - nullsLast(right.Dimension.ProductionDate) ||
+          left.Balance.CreatedAt.getTime() - right.Balance.CreatedAt.getTime(),
+      );
   }
 }
 
@@ -213,7 +226,10 @@ class MemoryPermissionChecker implements IPermissionChecker {
   }
 }
 
-function orderAggregate(status: OutboundOrderStatus = OutboundOrderStatus.Validated): OutboundOrderAggregate {
+function orderAggregate(
+  status: OutboundOrderStatus = OutboundOrderStatus.Validated,
+  lineOverrides: { RequestedLotNumber?: string | null; RequestedSerialNumber?: string | null } = {},
+): OutboundOrderAggregate {
   const now = new Date('2026-06-24T00:00:00.000Z');
   const order = new OutboundOrderEntity({
     Id: 'outbound-1',
@@ -241,6 +257,8 @@ function orderAggregate(status: OutboundOrderStatus = OutboundOrderStatus.Valida
     UomId: 'uom-1',
     UomCode: 'EA',
     OrderedQuantity: 5,
+    RequestedLotNumber: lineOverrides.RequestedLotNumber,
+    RequestedSerialNumber: lineOverrides.RequestedSerialNumber,
     CreatedAt: now,
   });
   return { Order: order, Lines: [line] };
@@ -257,7 +275,11 @@ function balance(id: string, dimensionId: string, qtyOnHand: number, qtyReserved
   });
 }
 
-function dimension(id: string, ownerId = 'owner-1') {
+function dimension(
+  id: string,
+  ownerId = 'owner-1',
+  overrides: { LotNumber?: string | null; SerialNumber?: string | null } = {},
+) {
   return new InventoryDimensionEntity({
     Id: id,
     OwnerId: ownerId,
@@ -267,7 +289,8 @@ function dimension(id: string, ownerId = 'owner-1') {
     InventoryStatusId: 'status-available',
     DimensionKeyHash: `hash-${id}`,
     UomId: 'uom-1',
-    LotNumber: 'LOT-1',
+    LotNumber: overrides.LotNumber ?? 'LOT-1',
+    SerialNumber: overrides.SerialNumber ?? null,
     ExpiryDate: new Date('2026-12-31T00:00:00.000Z'),
     CreatedAt: new Date('2026-06-24T00:00:00.000Z'),
     UpdatedAt: new Date('2026-06-24T00:00:00.000Z'),
@@ -288,9 +311,10 @@ function harness(
     candidates?: AllocationInventoryCandidate[];
     balances?: InventoryBalanceEntity[];
     permissionAllowed?: boolean;
+    lineOverrides?: { RequestedLotNumber?: string | null; RequestedSerialNumber?: string | null };
   } = {},
 ) {
-  const orders = new MemoryOutboundOrderRepository(orderAggregate(options.status));
+  const orders = new MemoryOutboundOrderRepository(orderAggregate(options.status, options.lineOverrides));
   const allocations = new MemoryAllocationRepository();
   const inventory = new MemoryAllocationInventoryRepository(options.candidates ?? []);
   const balances = new MemoryInventoryBalanceRepository(options.balances ?? []);
@@ -510,5 +534,146 @@ describe('AllocationLifecycleService', () => {
     await expect(
       denied.service.Allocate({ OutboundOrderId: 'outbound-1', IdempotencyKey: 'allocate-denied' }, context),
     ).rejects.toBeInstanceOf(ForbiddenAppException);
+  });
+
+  it('allocates the exact requested serial, not the FEFO-preferred dimension (IDC-05)', async () => {
+    const fefoBalance = balance('balance-fefo', 'dimension-fefo', 10, 0);
+    const fefoDimension = new InventoryDimensionEntity({
+      Id: 'dimension-fefo',
+      OwnerId: 'owner-1',
+      SkuId: 'sku-1',
+      WarehouseId: 'warehouse-1',
+      LocationId: 'location-1',
+      InventoryStatusId: 'status-available',
+      DimensionKeyHash: 'hash-dimension-fefo',
+      UomId: 'uom-1',
+      LotNumber: 'LOT-OLD',
+      ExpiryDate: new Date('2026-08-01T00:00:00.000Z'),
+      CreatedAt: new Date('2026-06-24T00:00:00.000Z'),
+      UpdatedAt: new Date('2026-06-24T00:00:00.000Z'),
+    });
+    const requestedBalance = balance('balance-requested', 'dimension-requested', 5, 0);
+    const requestedDimension = dimension('dimension-requested', 'owner-1', { SerialNumber: 'SN-1' });
+
+    const { service, balances } = harness({
+      candidates: [
+        candidate({ balance: fefoBalance, dimension: fefoDimension }),
+        candidate({ balance: requestedBalance, dimension: requestedDimension }),
+      ],
+      balances: [fefoBalance, requestedBalance],
+      lineOverrides: { RequestedSerialNumber: 'SN-1' },
+    });
+
+    const result = await service.Allocate(
+      { OutboundOrderId: 'outbound-1', IdempotencyKey: 'allocate-serial' },
+      context,
+    );
+
+    expect(result.Status).toBe(AllocationStatus.Allocated);
+    expect(result.Lines[0]).toMatchObject({ SourceDimensionId: 'dimension-requested', AllocatedQuantity: 5 });
+    expect(balances.balances.find((item) => item.Id === 'balance-requested')?.QtyReserved).toBe(5);
+    expect(balances.balances.find((item) => item.Id === 'balance-fefo')?.QtyReserved).toBe(0);
+  });
+
+  it('allocates the exact requested lot, not the FEFO-preferred dimension (IDC-05)', async () => {
+    const fefoBalance = balance('balance-fefo-lot', 'dimension-fefo-lot', 10, 0);
+    const fefoDimension = dimension('dimension-fefo-lot', 'owner-1', { LotNumber: 'LOT-OLD' });
+    const requestedBalance = balance('balance-requested-lot', 'dimension-requested-lot', 5, 0);
+    const requestedDimension = new InventoryDimensionEntity({
+      Id: 'dimension-requested-lot',
+      OwnerId: 'owner-1',
+      SkuId: 'sku-1',
+      WarehouseId: 'warehouse-1',
+      LocationId: 'location-1',
+      InventoryStatusId: 'status-available',
+      DimensionKeyHash: 'hash-dimension-requested-lot',
+      UomId: 'uom-1',
+      LotNumber: 'LOT-REQUESTED',
+      ExpiryDate: new Date('2026-12-31T00:00:00.000Z'),
+      CreatedAt: new Date('2026-06-24T00:00:00.000Z'),
+      UpdatedAt: new Date('2026-06-24T00:00:00.000Z'),
+    });
+
+    const { service, balances } = harness({
+      candidates: [
+        candidate({ balance: fefoBalance, dimension: fefoDimension }),
+        candidate({ balance: requestedBalance, dimension: requestedDimension }),
+      ],
+      balances: [fefoBalance, requestedBalance],
+      lineOverrides: { RequestedLotNumber: 'LOT-REQUESTED' },
+    });
+
+    const result = await service.Allocate({ OutboundOrderId: 'outbound-1', IdempotencyKey: 'allocate-lot' }, context);
+
+    expect(result.Status).toBe(AllocationStatus.Allocated);
+    expect(result.Lines[0]).toMatchObject({ SourceDimensionId: 'dimension-requested-lot', AllocatedQuantity: 5 });
+    expect(balances.balances.find((item) => item.Id === 'balance-requested-lot')?.QtyReserved).toBe(5);
+    expect(balances.balances.find((item) => item.Id === 'balance-fefo-lot')?.QtyReserved).toBe(0);
+  });
+
+  it('keeps plain FEFO-by-expiry-date behavior across multiple lots when no lot/serial is requested (IDC-05 regression)', async () => {
+    const olderBalance = balance('balance-older-lot', 'dimension-older-lot', 5, 0);
+    const olderDimension = new InventoryDimensionEntity({
+      Id: 'dimension-older-lot',
+      OwnerId: 'owner-1',
+      SkuId: 'sku-1',
+      WarehouseId: 'warehouse-1',
+      LocationId: 'location-1',
+      InventoryStatusId: 'status-available',
+      DimensionKeyHash: 'hash-dimension-older-lot',
+      UomId: 'uom-1',
+      LotNumber: 'LOT-EARLY-EXPIRY',
+      ExpiryDate: new Date('2026-08-01T00:00:00.000Z'),
+      CreatedAt: new Date('2026-06-24T00:00:00.000Z'),
+      UpdatedAt: new Date('2026-06-24T00:00:00.000Z'),
+    });
+    const newerBalance = balance('balance-newer-lot', 'dimension-newer-lot', 5, 0);
+    const newerDimension = dimension('dimension-newer-lot', 'owner-1', { LotNumber: 'LOT-LATE-EXPIRY' });
+
+    const { service, balances } = harness({
+      candidates: [
+        candidate({ balance: newerBalance, dimension: newerDimension }),
+        candidate({ balance: olderBalance, dimension: olderDimension }),
+      ],
+      balances: [olderBalance, newerBalance],
+    });
+
+    const result = await service.Allocate(
+      { OutboundOrderId: 'outbound-1', IdempotencyKey: 'allocate-fefo-regression' },
+      context,
+    );
+
+    expect(result.Status).toBe(AllocationStatus.Allocated);
+    expect(result.Lines[0]).toMatchObject({ SourceDimensionId: 'dimension-older-lot', AllocatedQuantity: 5 });
+    expect(balances.balances.find((item) => item.Id === 'balance-older-lot')?.QtyReserved).toBe(5);
+    expect(balances.balances.find((item) => item.Id === 'balance-newer-lot')?.QtyReserved).toBe(0);
+  });
+
+  it('backorders with a clear shortage reason when the requested serial is not in eligible inventory, without falling back to another dimension (IDC-05)', async () => {
+    const otherBalance = balance('balance-other-serial', 'dimension-other-serial', 10, 0);
+    const otherDimension = dimension('dimension-other-serial', 'owner-1', { SerialNumber: 'SN-DIFFERENT' });
+
+    const { service, balances, integrations } = harness({
+      candidates: [candidate({ balance: otherBalance, dimension: otherDimension })],
+      balances: [otherBalance],
+      lineOverrides: { RequestedSerialNumber: 'SN-MISSING' },
+    });
+
+    const result = await service.Allocate(
+      {
+        OutboundOrderId: 'outbound-1',
+        IdempotencyKey: 'allocate-serial-shortage',
+        Policy: AllocationPolicy.PartialBackorder,
+        EvidenceRefs: ['shortage:requested-serial-missing'],
+      },
+      context,
+    );
+
+    expect(result.Status).toBe(AllocationStatus.Failed);
+    expect(result.TotalAllocatedQuantity).toBe(0);
+    expect(result.TotalBackorderedQuantity).toBe(5);
+    expect(result.ShortageReason).toBeTruthy();
+    expect(balances.balances.find((item) => item.Id === 'balance-other-serial')?.QtyReserved).toBe(0);
+    expect(integrations.outbox[0].EventType).toBe('AllocationFailed');
   });
 });
