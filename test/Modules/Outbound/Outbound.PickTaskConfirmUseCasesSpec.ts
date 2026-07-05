@@ -707,6 +707,29 @@ describe('PickTaskConfirmationService', () => {
     expect(inventoryControl.ChangeStatusInTransaction).toHaveBeenCalledTimes(1);
   });
 
+  it('confirms successfully when a dedicated Lot scan-type (not embedded in the Item scan) matches the allocated dimension (IDC-06 AC5)', async () => {
+    const { service, inventoryControl } = buildHarness({
+      pickTask: makePickTask({ LotNumber: 'LOT-1' }),
+      scans: [
+        makeScan({ id: 'scan-location', scanType: MobileScanType.Location, rawValue: 'loc-source' }),
+        makeScan({
+          id: 'scan-item',
+          scanType: MobileScanType.Item,
+          rawValue: '(01)00000000000001(30)5',
+          normalizedValue: '00000000000001',
+          resolvedObjectId: 'sku-1',
+          parsed: { Quantity: 5 },
+        }),
+        makeScan({ id: 'scan-lot', scanType: MobileScanType.Lot, rawValue: 'LOT-1', normalizedValue: 'LOT-1' }),
+      ],
+    });
+
+    const result = await service.Confirm('pick-task-1', { IdempotencyKey: 'pick-confirm-dedicated-lot' }, context);
+
+    expect(result.IsDuplicate).toBe(false);
+    expect(inventoryControl.ChangeStatusInTransaction).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects pick confirmation with a WRONG_SERIAL code when a dedicated Serial scan-type mismatches, even without any Item-embedded serial (IDC-06 AC4)', async () => {
     const { service, inventoryControl } = buildHarness({
       pickTask: makePickTask({ SerialNumber: 'SN-1' }),
