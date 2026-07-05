@@ -29,6 +29,8 @@ import { ReceiptEntity } from '@modules/Inbound/Domain/Entities/ReceiptEntity';
 import { ReceiptLineEntity } from '@modules/Inbound/Domain/Entities/ReceiptLineEntity';
 import { ReceiptLineDiscrepancySignal } from '@modules/Inbound/Domain/Enums/ReceiptLineDiscrepancySignal';
 import { ReceiptLineStatus } from '@modules/Inbound/Domain/Enums/ReceiptLineStatus';
+import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
+import { SkuEntity } from '@modules/MasterData/Domain/Entities/SkuEntity';
 
 export class ConfirmReceiptLineUseCase {
   constructor(
@@ -38,6 +40,7 @@ export class ConfirmReceiptLineUseCase {
     private readonly integrations: IIntegrationRepository,
     private readonly reasonCatalog: IReasonCodeCatalog,
     private readonly readiness: ValidateReceivingReadinessUseCase,
+    private readonly skus: ISkuRepository,
     private readonly audited: AuditedTransaction,
     private readonly permissionChecker?: IPermissionChecker,
   ) {}
@@ -82,6 +85,9 @@ export class ConfirmReceiptLineUseCase {
 
     const actualSkuId = request.SkuId?.trim() || planLine.SkuId;
     const actualUomId = request.UomId?.trim() || planLine.UomId;
+    const sku = await this.skus.FindById(actualSkuId);
+    if (!sku) throw new BusinessRuleException('SKU not found for receipt line', { SkuId: actualSkuId });
+    this.AssertCaptureRequiredBySku(sku, request);
     const signals = this.DiscrepancySignals(request, planLine, actualSkuId, actualUomId);
     const now = new Date();
     const line = new ReceiptLineEntity({
@@ -175,6 +181,22 @@ export class ConfirmReceiptLineUseCase {
       if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== request.ExpiryDate.slice(0, 10)) {
         throw new BusinessRuleException('ExpiryDate must be a valid calendar date');
       }
+    }
+  }
+
+  // IDC-02: a SKU's Lot/Expiry/Serial control flags were previously pure CRUD toggles with no
+  // downstream effect (Epic 26 audit). This is the enforcement point for receiving -- IDC-01
+  // already added the capture fields, this makes them mandatory whenever the SKU declares it
+  // needs them.
+  private AssertCaptureRequiredBySku(sku: SkuEntity, request: ConfirmReceiptLineDto): void {
+    if (sku.LotControlled && !request.LotNumber?.trim()) {
+      throw new BusinessRuleException('LotNumber is required for this SKU', { SkuId: sku.Id });
+    }
+    if (sku.ExpiryControlled && !request.ExpiryDate) {
+      throw new BusinessRuleException('ExpiryDate is required for this SKU', { SkuId: sku.Id });
+    }
+    if (sku.SerialControlled && !request.SerialNumber?.trim()) {
+      throw new BusinessRuleException('SerialNumber is required for this SKU', { SkuId: sku.Id });
     }
   }
 
