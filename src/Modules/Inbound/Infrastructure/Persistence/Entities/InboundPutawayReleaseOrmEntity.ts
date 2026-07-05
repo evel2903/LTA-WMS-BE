@@ -57,6 +57,15 @@ export class InboundPutawayReleaseOrmEntity {
   @Column({ name: 'sscc_code', type: 'varchar', length: 40, nullable: true })
   public SsccCode!: string | null;
 
+  @Column({ name: 'lot_number', type: 'varchar', length: 100, nullable: true })
+  public LotNumber!: string | null;
+
+  @Column({ name: 'expiry_date', type: 'date', nullable: true })
+  public ExpiryDate!: Date | null;
+
+  @Column({ name: 'serial_number', type: 'varchar', length: 100, nullable: true })
+  public SerialNumber!: string | null;
+
   @Column({ name: 'inventory_status_code', type: 'varchar', length: 80 })
   public InventoryStatusCode!: string;
 

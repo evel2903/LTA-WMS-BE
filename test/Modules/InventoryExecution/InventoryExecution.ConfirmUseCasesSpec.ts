@@ -336,6 +336,9 @@ function buildHarness(input?: { task?: PutawayTaskEntity; sourceQty?: number; so
     InventoryStatusId: readyStatus.Id,
     UomId: task.UomId,
     LpnCode: task.LpnCode,
+    LotNumber: task.LotNumber,
+    ExpiryDate: task.ExpiryDate,
+    SerialNumber: task.SerialNumber,
   });
   const sourceDimension = MakeInventoryDimension({
     Id: 'dimension-source',
@@ -459,6 +462,55 @@ describe('InventoryExecution putaway confirm use case', () => {
       Result: AuditResult.Success,
       ReasonCodeId: 'reason-putaway-confirm',
     });
+  });
+
+  it('creates a distinct target InventoryDimension per SerialNumber, same everything else (IDC-01)', async () => {
+    const confirmForSerial = async (serial: string) => {
+      const { useCase, dimensions } = buildHarness({ task: makeTask({ SerialNumber: serial }) });
+      await useCase.Execute(
+        'putaway-task-1',
+        {
+          SourceLocationScan: 'rcv-stg-01',
+          TargetLocationScan: 'a-01',
+          LpnScan: 'lpn-001',
+          ConfirmedQuantity: 5,
+          IdempotencyKey: `confirm-key-${serial}`,
+        },
+        contextFor('operator-1'),
+      );
+      const target = [...dimensions.dimensions.values()].find((dimension) => dimension.Id !== 'dimension-source');
+      return target!;
+    };
+
+    const targetA = await confirmForSerial('SER-A');
+    const targetB = await confirmForSerial('SER-B');
+
+    expect(targetA.SerialNumber).toBe('SER-A');
+    expect(targetB.SerialNumber).toBe('SER-B');
+    expect(targetA.DimensionKeyHash).not.toBe(targetB.DimensionKeyHash);
+    expect(targetA.Id).not.toBe(targetB.Id);
+  });
+
+  it('backward-compat: omitting Lot/Expiry/Serial still resolves the pre-existing source dimension and hash (IDC-01)', async () => {
+    const { useCase, dimensions } = buildHarness();
+
+    const result = await useCase.Execute(
+      'putaway-task-1',
+      {
+        SourceLocationScan: 'rcv-stg-01',
+        TargetLocationScan: 'a-01',
+        LpnScan: 'lpn-001',
+        ConfirmedQuantity: 5,
+        IdempotencyKey: 'confirm-key-no-lot-serial',
+      },
+      contextFor('operator-1'),
+    );
+
+    expect(result.PutawayTask.TaskStatus).toBe(PutawayTaskStatus.Confirmed);
+    const target = [...dimensions.dimensions.values()].find((dimension) => dimension.Id !== 'dimension-source');
+    expect(target!.LotNumber).toBeNull();
+    expect(target!.ExpiryDate).toBeNull();
+    expect(target!.SerialNumber).toBeNull();
   });
 
   it('rejects mismatched target scan and writes failed audit without inventory mutation', async () => {

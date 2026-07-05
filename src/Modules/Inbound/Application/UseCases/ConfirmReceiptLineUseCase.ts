@@ -103,6 +103,9 @@ export class ConfirmReceiptLineUseCase {
       ReasonNote: request.ReasonNote ?? null,
       ScanEvidenceJson: request.ScanEvidence ? (request.ScanEvidence as unknown as Record<string, unknown>) : null,
       DiscrepancySignals: signals,
+      LotNumber: request.LotNumber?.trim() || null,
+      ExpiryDate: request.ExpiryDate ? new Date(request.ExpiryDate) : null,
+      SerialNumber: request.SerialNumber?.trim() || null,
       IdempotencyKey: request.IdempotencyKey,
       ReceivedAt: now,
       ReceivedBy: context.ActorUserId,
@@ -163,6 +166,16 @@ export class ConfirmReceiptLineUseCase {
     if (!request.IdempotencyKey?.trim()) throw new BusinessRuleException('Receipt line idempotency key is required');
     if (!request.InboundPlanLineId?.trim()) throw new BusinessRuleException('Inbound plan line is required');
     if (request.ActualQuantity <= 0) throw new BusinessRuleException('Actual quantity must be positive');
+    // class-validator's @IsDateString() is a format regex, not calendar-aware -- it accepts
+    // '2027-02-30'. JS then silently rolls that forward to 2027-03-02 instead of erroring, which
+    // would corrupt the exact field this story exists to make trustworthy. Round-trip through
+    // ISO and compare the date part to catch calendar-invalid input before it's ever persisted.
+    if (request.ExpiryDate) {
+      const parsed = new Date(request.ExpiryDate);
+      if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== request.ExpiryDate.slice(0, 10)) {
+        throw new BusinessRuleException('ExpiryDate must be a valid calendar date');
+      }
+    }
   }
 
   private AssertDuplicateReceiptLineMatches(existing: ReceiptLineEntity, request: ConfirmReceiptLineDto): void {
@@ -179,6 +192,17 @@ export class ConfirmReceiptLineUseCase {
 
     if (request.SkuId?.trim()) compare('SkuId', request.SkuId.trim(), existing.SkuId);
     if (request.UomId?.trim()) compare('UomId', request.UomId.trim(), existing.UomId);
+    // Unlike SkuId/UomId above, Lot/Expiry/Serial are compared unconditionally (not only when
+    // resent) -- this story's entire point is trustworthy Lot/Expiry/Serial identity, so a retry
+    // that silently drops one of these fields from the original payload must be treated as a
+    // mismatch, not as "field not mentioned, assume unchanged".
+    compare('LotNumber', request.LotNumber?.trim() || null, existing.LotNumber);
+    compare('SerialNumber', request.SerialNumber?.trim() || null, existing.SerialNumber);
+    compare(
+      'ExpiryDate',
+      request.ExpiryDate ? new Date(request.ExpiryDate).getTime() : null,
+      existing.ExpiryDate?.getTime() ?? null,
+    );
 
     const requestEvidence = request.ScanEvidence ? (request.ScanEvidence as unknown as Record<string, unknown>) : null;
     if (this.CanonicalJson(requestEvidence) !== this.CanonicalJson(existing.ScanEvidenceJson)) {

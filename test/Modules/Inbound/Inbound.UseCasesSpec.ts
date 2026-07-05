@@ -1248,6 +1248,140 @@ describe('Inbound plan use cases', () => {
     });
   });
 
+  it('captures Lot/Expiry/Serial on receipt line confirm and threads them through release to putaway (IDC-01)', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        LotNumber: 'LOT-IDC01',
+        ExpiryDate: '2027-01-31',
+        SerialNumber: 'SER-IDC01',
+        IdempotencyKey: 'idc01-capture-line-1',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(line.LotNumber).toBe('LOT-IDC01');
+    expect(line.ExpiryDate?.toISOString().slice(0, 10)).toBe('2027-01-31');
+    expect(line.SerialNumber).toBe('SER-IDC01');
+
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'idc01-capture-qc-1' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    const release = await releaseInboundToPutawayUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'idc01-capture-release-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(release.LotNumber).toBe('LOT-IDC01');
+    expect(release.ExpiryDate?.toISOString().slice(0, 10)).toBe('2027-01-31');
+    expect(release.SerialNumber).toBe('SER-IDC01');
+  });
+
+  it('leaves Lot/Expiry/Serial null end-to-end when not captured (IDC-01 backward-compat)', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'idc01-no-capture-line-1',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(line.LotNumber).toBeNull();
+    expect(line.ExpiryDate).toBeNull();
+    expect(line.SerialNumber).toBeNull();
+
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'idc01-no-capture-qc-1' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    const release = await releaseInboundToPutawayUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'idc01-no-capture-release-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(release.LotNumber).toBeNull();
+    expect(release.ExpiryDate).toBeNull();
+    expect(release.SerialNumber).toBeNull();
+  });
+
+  it('rejects a calendar-invalid ExpiryDate instead of silently rolling it forward (IDC-01)', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await expect(
+      confirmReceiptLineUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          InboundPlanLineId: created.Lines[0].Id,
+          ActualQuantity: 12,
+          ExpiryDate: '2027-02-30',
+          IdempotencyKey: 'idc01-bad-calendar-date-1',
+          ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('flags an idempotent retry that drops a previously-captured LotNumber as a payload mismatch (IDC-01)', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        LotNumber: 'LOT-ORIGINAL',
+        IdempotencyKey: 'idc01-retry-drops-lot-1',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await expect(
+      confirmReceiptLineUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          InboundPlanLineId: created.Lines[0].Id,
+          ActualQuantity: 12,
+          IdempotencyKey: 'idc01-retry-drops-lot-1',
+          ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(ConflictException);
+  });
+
   it('rejects receipt line confirm when Receipt Update permission is denied without side effects', async () => {
     const bundle = repoBundle();
     const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);

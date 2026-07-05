@@ -340,6 +340,9 @@ export class ConfirmPutawayTaskUseCase {
       InventoryStatusId: inventoryStatusId,
       UomId: task.UomId,
       LpnCode: task.LpnCode,
+      LotNumber: task.LotNumber,
+      ExpiryDate: task.ExpiryDate,
+      SerialNumber: task.SerialNumber,
     };
   }
 
@@ -504,6 +507,9 @@ export class ConfirmPutawayTaskUseCase {
         DimensionKeyHash: dimensionPlan.TargetHash,
         UomId: task.UomId,
         LpnCode: task.LpnCode,
+        LotNumber: task.LotNumber,
+        ExpiryDate: task.ExpiryDate,
+        SerialNumber: task.SerialNumber,
         SourceSystem: 'LTA-WMS',
         ReferenceId: task.Id,
         CreatedAt: new Date(),

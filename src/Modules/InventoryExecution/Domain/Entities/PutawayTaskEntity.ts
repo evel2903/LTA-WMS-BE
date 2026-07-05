@@ -22,6 +22,9 @@ export interface PutawayTaskEntityProps {
   Quantity: number;
   LpnCode?: string | null;
   SsccCode?: string | null;
+  LotNumber?: string | null;
+  ExpiryDate?: Date | null;
+  SerialNumber?: string | null;
   InventoryStatusCode: string;
   SourceLocationId?: string | null;
   SourceLocationCode?: string | null;
@@ -67,6 +70,9 @@ export class PutawayTaskEntity {
   public Quantity: number;
   public LpnCode: string | null;
   public SsccCode: string | null;
+  public LotNumber: string | null;
+  public ExpiryDate: Date | null;
+  public SerialNumber: string | null;
   public InventoryStatusCode: string;
   public SourceLocationId: string | null;
   public SourceLocationCode: string | null;
@@ -112,6 +118,9 @@ export class PutawayTaskEntity {
     this.Quantity = props.Quantity;
     this.LpnCode = props.LpnCode ?? null;
     this.SsccCode = props.SsccCode ?? null;
+    this.LotNumber = props.LotNumber ?? null;
+    this.ExpiryDate = props.ExpiryDate ?? null;
+    this.SerialNumber = props.SerialNumber ?? null;
     this.InventoryStatusCode = props.InventoryStatusCode;
     this.SourceLocationId = props.SourceLocationId ?? null;
     this.SourceLocationCode = props.SourceLocationCode ?? null;
