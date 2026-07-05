@@ -683,4 +683,123 @@ describe('PickTaskConfirmationService', () => {
     );
     expect(inventoryControl.ChangeStatusInTransaction).not.toHaveBeenCalled();
   });
+
+  it('confirms successfully when a dedicated Serial scan-type (not embedded in the Item scan) matches the allocated dimension (IDC-06 AC5)', async () => {
+    const { service, inventoryControl } = buildHarness({
+      pickTask: makePickTask({ LotNumber: null, SerialNumber: 'SN-1' }),
+      scans: [
+        makeScan({ id: 'scan-location', scanType: MobileScanType.Location, rawValue: 'loc-source' }),
+        makeScan({
+          id: 'scan-item',
+          scanType: MobileScanType.Item,
+          rawValue: '(01)00000000000001(30)5',
+          normalizedValue: '00000000000001',
+          resolvedObjectId: 'sku-1',
+          parsed: { Quantity: 5 },
+        }),
+        makeScan({ id: 'scan-serial', scanType: MobileScanType.Serial, rawValue: 'SN-1', normalizedValue: 'SN-1' }),
+      ],
+    });
+
+    const result = await service.Confirm('pick-task-1', { IdempotencyKey: 'pick-confirm-dedicated-serial' }, context);
+
+    expect(result.IsDuplicate).toBe(false);
+    expect(inventoryControl.ChangeStatusInTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects pick confirmation with a WRONG_SERIAL code when a dedicated Serial scan-type mismatches, even without any Item-embedded serial (IDC-06 AC4)', async () => {
+    const { service, inventoryControl } = buildHarness({
+      pickTask: makePickTask({ SerialNumber: 'SN-1' }),
+      scans: [
+        makeScan({ id: 'scan-location', scanType: MobileScanType.Location, rawValue: 'loc-source' }),
+        makeScan({
+          id: 'scan-item',
+          scanType: MobileScanType.Item,
+          rawValue: '(01)00000000000001(30)5',
+          normalizedValue: '00000000000001',
+          resolvedObjectId: 'sku-1',
+          parsed: { Quantity: 5 },
+        }),
+        makeScan({
+          id: 'scan-serial',
+          scanType: MobileScanType.Serial,
+          rawValue: 'SN-WRONG',
+          normalizedValue: 'SN-WRONG',
+        }),
+      ],
+    });
+
+    let caught: unknown;
+    try {
+      await service.Confirm('pick-task-1', { IdempotencyKey: 'pick-confirm-dedicated-serial-wrong' }, context);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    const scanEvidence = (caught as BusinessRuleException).Details as { ScanEvidence: PickTaskScanEvidenceDto[] };
+    expect(scanEvidence.ScanEvidence).toEqual(
+      expect.arrayContaining([expect.objectContaining({ ScanType: 'Serial', RejectionCode: 'WRONG_SERIAL' })]),
+    );
+    expect(inventoryControl.ChangeStatusInTransaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects pick confirmation with a WRONG_EXPIRYDATE code when a dedicated ExpiryDate scan-type mismatches (IDC-06 AC4)', async () => {
+    const { service, inventoryControl } = buildHarness({
+      pickTask: makePickTask({ ExpiryDate: new Date('2027-01-31T00:00:00.000Z') }),
+      scans: [
+        makeScan({ id: 'scan-location', scanType: MobileScanType.Location, rawValue: 'loc-source' }),
+        makeScan({
+          id: 'scan-item',
+          scanType: MobileScanType.Item,
+          rawValue: '(01)00000000000001(30)5',
+          normalizedValue: '00000000000001',
+          resolvedObjectId: 'sku-1',
+          parsed: { Quantity: 5 },
+        }),
+        makeScan({
+          id: 'scan-expiry',
+          scanType: MobileScanType.ExpiryDate,
+          rawValue: '2027-02-28',
+          normalizedValue: '2027-02-28',
+        }),
+      ],
+    });
+
+    let caught: unknown;
+    try {
+      await service.Confirm('pick-task-1', { IdempotencyKey: 'pick-confirm-dedicated-expiry-wrong' }, context);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    const scanEvidence = (caught as BusinessRuleException).Details as { ScanEvidence: PickTaskScanEvidenceDto[] };
+    expect(scanEvidence.ScanEvidence).toEqual(
+      expect.arrayContaining([expect.objectContaining({ ScanType: 'ExpiryDate', RejectionCode: 'WRONG_EXPIRYDATE' })]),
+    );
+    expect(inventoryControl.ChangeStatusInTransaction).not.toHaveBeenCalled();
+  });
+
+  it('keeps confirming via the legacy Item-scan-embedded GS1 lot/serial when no dedicated scan-type is sent (IDC-06 AC6 regression)', async () => {
+    const { service, inventoryControl } = buildHarness({
+      pickTask: makePickTask({ LotNumber: null, SerialNumber: 'SN-1' }),
+      scans: [
+        makeScan({ id: 'scan-location', scanType: MobileScanType.Location, rawValue: 'loc-source' }),
+        makeScan({
+          id: 'scan-item',
+          scanType: MobileScanType.Item,
+          rawValue: '(01)00000000000001(21)SN-1(30)5',
+          normalizedValue: '00000000000001',
+          resolvedObjectId: 'sku-1',
+          parsed: { Serial: 'SN-1', Quantity: 5 },
+        }),
+      ],
+    });
+
+    const result = await service.Confirm('pick-task-1', { IdempotencyKey: 'pick-confirm-legacy-gs1' }, context);
+
+    expect(result.IsDuplicate).toBe(false);
+    expect(inventoryControl.ChangeStatusInTransaction).toHaveBeenCalledTimes(1);
+  });
 });

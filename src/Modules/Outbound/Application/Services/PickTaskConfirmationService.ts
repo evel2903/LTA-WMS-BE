@@ -306,6 +306,9 @@ export class PickTaskConfirmationService {
     const itemScan = latestByType(MobileScanType.Item);
     const quantityScan = latestByType(MobileScanType.Quantity);
     const locationScan = latestByType(MobileScanType.Location);
+    const lotScan = latestByType(MobileScanType.Lot);
+    const serialScan = latestByType(MobileScanType.Serial);
+    const expiryScan = latestByType(MobileScanType.ExpiryDate);
     const parsed = itemScan?.ParsedValueJson ?? {};
     const quantityValue = quantityScan
       ? Number(quantityScan.NormalizedValue ?? quantityScan.RawValue)
@@ -325,13 +328,27 @@ export class PickTaskConfirmationService {
         task.Quantity,
         typeof quantityValue === 'number' ? quantityValue : null,
       ),
-      this.CompareOptionalScan('Lot', itemScan, task.LotNumber, this.StringValue(parsed.Lot)),
-      this.CompareOptionalScan('Serial', itemScan, task.SerialNumber, this.StringValue(parsed.Serial)),
+      this.CompareOptionalScan(
+        'Lot',
+        lotScan ?? itemScan,
+        task.LotNumber,
+        lotScan ? this.StringValue(lotScan.NormalizedValue ?? lotScan.RawValue) : this.StringValue(parsed.Lot),
+      ),
+      this.CompareOptionalScan(
+        'Serial',
+        serialScan ?? itemScan,
+        task.SerialNumber,
+        serialScan
+          ? this.StringValue(serialScan.NormalizedValue ?? serialScan.RawValue)
+          : this.StringValue(parsed.Serial),
+      ),
       this.CompareOptionalScan(
         'ExpiryDate',
-        itemScan,
+        expiryScan ?? itemScan,
         task.ExpiryDate ? task.ExpiryDate.toISOString().slice(0, 10) : null,
-        this.StringValue(parsed.ExpiryDate),
+        expiryScan
+          ? this.StringValue(expiryScan.NormalizedValue ?? expiryScan.RawValue)
+          : this.StringValue(parsed.ExpiryDate),
       ),
     ].filter(
       (scan) =>

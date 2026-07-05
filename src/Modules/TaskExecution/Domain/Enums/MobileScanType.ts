@@ -7,4 +7,7 @@ export enum MobileScanType {
   Package = 'Package',
   Load = 'Load',
   ManualEntry = 'ManualEntry',
+  Lot = 'Lot',
+  Serial = 'Serial',
+  ExpiryDate = 'ExpiryDate',
 }
