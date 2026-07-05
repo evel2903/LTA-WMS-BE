@@ -186,6 +186,9 @@ export interface ConfirmReceiptLineDto {
   ManualConfirm?: boolean;
   ReasonCode?: string | null;
   ReasonNote?: string | null;
+  LotNumber?: string | null;
+  ExpiryDate?: string | null;
+  SerialNumber?: string | null;
   IdempotencyKey: string;
   ScanEvidence?: ReceiptLineScanEvidenceDto | null;
 }
@@ -209,6 +212,9 @@ export interface ReceiptLineDto {
   ReasonNote: string | null;
   ScanEvidenceJson: Record<string, unknown> | null;
   DiscrepancySignals: ReceiptLineDiscrepancySignal[];
+  LotNumber: string | null;
+  ExpiryDate: Date | null;
+  SerialNumber: string | null;
   IdempotencyKey: string;
   ReceivedAt: Date;
   ReceivedBy: string | null;
@@ -289,6 +295,9 @@ export interface InboundPutawayReleaseDto {
   Quantity: number;
   LpnCode: string | null;
   SsccCode: string | null;
+  LotNumber: string | null;
+  ExpiryDate: Date | null;
+  SerialNumber: string | null;
   InventoryStatusCode: string;
   CurrentLocationId: string | null;
   CurrentLocationCode: string | null;

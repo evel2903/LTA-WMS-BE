@@ -1,4 +1,4 @@
-import { IsBoolean, IsNumber, IsObject, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsNumber, IsObject, IsOptional, IsString, Min } from 'class-validator';
 
 export class ConfirmReceiptLineRequest {
   @IsString()
@@ -27,6 +27,18 @@ export class ConfirmReceiptLineRequest {
   @IsOptional()
   @IsString()
   public ReasonNote?: string;
+
+  @IsOptional()
+  @IsString()
+  public LotNumber?: string;
+
+  @IsOptional()
+  @IsDateString()
+  public ExpiryDate?: string;
+
+  @IsOptional()
+  @IsString()
+  public SerialNumber?: string;
 
   @IsString()
   public IdempotencyKey!: string;

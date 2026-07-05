@@ -20,6 +20,9 @@ export class ReceiptLineEntity {
   public ReasonNote: string | null;
   public ScanEvidenceJson: Record<string, unknown> | null;
   public DiscrepancySignals: ReceiptLineDiscrepancySignal[];
+  public LotNumber: string | null;
+  public ExpiryDate: Date | null;
+  public SerialNumber: string | null;
   public IdempotencyKey: string;
   public ReceivedAt: Date;
   public ReceivedBy: string | null;
@@ -45,6 +48,9 @@ export class ReceiptLineEntity {
     ReasonNote?: string | null;
     ScanEvidenceJson?: Record<string, unknown> | null;
     DiscrepancySignals?: ReceiptLineDiscrepancySignal[];
+    LotNumber?: string | null;
+    ExpiryDate?: Date | null;
+    SerialNumber?: string | null;
     IdempotencyKey: string;
     ReceivedAt: Date;
     ReceivedBy?: string | null;
@@ -69,6 +75,9 @@ export class ReceiptLineEntity {
     this.ReasonNote = params.ReasonNote ?? null;
     this.ScanEvidenceJson = params.ScanEvidenceJson ?? null;
     this.DiscrepancySignals = params.DiscrepancySignals ?? [];
+    this.LotNumber = params.LotNumber ?? null;
+    this.ExpiryDate = params.ExpiryDate ?? null;
+    this.SerialNumber = params.SerialNumber ?? null;
     this.IdempotencyKey = params.IdempotencyKey;
     this.ReceivedAt = params.ReceivedAt;
     this.ReceivedBy = params.ReceivedBy ?? null;

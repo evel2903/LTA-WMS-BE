@@ -16,6 +16,9 @@ export class InboundPutawayReleaseEntity {
   public Quantity: number;
   public LpnCode: string | null;
   public SsccCode: string | null;
+  public LotNumber: string | null;
+  public ExpiryDate: Date | null;
+  public SerialNumber: string | null;
   public InventoryStatusCode: string;
   public CurrentLocationId: string | null;
   public CurrentLocationCode: string | null;
@@ -55,6 +58,9 @@ export class InboundPutawayReleaseEntity {
     Quantity: number;
     LpnCode?: string | null;
     SsccCode?: string | null;
+    LotNumber?: string | null;
+    ExpiryDate?: Date | null;
+    SerialNumber?: string | null;
     InventoryStatusCode: string;
     CurrentLocationId?: string | null;
     CurrentLocationCode?: string | null;
@@ -93,6 +99,9 @@ export class InboundPutawayReleaseEntity {
     this.Quantity = params.Quantity;
     this.LpnCode = params.LpnCode ?? null;
     this.SsccCode = params.SsccCode ?? null;
+    this.LotNumber = params.LotNumber ?? null;
+    this.ExpiryDate = params.ExpiryDate ?? null;
+    this.SerialNumber = params.SerialNumber ?? null;
     this.InventoryStatusCode = params.InventoryStatusCode;
     this.CurrentLocationId = params.CurrentLocationId ?? null;
     this.CurrentLocationCode = params.CurrentLocationCode ?? null;

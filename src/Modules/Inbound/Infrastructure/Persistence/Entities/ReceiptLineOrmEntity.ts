@@ -60,6 +60,15 @@ export class ReceiptLineOrmEntity {
   @Column({ name: 'discrepancy_signals', type: 'jsonb', default: () => `'[]'::jsonb` })
   public DiscrepancySignals!: string[];
 
+  @Column({ name: 'lot_number', type: 'varchar', length: 100, nullable: true })
+  public LotNumber!: string | null;
+
+  @Column({ name: 'expiry_date', type: 'date', nullable: true })
+  public ExpiryDate!: Date | null;
+
+  @Column({ name: 'serial_number', type: 'varchar', length: 100, nullable: true })
+  public SerialNumber!: string | null;
+
   @Column({ name: 'idempotency_key', type: 'varchar', length: 160 })
   public IdempotencyKey!: string;
 

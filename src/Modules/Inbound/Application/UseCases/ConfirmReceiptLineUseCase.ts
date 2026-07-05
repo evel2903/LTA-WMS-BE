@@ -103,6 +103,9 @@ export class ConfirmReceiptLineUseCase {
       ReasonNote: request.ReasonNote ?? null,
       ScanEvidenceJson: request.ScanEvidence ? (request.ScanEvidence as unknown as Record<string, unknown>) : null,
       DiscrepancySignals: signals,
+      LotNumber: request.LotNumber?.trim() || null,
+      ExpiryDate: request.ExpiryDate ? new Date(request.ExpiryDate) : null,
+      SerialNumber: request.SerialNumber?.trim() || null,
       IdempotencyKey: request.IdempotencyKey,
       ReceivedAt: now,
       ReceivedBy: context.ActorUserId,
@@ -179,6 +182,11 @@ export class ConfirmReceiptLineUseCase {
 
     if (request.SkuId?.trim()) compare('SkuId', request.SkuId.trim(), existing.SkuId);
     if (request.UomId?.trim()) compare('UomId', request.UomId.trim(), existing.UomId);
+    if (request.LotNumber?.trim()) compare('LotNumber', request.LotNumber.trim(), existing.LotNumber);
+    if (request.SerialNumber?.trim()) compare('SerialNumber', request.SerialNumber.trim(), existing.SerialNumber);
+    if (request.ExpiryDate) {
+      compare('ExpiryDate', new Date(request.ExpiryDate).getTime(), existing.ExpiryDate?.getTime() ?? null);
+    }
 
     const requestEvidence = request.ScanEvidence ? (request.ScanEvidence as unknown as Record<string, unknown>) : null;
     if (this.CanonicalJson(requestEvidence) !== this.CanonicalJson(existing.ScanEvidenceJson)) {

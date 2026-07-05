@@ -67,6 +67,9 @@ const makeRelease = (overrides: Partial<InboundPutawayReleaseEntity> = {}) =>
     Quantity: overrides.Quantity ?? 5,
     LpnCode: overrides.LpnCode ?? 'LPN-001',
     SsccCode: overrides.SsccCode ?? '000000000000000001',
+    LotNumber: overrides.LotNumber ?? null,
+    ExpiryDate: overrides.ExpiryDate ?? null,
+    SerialNumber: overrides.SerialNumber ?? null,
     InventoryStatusCode: overrides.InventoryStatusCode ?? 'READY_FOR_PUTAWAY',
     CurrentLocationId: overrides.CurrentLocationId ?? 'staging-1',
     CurrentLocationCode: overrides.CurrentLocationCode ?? 'RCV-STG-01',
@@ -345,6 +348,29 @@ describe('InventoryExecution putaway release use case', () => {
       ObjectType: ObjectType.PutawayTask,
       Result: AuditResult.Success,
     });
+  });
+
+  it('threads Lot/Expiry/Serial from the release onto the created PutawayTask (IDC-01)', async () => {
+    const { useCase } = buildUseCase({
+      release: makeRelease({
+        LotNumber: 'LOT-IDC01',
+        ExpiryDate: new Date('2027-01-31T00:00:00.000Z'),
+        SerialNumber: 'SER-IDC01',
+      }),
+    });
+
+    const result = await useCase.Execute(
+      {
+        InboundPutawayReleaseId: 'release-1',
+        SourceLocationCode: 'RCV-STG-01',
+        IdempotencyKey: 'putaway-key-idc01',
+      },
+      contextFor('operator-1'),
+    );
+
+    expect(result.LotNumber).toBe('LOT-IDC01');
+    expect(result.ExpiryDate?.toISOString().slice(0, 10)).toBe('2027-01-31');
+    expect(result.SerialNumber).toBe('SER-IDC01');
   });
 
   it('rejects ineligible inventory status and writes failed audit without event', async () => {

@@ -21,6 +21,9 @@ export interface PutawayTaskDto {
   Quantity: number;
   LpnCode: string | null;
   SsccCode: string | null;
+  LotNumber: string | null;
+  ExpiryDate: Date | null;
+  SerialNumber: string | null;
   InventoryStatusCode: string;
   SourceLocationId: string | null;
   SourceLocationCode: string | null;
