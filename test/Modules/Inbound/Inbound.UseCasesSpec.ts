@@ -1501,6 +1501,36 @@ describe('Inbound plan use cases', () => {
     ).rejects.toThrow(BusinessRuleException);
   });
 
+  it('allows release without LPN when the SKU has no control flags set — regression guard (IDC-02)', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'idc02-release-no-flags-line',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'idc02-release-no-flags-qc' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    const release = await releaseInboundToPutawayUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'idc02-release-no-flags-release' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(release.InventoryStatusCode).toBe('READY_FOR_PUTAWAY');
+  });
+
   it('requires LPN at release when the SKU has LpnControlled=true, even though profile/rule do not require it (IDC-02)', async () => {
     const bundle = repoBundle();
     bundle.skus.FindById.mockResolvedValue(sku({ LpnControlled: true }));

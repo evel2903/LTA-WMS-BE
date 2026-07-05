@@ -91,12 +91,16 @@ export class ReleaseInboundToPutawayUseCase {
     if (aggregate.Plan.WarehouseProfileId && !profile)
       throw new BusinessRuleException('WarehouseProfile not found for release');
 
-    const lpn = await this.receiving.FindInboundLpnByReceiptLineId(line.Id);
     // IDC-02: SKU.LpnControlled is a SEPARATE source from the profile-level lpnControlled key the
     // rule gate/ProfileRequiresLpn read below -- OR-combined into lpnRequired, never replacing
     // either. Fail-closed on an unresolvable SkuId (same IRE-06 lesson as the compliance path in
     // ReleasePutawayTaskUseCase): an orphaned SkuId must not silently read as "no requirement".
-    const sku = await this.skus.FindById(line.SkuId);
+    // lpn/sku are independent reads -- fetched in parallel, same pattern as the duplicate-check +
+    // SKU lookup in ReleasePutawayTaskUseCase.ts.
+    const [lpn, sku] = await Promise.all([
+      this.receiving.FindInboundLpnByReceiptLineId(line.Id),
+      this.skus.FindById(line.SkuId),
+    ]);
     if (!sku) throw new BusinessRuleException('SKU not found for release', { SkuId: line.SkuId });
     const skuRequiresLpn = sku.LpnControlled === true;
     const profileRequiresLpn = this.ProfileRequiresLpn(profile);
