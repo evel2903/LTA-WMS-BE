@@ -676,4 +676,69 @@ describe('AllocationLifecycleService', () => {
     expect(balances.balances.find((item) => item.Id === 'balance-other-serial')?.QtyReserved).toBe(0);
     expect(integrations.outbox[0].EventType).toBe('AllocationFailed');
   });
+
+  it('requires both requested lot AND serial to match the same dimension, not either alone (IDC-05)', async () => {
+    const lotOnlyBalance = balance('balance-lot-only', 'dimension-lot-only', 10, 0);
+    const lotOnlyDimension = dimension('dimension-lot-only', 'owner-1', { LotNumber: 'LOT-X', SerialNumber: null });
+    const serialOnlyBalance = balance('balance-serial-only', 'dimension-serial-only', 10, 0);
+    const serialOnlyDimension = dimension('dimension-serial-only', 'owner-1', {
+      LotNumber: 'LOT-OTHER',
+      SerialNumber: 'SN-X',
+    });
+    const bothBalance = balance('balance-both', 'dimension-both', 5, 0);
+    const bothDimension = dimension('dimension-both', 'owner-1', { LotNumber: 'LOT-X', SerialNumber: 'SN-X' });
+
+    const { service, balances } = harness({
+      candidates: [
+        candidate({ balance: lotOnlyBalance, dimension: lotOnlyDimension }),
+        candidate({ balance: serialOnlyBalance, dimension: serialOnlyDimension }),
+        candidate({ balance: bothBalance, dimension: bothDimension }),
+      ],
+      balances: [lotOnlyBalance, serialOnlyBalance, bothBalance],
+      lineOverrides: { RequestedLotNumber: 'LOT-X', RequestedSerialNumber: 'SN-X' },
+    });
+
+    const result = await service.Allocate(
+      { OutboundOrderId: 'outbound-1', IdempotencyKey: 'allocate-lot-and-serial' },
+      context,
+    );
+
+    expect(result.Status).toBe(AllocationStatus.Allocated);
+    expect(result.Lines[0]).toMatchObject({ SourceDimensionId: 'dimension-both', AllocatedQuantity: 5 });
+    expect(balances.balances.find((item) => item.Id === 'balance-both')?.QtyReserved).toBe(5);
+    expect(balances.balances.find((item) => item.Id === 'balance-lot-only')?.QtyReserved).toBe(0);
+    expect(balances.balances.find((item) => item.Id === 'balance-serial-only')?.QtyReserved).toBe(0);
+  });
+
+  it('partially allocates a requested lot with insufficient stock and backorders the rest, without falling back to a different lot (IDC-05)', async () => {
+    const requestedBalance = balance('balance-requested-partial', 'dimension-requested-partial', 2, 0);
+    const requestedDimension = dimension('dimension-requested-partial', 'owner-1', { LotNumber: 'LOT-PARTIAL' });
+    const otherStockBalance = balance('balance-other-stock', 'dimension-other-stock', 100, 0);
+    const otherStockDimension = dimension('dimension-other-stock', 'owner-1', { LotNumber: 'LOT-OTHER-STOCK' });
+
+    const { service, balances } = harness({
+      candidates: [
+        candidate({ balance: requestedBalance, dimension: requestedDimension }),
+        candidate({ balance: otherStockBalance, dimension: otherStockDimension }),
+      ],
+      balances: [requestedBalance, otherStockBalance],
+      lineOverrides: { RequestedLotNumber: 'LOT-PARTIAL' },
+    });
+
+    const result = await service.Allocate(
+      {
+        OutboundOrderId: 'outbound-1',
+        IdempotencyKey: 'allocate-lot-partial',
+        Policy: AllocationPolicy.PartialBackorder,
+        EvidenceRefs: ['shortage:requested-lot-partial'],
+      },
+      context,
+    );
+
+    expect(result.Status).toBe(AllocationStatus.PartiallyAllocated);
+    expect(result.TotalAllocatedQuantity).toBe(2);
+    expect(result.TotalBackorderedQuantity).toBe(3);
+    expect(balances.balances.find((item) => item.Id === 'balance-requested-partial')?.QtyReserved).toBe(2);
+    expect(balances.balances.find((item) => item.Id === 'balance-other-stock')?.QtyReserved).toBe(0);
+  });
 });

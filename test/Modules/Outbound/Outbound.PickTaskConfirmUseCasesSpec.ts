@@ -19,6 +19,7 @@ import { InventoryControlResultDto } from '@modules/InventoryExecution/Applicati
 import { InventoryControlUseCase } from '@modules/InventoryExecution/Application/UseCases/InventoryControlUseCase';
 import { IIntegrationRepository } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
 import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/OutboxMessageEntity';
+import { PickTaskScanEvidenceDto } from '@modules/Outbound/Application/DTOs/PickTaskConfirmDto';
 import {
   IOutboundOrderRepository,
   OutboundOrderAggregate,
@@ -621,7 +622,7 @@ describe('PickTaskConfirmationService', () => {
     );
   });
 
-  it('rejects pick confirmation when the operator scans a different serial than the allocated dimension (IDC-05 AC5)', async () => {
+  it('rejects pick confirmation with a WRONG_SERIAL code when the operator scans a different serial than the allocated dimension (IDC-05 AC5)', async () => {
     const { service, inventoryControl } = buildHarness({
       pickTask: makePickTask({ SerialNumber: 'SN-1' }),
       scans: [
@@ -637,13 +638,22 @@ describe('PickTaskConfirmationService', () => {
       ],
     });
 
-    await expect(service.Confirm('pick-task-1', { IdempotencyKey: 'pick-confirm-serial' }, context)).rejects.toThrow(
-      'Pick scan confirmation failed',
+    let caught: unknown;
+    try {
+      await service.Confirm('pick-task-1', { IdempotencyKey: 'pick-confirm-serial' }, context);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    const scanEvidence = (caught as BusinessRuleException).Details as { ScanEvidence: PickTaskScanEvidenceDto[] };
+    expect(scanEvidence.ScanEvidence).toEqual(
+      expect.arrayContaining([expect.objectContaining({ ScanType: 'Serial', RejectionCode: 'WRONG_SERIAL' })]),
     );
     expect(inventoryControl.ChangeStatusInTransaction).not.toHaveBeenCalled();
   });
 
-  it('rejects pick confirmation when the operator scans a different lot than the allocated dimension (IDC-05 AC5)', async () => {
+  it('rejects pick confirmation with a WRONG_LOT code when the operator scans a different lot than the allocated dimension (IDC-05 AC5)', async () => {
     const { service, inventoryControl } = buildHarness({
       pickTask: makePickTask({ LotNumber: 'LOT-REQUESTED' }),
       scans: [
@@ -659,8 +669,17 @@ describe('PickTaskConfirmationService', () => {
       ],
     });
 
-    await expect(service.Confirm('pick-task-1', { IdempotencyKey: 'pick-confirm-lot' }, context)).rejects.toThrow(
-      'Pick scan confirmation failed',
+    let caught: unknown;
+    try {
+      await service.Confirm('pick-task-1', { IdempotencyKey: 'pick-confirm-lot' }, context);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    const scanEvidence = (caught as BusinessRuleException).Details as { ScanEvidence: PickTaskScanEvidenceDto[] };
+    expect(scanEvidence.ScanEvidence).toEqual(
+      expect.arrayContaining([expect.objectContaining({ ScanType: 'Lot', RejectionCode: 'WRONG_LOT' })]),
     );
     expect(inventoryControl.ChangeStatusInTransaction).not.toHaveBeenCalled();
   });
