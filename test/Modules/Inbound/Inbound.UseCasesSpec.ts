@@ -266,6 +266,10 @@ class FakeReceivingRepository implements IReceivingRepository {
     return this.Lines.find((item) => item.Id === id) ?? null;
   }
 
+  public async FindReceiptLineBySkuAndSerial(skuId: string, serialNumber: string): Promise<ReceiptLineEntity | null> {
+    return this.Lines.find((item) => item.SkuId === skuId && item.SerialNumber === serialNumber) ?? null;
+  }
+
   public async CreateInboundDiscrepancy(discrepancy: InboundDiscrepancyEntity): Promise<InboundDiscrepancyEntity> {
     if (
       this.Discrepancies.some(
@@ -1479,6 +1483,117 @@ describe('Inbound plan use cases', () => {
     );
 
     expect(line.SerialNumber).toBe('SN-IFB14-002');
+  });
+
+  it('blocks receipt line confirm reusing a SerialNumber already received for the same SKU (IFB-15)', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 1,
+        SerialNumber: 'SN-IFB15-DUP',
+        IdempotencyKey: 'ifb15-first-unit-1',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await expect(
+      confirmReceiptLineUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          InboundPlanLineId: created.Lines[0].Id,
+          ActualQuantity: 1,
+          SerialNumber: 'SN-IFB15-DUP',
+          IdempotencyKey: 'ifb15-second-unit-reusing-serial-1',
+          ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('allows the same SerialNumber to be received for a DIFFERENT SKU (IFB-15, scoped by SkuId)', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockImplementation(async (id: string) => sku({ Id: id, SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(
+      {
+        ...createRequest(),
+        Lines: [
+          { LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 1, ExternalLineReference: '10' },
+          { LineNumber: 2, SkuId: 'sku-2', UomId: 'uom-1', ExpectedQuantity: 1, ExternalLineReference: '20' },
+        ],
+      },
+      SystemAuditContext,
+    );
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 1,
+        SerialNumber: 'SN-IFB15-SHARED',
+        IdempotencyKey: 'ifb15-sku1-shared-serial-1',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const secondLine = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[1].Id,
+        ActualQuantity: 1,
+        SerialNumber: 'SN-IFB15-SHARED',
+        IdempotencyKey: 'ifb15-sku2-shared-serial-1',
+        ScanEvidence: { RawValue: 'barcode-2', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(secondLine.SerialNumber).toBe('SN-IFB15-SHARED');
+  });
+
+  it('allows an idempotent retry of the same payload even though its SerialNumber matches its own prior confirm (IFB-15)', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const requestPayload = {
+      ReceiptId: session.ReceiptId,
+      InboundPlanLineId: created.Lines[0].Id,
+      ActualQuantity: 1,
+      SerialNumber: 'SN-IFB15-RETRY',
+      IdempotencyKey: 'ifb15-retry-same-payload-1',
+      ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+    };
+
+    await confirmReceiptLineUseCase(bundle).Execute(requestPayload, {
+      ...SystemAuditContext,
+      ActorUserId: 'user-1',
+    });
+    const retried = await confirmReceiptLineUseCase(bundle).Execute(requestPayload, {
+      ...SystemAuditContext,
+      ActorUserId: 'user-1',
+    });
+
+    expect(retried.SerialNumber).toBe('SN-IFB15-RETRY');
+    expect(retried.IsDuplicate).toBe(true);
   });
 
   it('blocks receipt line confirm missing LotNumber when the SKU has LotControlled=true (IDC-02)', async () => {

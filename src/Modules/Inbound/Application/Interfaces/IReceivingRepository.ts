@@ -29,6 +29,7 @@ export interface IReceivingRepository {
   CreateReceiptLine(line: ReceiptLineEntity, manager?: EntityManager): Promise<ReceiptLineEntity>;
   FindReceiptLineById(id: string): Promise<ReceiptLineEntity | null>;
   FindReceiptLineByIdempotencyKey(receiptId: string, idempotencyKey: string): Promise<ReceiptLineEntity | null>;
+  FindReceiptLineBySkuAndSerial(skuId: string, serialNumber: string): Promise<ReceiptLineEntity | null>;
   CreateInboundDiscrepancy(
     discrepancy: InboundDiscrepancyEntity,
     manager?: EntityManager,
