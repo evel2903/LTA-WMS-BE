@@ -44,15 +44,15 @@ type RequiredOwnershipPolicySemantic = {
 
 const requiredPolicySemantics: Record<MasterDataObjectGroup, RequiredOwnershipPolicySemantic> = {
   [MasterDataObjectGroup.Sku]: {
-    SourceOfTruthType: SourceOfTruthType.ExternalSystem,
-    OwnershipMode: DataOwnershipMode.ExternalOwnedReadOnly,
-    DirectEditAllowed: false,
+    SourceOfTruthType: SourceOfTruthType.Wms,
+    OwnershipMode: DataOwnershipMode.WmsOwnedEditable,
+    DirectEditAllowed: true,
     RequiresAudit: true,
-    RequiresReason: true,
-    RequiresSourceSystem: true,
-    RequiresReferenceId: true,
-    ImplementationStatus: OwnershipPolicyImplementationStatus.PartiallyImplemented,
-    DeferredToStory: 'C5',
+    RequiresReason: false,
+    RequiresSourceSystem: false,
+    RequiresReferenceId: false,
+    ImplementationStatus: OwnershipPolicyImplementationStatus.Implemented,
+    DeferredToStory: 'FND-UXR-03A',
   },
   [MasterDataObjectGroup.UomPack]: {
     SourceOfTruthType: SourceOfTruthType.Hybrid,

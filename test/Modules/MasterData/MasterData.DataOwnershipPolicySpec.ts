@@ -96,11 +96,15 @@ describe('MasterData ownership policy catalog', () => {
     const byGroup = new Map(result.Items.map((policy) => [policy.ObjectGroup, policy]));
 
     expect(byGroup.get(MasterDataObjectGroup.Sku)).toMatchObject({
-      SourceOfTruthType: SourceOfTruthType.ExternalSystem,
-      OwnershipMode: DataOwnershipMode.ExternalOwnedReadOnly,
-      DirectEditAllowed: false,
-      RequiresSourceSystem: true,
-      RequiresReferenceId: true,
+      SourceOfTruthType: SourceOfTruthType.Wms,
+      OwnershipMode: DataOwnershipMode.WmsOwnedEditable,
+      DirectEditAllowed: true,
+      RequiresAudit: true,
+      RequiresReason: false,
+      RequiresSourceSystem: false,
+      RequiresReferenceId: false,
+      ImplementationStatus: OwnershipPolicyImplementationStatus.Implemented,
+      DeferredToStory: 'FND-UXR-03A',
     });
     expect(byGroup.get(MasterDataObjectGroup.OwnerCustomerSupplier)).toMatchObject({
       SourceOfTruthType: SourceOfTruthType.ExternalSystem,

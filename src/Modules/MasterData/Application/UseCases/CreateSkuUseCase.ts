@@ -23,8 +23,8 @@ import { UomEntity } from '@modules/MasterData/Domain/Entities/UomEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
 export class CreateSkuUseCase {
-  // Sku is an external source-of-truth (A6 Sku, DirectEditAllowed=false):
-  // when wired in production the ownership policy hard-blocks this with SOURCE_OF_TRUTH_READONLY.
+  // SKU create is policy-gated: deployments can allow direct WMS maintenance or
+  // block writes with SOURCE_OF_TRUTH_READONLY by changing the ownership policy.
   // ownershipPolicy + auditedTransaction are optional only so fixture-setup tests can construct
   // the use case bare; the module always wires them.
   constructor(

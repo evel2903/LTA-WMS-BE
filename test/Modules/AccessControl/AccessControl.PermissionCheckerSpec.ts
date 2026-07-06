@@ -130,6 +130,28 @@ describe('PermissionChecker', () => {
     expect(outScope).toEqual({ Allowed: false, Reason: 'OUT_OF_SCOPE' });
   });
 
+  it('enforces Owner data scope for SKU create when an owner target is supplied', async () => {
+    const world = await buildWorld();
+    await world.assign('admin', RoleCode.WmsAdmin);
+
+    const outScope = await world.checker.Check({
+      UserId: 'admin',
+      Action: ActionCode.Create,
+      ObjectType: ObjectType.Sku,
+      Scope: { OwnerId: 'owner-1' },
+    });
+    expect(outScope).toEqual({ Allowed: false, Reason: 'OUT_OF_SCOPE' });
+
+    await world.grantUserScope('admin', DataScopeType.Owner, 'owner-1');
+    const inScope = await world.checker.Check({
+      UserId: 'admin',
+      Action: ActionCode.Create,
+      ObjectType: ObjectType.Sku,
+      Scope: { OwnerId: 'owner-1' },
+    });
+    expect(inScope.Allowed).toBe(true);
+  });
+
   it('IncludeAll on the role lets any target pass scope', async () => {
     const world = await buildWorld();
     const roleId = await world.assign('sup', RoleCode.WarehouseSupervisor);

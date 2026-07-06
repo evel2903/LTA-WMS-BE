@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import dataSource from '@shared/Database/TypeOrmDataSource';
-import { ForbiddenAppException } from '@common/Exceptions/AppException';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ActorType } from '@modules/AccessControl/Domain/Enums/ActorType';
@@ -45,13 +44,13 @@ import { WarehouseProfilePolicyValidator } from '@modules/WarehouseProfile/Appli
  * C5 AC5 — live Postgres integration. Exercises the REAL wired use cases against real
  * repositories + the real AuditedTransaction (mutation and its audit row commit/rollback
  * in one DB transaction), proving:
- *  1. A6 hard-block (SOURCE_OF_TRUTH_READONLY) fires for an external source-of-truth group
- *     (SKU) and NO audit row is written for the rejected mutation.
+ *  1. SKU can be created directly through the WMS mutation path after FND-UXR-03A and writes
+ *     exactly one audit row.
  *  2. A WMS-owned MasterData create (Warehouse) writes exactly one Create audit row with the
  *     after-image, actor and resolved reason-code id (WarehouseLocation requires_reason=true).
  *  3. A WarehouseProfile (audit-only) DRAFT create writes one Create audit row.
  *
- * The ownership policy rows are the REAL DB-backed seed inside migration 1781627000000
+ * The ownership policy rows are the REAL DB-backed seed plus later migrations
  * (runMigrations populates master_data_ownership_policies). Skips gracefully with no DB so
  * `yarn test` stays green in DB-less environments. char(36) ids use randomUUID() so values
  * round-trip without blank-padding.
@@ -78,7 +77,37 @@ describe('C5 AC5 audit on V0 mutations + A6 hard-block (live Postgres)', () => {
     UserAgent: 'jest-c5-integration',
   });
 
-  const ensureOwnershipPolicySeeds = async () => {
+  const assertSkuOwnershipPolicyMigrated = async () => {
+    const rows = (await dataSource.query(`
+      SELECT
+        "source_of_truth_type",
+        "ownership_mode",
+        "direct_edit_allowed",
+        "requires_audit",
+        "requires_reason",
+        "requires_source_system",
+        "requires_reference_id",
+        "implementation_status",
+        "deferred_to_story"
+      FROM "master_data_ownership_policies"
+      WHERE "object_group" = 'Sku'
+    `)) as Array<Record<string, unknown>>;
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      source_of_truth_type: 'Wms',
+      ownership_mode: 'WmsOwnedEditable',
+      direct_edit_allowed: true,
+      requires_audit: true,
+      requires_reason: false,
+      requires_source_system: false,
+      requires_reference_id: false,
+      implementation_status: 'Implemented',
+      deferred_to_story: 'FND-UXR-03A',
+    });
+  };
+
+  const ensureSupportingOwnershipPolicySeeds = async () => {
     await dataSource.query(`
       INSERT INTO "master_data_ownership_policies" (
         "id", "object_group", "display_name", "source_of_truth_type", "typical_source_systems",
@@ -86,13 +115,6 @@ describe('C5 AC5 audit on V0 mutations + A6 hard-block (live Postgres)', () => {
         "requires_source_system", "requires_reference_id", "implementation_status",
         "deferred_to_story", "policy_notes", "source_doc_ref", "created_at", "updated_at"
       ) VALUES
-        (
-          '00000000-0000-0000-0000-000000000601', 'Sku', 'SKU', 'ExternalSystem',
-          '["ERP","OMS","PIM","OwnerMaster"]'::jsonb, 'ExternalOwnedReadOnly', false, true,
-          true, true, true, 'PartiallyImplemented', 'C5',
-          'SKU basic attributes are external-owned; WMS operational flags are conditional.',
-          'doc04#14', now(), now()
-        ),
         (
           '00000000-0000-0000-0000-000000000604', 'WarehouseLocation', 'Warehouse/Location', 'Wms',
           '["WMS"]'::jsonb, 'WmsOwnedEditable', true, true, true, false, false,
@@ -129,13 +151,16 @@ describe('C5 AC5 audit on V0 mutations + A6 hard-block (live Postgres)', () => {
     try {
       if (!dataSource.isInitialized) await dataSource.initialize();
       await dataSource.runMigrations();
-      await ensureOwnershipPolicySeeds();
-      available = true;
     } catch {
       available = false;
 
       console.warn('[C5AuditIntegrationSpec] No Postgres reachable — skipping live C5 audit assertions.');
+      return;
     }
+
+    await assertSkuOwnershipPolicyMigrated();
+    await ensureSupportingOwnershipPolicySeeds();
+    available = true;
   });
 
   afterAll(async () => {
@@ -153,12 +178,24 @@ describe('C5 AC5 audit on V0 mutations + A6 hard-block (live Postgres)', () => {
     );
   });
 
-  // 1) A6 hard-block: SKU is an external source-of-truth (DirectEditAllowed=false) — direct
-  //    Create must be rejected with SOURCE_OF_TRUTH_READONLY and write NO audit row.
-  it('AC5: blocks direct SKU create (A6 SOURCE_OF_TRUTH_READONLY) and writes no audit row', async () => {
+  // 1) FND-UXR-03A: SKU is WMS-editable, so direct create persists and writes audit.
+  it('AC5: creates direct SKU and writes exactly one Create audit row', async () => {
     if (!available) return;
 
     const skuCode = `C5-SKU-${randomUUID().slice(0, 8)}`;
+    const uomId = randomUUID();
+    await dataSource.getRepository(UomOrmEntity).save({
+      Id: uomId,
+      UomCode: `C5-UOM-${randomUUID().slice(0, 8)}`,
+      UomName: 'C5 SKU unit',
+      UomType: 'Quantity',
+      DecimalPrecision: 0,
+      Status: MasterDataStatus.Active,
+      SourceSystem: 'jest',
+      ReferenceId: 'c5-sku-create',
+      CreatedBy: null,
+      UpdatedBy: null,
+    });
     const useCase = new CreateSkuUseCase(
       new SkuRepository(dataSource.getRepository(SkuOrmEntity)),
       new OwnerRepository(dataSource.getRepository(OwnerOrmEntity)),
@@ -166,32 +203,41 @@ describe('C5 AC5 audit on V0 mutations + A6 hard-block (live Postgres)', () => {
       ownershipPolicy,
       auditedTransaction,
     );
+    const ctx = context();
 
-    let caught: unknown;
-    try {
-      await useCase.Execute(
-        {
-          SkuCode: skuCode,
-          SkuName: 'C5 blocked sku',
-          ItemClass: 'GENERAL',
-          ItemStatus: SkuStatus.Active,
-          BaseUomId: randomUUID(),
-          InventoryUomId: randomUUID(),
-        },
-        context(),
-      );
-    } catch (error) {
-      caught = error;
-    }
+    await useCase.Execute(
+      {
+        SkuCode: skuCode,
+        SkuName: 'C5 direct sku',
+        ItemClass: 'GENERAL',
+        ItemStatus: SkuStatus.Active,
+        BaseUomId: uomId,
+        InventoryUomId: uomId,
+      },
+      ctx,
+    );
 
-    expect(caught).toBeInstanceOf(ForbiddenAppException);
-    expect((caught as ForbiddenAppException).Details).toMatchObject({ Reason: 'SOURCE_OF_TRUTH_READONLY' });
-
-    // No SKU persisted and no audit row written for this object code.
     const skuRow = await dataSource.getRepository(SkuOrmEntity).findOne({ where: { SkuCode: skuCode } });
-    expect(skuRow).toBeNull();
-    const auditCount = await auditRepo().count({ where: { ObjectCode: skuCode } });
-    expect(auditCount).toBe(0);
+    expect(skuRow).toMatchObject({ SkuCode: skuCode, BaseUomId: uomId, InventoryUomId: uomId });
+    const auditRows = await auditRepo().find({ where: { ObjectCode: skuCode } });
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0]).toMatchObject({
+      Action: ActionCode.Create,
+      ObjectType: ObjectType.Sku,
+      ObjectId: skuRow?.Id,
+      ObjectCode: skuCode,
+      ActorUserId: ctx.ActorUserId,
+      ActorType: ActorType.User,
+      CorrelationId: ctx.CorrelationId,
+      RequestId: ctx.RequestId,
+      Result: 'SUCCESS',
+    });
+    expect(auditRows[0].AfterJson).toMatchObject({
+      SkuCode: skuCode,
+      BaseUomId: uomId,
+      InventoryUomId: uomId,
+      ItemStatus: SkuStatus.Active,
+    });
   });
 
   // 2) MasterData mutation + audit (Warehouse). WarehouseLocation A6 policy has
