@@ -866,6 +866,9 @@ const SeedInbound = async (
   lpnCode: string,
 ): Promise<void> => {
   const flowReference = item.FlowReference;
+  // IFB-13: resolved once here (mirrors the SeedScenario pattern) so the InboundPutawayRelease
+  // insert below can use a real Id instead of hardcoding null.
+  const inboundLocation = RequiredMapValue(context.LocationsByCode, item.InboundLocationCode);
   await SaveEntity(manager.getRepository(InboundPlanOrmEntity), {
     Id: ids.InboundPlanId,
     SourceSystem: DemoSourceSystem,
@@ -1071,7 +1074,9 @@ const SeedInbound = async (
     LpnCode: lpnCode,
     SsccCode: null,
     InventoryStatusCode: 'READY_FOR_PUTAWAY',
-    CurrentLocationId: null,
+    // IFB-13: inboundLocation was already resolved above (line 658) -- discarding its Id here was
+    // the exact same bug this story fixes in the application code, reproduced in seed data.
+    CurrentLocationId: inboundLocation.Id,
     CurrentLocationCode: item.InboundLocationCode,
     WarehouseProfileId: context.WarehouseProfile.Id,
     LabelDecision: 'Allowed',

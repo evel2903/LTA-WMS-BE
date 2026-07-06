@@ -14,6 +14,7 @@ import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/Outbox
 import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
 import { ILocationProfileRepository } from '@modules/MasterData/Application/Interfaces/ILocationProfileRepository';
 import { ILocationRepository } from '@modules/MasterData/Application/Interfaces/ILocationRepository';
+import { DEFAULT_STAGING_LOCATION_CODE } from '@modules/MasterData/Domain/Constants/LocationConstants';
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { LocationEntity } from '@modules/MasterData/Domain/Entities/LocationEntity';
 import { LocationProfileEntity } from '@modules/MasterData/Domain/Entities/LocationProfileEntity';
@@ -108,6 +109,7 @@ export class ReleasePutawayTaskUseCase {
       await this.AuditBlocked(context, release, reason, { SkuId: release.SkuId });
       throw new BusinessRuleException(reason);
     }
+    const sourceLocation = await this.ResolveSourceLocation(request, release, context);
     const eligibility = await this.ResolveTarget(request, release, context, sku);
     const now = new Date();
     const taskId = randomUUID();
@@ -148,8 +150,8 @@ export class ReleasePutawayTaskUseCase {
       ExpiryDate: release.ExpiryDate,
       SerialNumber: release.SerialNumber,
       InventoryStatusCode: release.InventoryStatusCode,
-      SourceLocationId: request.SourceLocationId ?? release.CurrentLocationId,
-      SourceLocationCode: request.SourceLocationCode?.trim() || release.CurrentLocationCode,
+      SourceLocationId: sourceLocation.Id,
+      SourceLocationCode: sourceLocation.Code,
       TargetLocationId: eligibility.Target.Id,
       TargetLocationCode: eligibility.Target.LocationCode,
       TargetLocationProfileId: eligibility.Target.LocationProfileId,
@@ -159,8 +161,8 @@ export class ReleasePutawayTaskUseCase {
       ConstraintJson: {
         ...eligibility.Constraints,
         Source: {
-          SourceLocationId: request.SourceLocationId ?? release.CurrentLocationId,
-          SourceLocationCode: request.SourceLocationCode?.trim() || release.CurrentLocationCode,
+          SourceLocationId: sourceLocation.Id,
+          SourceLocationCode: sourceLocation.Code,
         },
       },
       EligibilityDecisionJson: {
@@ -225,6 +227,45 @@ export class ReleasePutawayTaskUseCase {
     if (request.SourceLocationId && task.SourceLocationId !== request.SourceLocationId) {
       throw new ConflictException('Putaway task idempotency key already used for a different source location');
     }
+  }
+
+  // IFB-13: defensive fallback for a release created before ReleaseInboundToPutawayUseCase's
+  // ResolveCurrentLocation fix (or by any other future producer of InboundPutawayReleaseEntity) that
+  // can still carry CurrentLocationId = null with only CurrentLocationCode set. Resolve the code to a
+  // real Location row here too, rather than let a null SourceLocationId reach the task --
+  // ConfirmPutawayTaskUseCase requires a real id to confirm. Branch count and nullability differ from
+  // the sibling method (this one also trusts an already-resolved release.CurrentLocationId), so it
+  // isn't a literal mirror -- both independently resolve the same "code -> real Location row" fallback.
+  private async ResolveSourceLocation(
+    request: ReleasePutawayTaskDto,
+    release: InboundPutawayReleaseEntity,
+    context: AuditContext,
+  ): Promise<{ Id: string; Code: string }> {
+    const releaseLocationCode = release.CurrentLocationCode?.trim() || DEFAULT_STAGING_LOCATION_CODE;
+    if (request.SourceLocationId) {
+      return {
+        Id: request.SourceLocationId,
+        Code: request.SourceLocationCode?.trim() || releaseLocationCode,
+      };
+    }
+    if (release.CurrentLocationId) {
+      return { Id: release.CurrentLocationId, Code: releaseLocationCode };
+    }
+    const location = await this.locations.FindByWarehouseAndCode(release.WarehouseId, releaseLocationCode);
+    // Dual-review finding: no status filter here previously, so a deactivated staging location would
+    // have silently resolved -- inconsistent with ResolveTarget's explicit Active check below.
+    if (!location || location.LocationStatus !== LocationStatus.Active) {
+      const reason = 'Source location not found for putaway task release';
+      await this.AuditBlocked(context, release, reason, {
+        WarehouseId: release.WarehouseId,
+        LocationCode: releaseLocationCode,
+      });
+      throw new BusinessRuleException(reason, {
+        WarehouseId: release.WarehouseId,
+        LocationCode: releaseLocationCode,
+      });
+    }
+    return { Id: location.Id, Code: location.LocationCode };
   }
 
   private async ResolveTarget(
