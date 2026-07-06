@@ -1,8 +1,12 @@
+import 'reflect-metadata';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 import request from 'supertest';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import { REQUIRE_PERMISSION_KEY } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
 import { CreateSkuUseCase } from '@modules/MasterData/Application/UseCases/CreateSkuUseCase';
 import { GetSkuUseCase } from '@modules/MasterData/Application/UseCases/GetSkuUseCase';
 import { GetSkuRuleFactsUseCase } from '@modules/MasterData/Application/UseCases/GetSkuRuleFactsUseCase';
@@ -50,6 +54,14 @@ describe('E2E SkuController (no DB)', () => {
     getRuleFactsExecute.mockReset();
     listExecute.mockReset();
     updateExecute.mockReset();
+  });
+
+  it('declares create permission with owner scope from DefaultOwnerId', () => {
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, SkuController.prototype.Create)).toEqual({
+      Action: ActionCode.Create,
+      ObjectType: ObjectType.Sku,
+      Scope: { OwnerId: { In: 'body', Key: 'DefaultOwnerId' } },
+    });
   });
 
   it('POST /skus rejects missing required fields and empty optional IDs', async () => {

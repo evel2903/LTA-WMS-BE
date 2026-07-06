@@ -25,7 +25,8 @@ import { SkuEntity } from '@modules/MasterData/Domain/Entities/SkuEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
 export class UpdateSkuUseCase {
-  // Hard-blocked in production by A6 (Sku source-of-truth read-only) — see CreateSkuUseCase.
+  // SKU update is policy-gated like create; editable policy allows WMS UI
+  // maintenance, read-only policy blocks writes before persistence.
   constructor(
     private readonly skuRepository: ISkuRepository,
     private readonly ownerRepository: IOwnerRepository,

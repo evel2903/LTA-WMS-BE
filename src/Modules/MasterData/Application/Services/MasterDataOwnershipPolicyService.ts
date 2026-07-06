@@ -30,7 +30,7 @@ export interface OwnershipDecision {
 
 /**
  * Enforces A6 source-of-truth / data-ownership policy at the mutation surface
- * (FR-8, V0-AC-03.5). External-owned read-only groups (DirectEditAllowed=false, e.g. SKU,
+ * (FR-8, V0-AC-03.5). External-owned read-only groups (DirectEditAllowed=false, e.g.
  * Owner, LPN) are hard-blocked for write actions and must come through an integration
  * path; conditional-edit / change-controlled groups must supply reason / source-system /
  * reference-id per their policy flags. When a reason code is supplied it is validated

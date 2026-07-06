@@ -27,7 +27,7 @@ export class SkuController {
   ) {}
 
   @Post()
-  @RequirePermission(ActionCode.Create, ObjectType.Sku)
+  @RequirePermission(ActionCode.Create, ObjectType.Sku, { OwnerId: { In: 'body', Key: 'DefaultOwnerId' } })
   public async Create(@Body() request: CreateSkuRequest, @CurrentAuditContext() context: AuditContext) {
     return await this.createSkuUseCase.Execute(request, context);
   }
