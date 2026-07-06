@@ -52,6 +52,8 @@ import { InboundPlanDocumentStatus } from '@modules/Inbound/Domain/Enums/Inbound
 import { ReceiptLineDiscrepancySignal } from '@modules/Inbound/Domain/Enums/ReceiptLineDiscrepancySignal';
 import { ReceiptLineStatus } from '@modules/Inbound/Domain/Enums/ReceiptLineStatus';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
+import { LocationEntity } from '@modules/MasterData/Domain/Entities/LocationEntity';
+import { LocationStatus } from '@modules/MasterData/Domain/Enums/LocationStatus';
 import { OwnerEntity } from '@modules/MasterData/Domain/Entities/OwnerEntity';
 import { PartnerEntity } from '@modules/PartnerMaster/Domain/Entities/PartnerEntity';
 import { PartnerRiskLevel } from '@modules/PartnerMaster/Domain/Enums/PartnerRiskLevel';
@@ -71,6 +73,7 @@ import { RuleStatus } from '@modules/WarehouseProfile/Domain/Enums/RuleStatus';
 import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
 import { ICoreFlowRepository } from '@modules/CoreFlow/Application/Interfaces/ICoreFlowRepository';
 import { IIntegrationRepository } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
+import { ILocationRepository } from '@modules/MasterData/Application/Interfaces/ILocationRepository';
 import { IOwnerRepository } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { IUomRepository } from '@modules/MasterData/Application/Interfaces/IUomRepository';
@@ -528,6 +531,21 @@ const sku = (overrides: Partial<ConstructorParameters<typeof SkuEntity>[0]> = {}
     ...overrides,
   });
 
+const location = (overrides: Partial<ConstructorParameters<typeof LocationEntity>[0]> = {}) =>
+  new LocationEntity({
+    Id: 'location-receiving-1',
+    WarehouseId: 'warehouse-1',
+    ZoneId: 'zone-receiving-1',
+    LocationCode: 'RECEIVING',
+    LocationName: 'Receiving Staging',
+    LocationType: 'DOCK',
+    LocationProfileId: 'profile-dock-1',
+    LocationStatus: LocationStatus.Active,
+    CreatedAt: now,
+    UpdatedAt: now,
+    ...overrides,
+  });
+
 const profile = (strategyPolicy: Record<string, unknown> = {}, thresholdPolicy: Record<string, unknown> = {}) =>
   new WarehouseProfileEntity({
     Id: 'profile-1',
@@ -653,6 +671,11 @@ const repoBundle = () => {
   const owners = { FindById: jest.fn(async () => owner()) };
   const warehouses = { FindById: jest.fn(async () => warehouse()) };
   const skus = { FindById: jest.fn<Promise<SkuEntity | null>, [string]>(async () => sku()) };
+  const locations = {
+    FindByWarehouseAndCode: jest.fn<Promise<LocationEntity | null>, [string, string]>(async (_warehouseId, code) =>
+      location({ LocationCode: code }),
+    ),
+  };
   const uoms = { FindById: jest.fn(async () => uom()) };
   const coreFlows = {
     Instances: [] as unknown[],
@@ -725,6 +748,7 @@ const repoBundle = () => {
     owners,
     warehouses,
     skus,
+    locations,
     uoms,
     coreFlows,
     integrations,
@@ -842,6 +866,7 @@ const releaseInboundToPutawayUseCase = (bundle: ReturnType<typeof repoBundle>) =
     bundle.integrations as unknown as IIntegrationRepository,
     bundle.reasonCatalog,
     bundle.skus as unknown as ISkuRepository,
+    bundle.locations as unknown as ILocationRepository,
     bundle.audited as unknown as AuditedTransaction,
     bundle.permissionChecker,
   );
@@ -2595,6 +2620,149 @@ describe('Inbound plan use cases', () => {
         (item) => (item as { StepCode?: CoreFlowStepCode }).StepCode === CoreFlowStepCode.InboundReleasedToPutaway,
       ),
     ).toHaveLength(1);
+  });
+
+  it('resolves CurrentLocationId by warehouse+code when the release request omits it (IFB-13)', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-release-no-location',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'qc-release-no-location' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    await confirmInboundLpnUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        LpnCode: 'LPN-NO-LOCATION-1',
+        IdempotencyKey: 'lpn-release-no-location',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const release = await releaseInboundToPutawayUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        IdempotencyKey: 'release-no-location',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    // IFB-13 root fix: CurrentLocationId used to default to null independently of
+    // CurrentLocationCode defaulting to 'RECEIVING' -- a release created this way could never be
+    // putaway-confirmed later. It must now resolve to a real location id via warehouse+code lookup.
+    expect(release.CurrentLocationCode).toBe('RECEIVING');
+    expect(release.CurrentLocationId).toBe('location-receiving-1');
+    expect(release.CurrentLocationId).not.toBeNull();
+    expect(bundle.locations.FindByWarehouseAndCode).toHaveBeenCalledWith(created.WarehouseId, 'RECEIVING');
+  });
+
+  it('fails release loudly (not silently with a null id) when no location matches the current-location code (IFB-13)', async () => {
+    const bundle = repoBundle();
+    bundle.locations.FindByWarehouseAndCode.mockResolvedValueOnce(null);
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-release-unresolvable-location',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'qc-release-unresolvable-location' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    await confirmInboundLpnUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        LpnCode: 'LPN-UNRESOLVABLE-1',
+        IdempotencyKey: 'lpn-release-unresolvable-location',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          IdempotencyKey: 'release-unresolvable-location',
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.receiving.PutawayReleases).toHaveLength(0);
+  });
+
+  it('fails release loudly when the current-location code resolves to an INACTIVE location, not just a missing one (IFB-13 dual-review patch)', async () => {
+    const bundle = repoBundle();
+    bundle.locations.FindByWarehouseAndCode.mockResolvedValueOnce(
+      location({ LocationStatus: LocationStatus.Inactive }),
+    );
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-release-inactive-location',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'qc-release-inactive-location' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    await confirmInboundLpnUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        LpnCode: 'LPN-INACTIVE-LOCATION-1',
+        IdempotencyKey: 'lpn-release-inactive-location',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          IdempotencyKey: 'release-inactive-location',
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.receiving.PutawayReleases).toHaveLength(0);
   });
 
   it('blocks release while QC target is pending or blocked and does not emit putaway event', async () => {

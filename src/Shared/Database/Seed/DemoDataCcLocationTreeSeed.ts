@@ -152,6 +152,20 @@ export const BuildDemoDataCcLocationTreePlan = (): DemoDataCcLocationTreePlan =>
     loc('RCV-A01', 'Receiving aisle A01', 'LTA-RCV', 'LP-LTA-AISLE', 'AISLE', undefined, 10, 10),
     loc('RCV-A01-D01', 'Dock nhận hàng 01', 'LTA-RCV', 'LP-LTA-DOCK', 'DOCK', 'RCV-A01', 11, 11, 6),
     loc('RCV-A01-D02', 'Dock nhận hàng 02', 'LTA-RCV', 'LP-LTA-DOCK', 'DOCK', 'RCV-A01', 12, 12, 6),
+    // IFB-13: real Location row for the default staging code ('RECEIVING') that
+    // ReleaseInboundToPutawayUseCase resolves a putaway release's CurrentLocationId against when the
+    // caller doesn't supply one explicitly. Without this row the lookup fails closed.
+    loc(
+      'RECEIVING',
+      'Khu vực nhận hàng tạm (staging mặc định)',
+      'LTA-RCV',
+      'LP-LTA-DOCK',
+      'DOCK',
+      'RCV-A01',
+      13,
+      13,
+      6,
+    ),
     loc('QC-A01', 'QC aisle A01', 'LTA-QC', 'LP-LTA-AISLE', 'AISLE', undefined, 20, 20),
     loc('QC-A01-STG01', 'QC staging 01', 'LTA-QC', 'LP-LTA-QC', 'QC_STAGE', 'QC-A01', 21, 21, 8),
     loc('QC-A01-HOLD01', 'QC hold 01', 'LTA-QC', 'LP-LTA-QC', 'QC_STAGE', 'QC-A01', 22, 22, 4),

@@ -76,6 +76,10 @@ import { ReceivingRepository } from '@modules/Inbound/Infrastructure/Persistence
 import { InboundPlanController } from '@modules/Inbound/Presentation/Controllers/InboundPlanController';
 import { QcTaskController } from '@modules/Inbound/Presentation/Controllers/QcTaskController';
 import { ReceiptController } from '@modules/Inbound/Presentation/Controllers/ReceiptController';
+import {
+  ILocationRepository,
+  LOCATION_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/ILocationRepository';
 import { IOwnerRepository, OWNER_REPOSITORY } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { ISkuRepository, SKU_REPOSITORY } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { IUomRepository, UOM_REPOSITORY } from '@modules/MasterData/Application/Interfaces/IUomRepository';
@@ -403,6 +407,7 @@ import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRu
         integrations: IIntegrationRepository,
         reasonCatalog: IReasonCodeCatalog,
         skus: ISkuRepository,
+        locations: ILocationRepository,
         audited: AuditedTransaction,
         permissionChecker: IPermissionChecker,
       ) =>
@@ -416,6 +421,7 @@ import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRu
           integrations,
           reasonCatalog,
           skus,
+          locations,
           audited,
           permissionChecker,
         ),
@@ -429,6 +435,7 @@ import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRu
         INTEGRATION_REPOSITORY,
         REASON_CODE_CATALOG,
         SKU_REPOSITORY,
+        LOCATION_REPOSITORY,
         AuditedTransaction,
         PERMISSION_CHECKER,
       ],

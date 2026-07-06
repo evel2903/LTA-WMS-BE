@@ -34,7 +34,10 @@ import { LabelBlockingValidationResultDto } from '@modules/BarcodeLabel/Applicat
 import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/OutboxMessageEntity';
 import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
 import { IIntegrationRepository } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
+import { ILocationRepository } from '@modules/MasterData/Application/Interfaces/ILocationRepository';
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
+import { DEFAULT_STAGING_LOCATION_CODE } from '@modules/MasterData/Domain/Constants/LocationConstants';
+import { LocationStatus } from '@modules/MasterData/Domain/Enums/LocationStatus';
 import { IWarehouseProfileRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
 import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileEntity';
 
@@ -61,6 +64,7 @@ export class ReleaseInboundToPutawayUseCase {
     private readonly integrations: IIntegrationRepository,
     private readonly reasonCatalog: IReasonCodeCatalog,
     private readonly skus: ISkuRepository,
+    private readonly locations: ILocationRepository,
     private readonly audited: AuditedTransaction,
     private readonly permissionChecker?: IPermissionChecker,
   ) {}
@@ -163,6 +167,8 @@ export class ReleaseInboundToPutawayUseCase {
       throw new BusinessRuleException(labelDecision.Reason);
     }
 
+    const currentLocation = await this.ResolveCurrentLocation(request, receipt);
+
     const now = new Date();
     const outboxId = randomUUID();
     const milestoneId = receipt.CoreFlowInstanceId ? randomUUID() : null;
@@ -197,8 +203,8 @@ export class ReleaseInboundToPutawayUseCase {
       ExpiryDate: line.ExpiryDate,
       SerialNumber: line.SerialNumber,
       InventoryStatusCode: readiness.InventoryStatusCode,
-      CurrentLocationId: request.CurrentLocationId ?? null,
-      CurrentLocationCode: request.CurrentLocationCode?.trim() || 'RECEIVING',
+      CurrentLocationId: currentLocation.Id,
+      CurrentLocationCode: currentLocation.Code,
       WarehouseProfileId: aggregate.Plan.WarehouseProfileId,
       LabelDecision: labelDecision?.Decision ?? null,
       LabelReason: labelDecision?.Reason ?? null,
@@ -290,14 +296,40 @@ export class ReleaseInboundToPutawayUseCase {
     duplicate: InboundPutawayReleaseEntity,
     request: ReleaseInboundToPutawayDto,
   ): void {
-    const requestedLocationId = request.CurrentLocationId ?? null;
-    const requestedLocationCode = request.CurrentLocationCode?.trim() || 'RECEIVING';
-    if (
-      duplicate.CurrentLocationId !== requestedLocationId ||
-      duplicate.CurrentLocationCode !== requestedLocationCode
-    ) {
+    // Only compare when the caller explicitly supplied a value -- the resolved default (looked up
+    // from CurrentLocationCode via ResolveCurrentLocation) is not something the caller stated, so a
+    // retry that omits it must not be treated as "a different release payload".
+    if (request.CurrentLocationId && duplicate.CurrentLocationId !== request.CurrentLocationId) {
       throw new ConflictException('Putaway release idempotency key already used for a different release payload');
     }
+    const requestedLocationCode = request.CurrentLocationCode?.trim();
+    if (requestedLocationCode && duplicate.CurrentLocationCode !== requestedLocationCode) {
+      throw new ConflictException('Putaway release idempotency key already used for a different release payload');
+    }
+  }
+
+  // IFB-13: CurrentLocationId and CurrentLocationCode used to be defaulted independently (code ->
+  // 'RECEIVING', id -> null), so a release created without an explicit CurrentLocationId could never
+  // be putaway-confirmed later (ConfirmPutawayTaskUseCase requires a real SourceLocationId). Resolve
+  // the code to a real Location row up front and fail loudly here if none exists, instead of letting
+  // a null id silently propagate downstream.
+  private async ResolveCurrentLocation(
+    request: ReleaseInboundToPutawayDto,
+    receipt: ReceiptEntity,
+  ): Promise<{ Id: string | null; Code: string }> {
+    const code = request.CurrentLocationCode?.trim() || DEFAULT_STAGING_LOCATION_CODE;
+    if (request.CurrentLocationId) return { Id: request.CurrentLocationId, Code: code };
+    const location = await this.locations.FindByWarehouseAndCode(receipt.WarehouseId, code);
+    // Dual-review finding: FindByWarehouseAndCode doesn't filter by status, so without this check a
+    // deactivated staging location would silently resolve here even though ResolveTarget (the
+    // sibling target-location path in ReleasePutawayTaskUseCase) explicitly rejects inactive locations.
+    if (!location || location.LocationStatus !== LocationStatus.Active) {
+      throw new BusinessRuleException('Current staging location not found for putaway release', {
+        WarehouseId: receipt.WarehouseId,
+        LocationCode: code,
+      });
+    }
+    return { Id: location.Id, Code: location.LocationCode };
   }
 
   private async ResolveReadiness(line: ReceiptLineEntity): Promise<ReleaseReadiness> {
