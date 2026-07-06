@@ -267,6 +267,20 @@ export class AllocationLifecycleService {
     let totalBackordered = 0;
 
     for (const line of lines.slice().sort((left, right) => left.LineNumber - right.LineNumber)) {
+      // IFB-14: RequestedSerialNumber pins allocation to exactly one specific physical unit --
+      // requesting that one serial for more than 1 unit is a logical contradiction (the balance
+      // model has no way to represent "this exact serial, times 3"). Fail loud instead of letting
+      // ListCandidates silently exact-match a multi-unit line against a single serial value.
+      if (line.RequestedSerialNumber !== null && line.OrderedQuantity !== 1) {
+        throw new BusinessRuleException(
+          'RequestedSerialNumber requires OrderedQuantity = 1; split into separate lines to request multiple specific serials',
+          {
+            OutboundOrderLineId: line.Id,
+            RequestedSerialNumber: line.RequestedSerialNumber,
+            OrderedQuantity: line.OrderedQuantity,
+          },
+        );
+      }
       let remaining = line.OrderedQuantity;
       totalOrdered += line.OrderedQuantity;
       const candidates = await this.allocationInventory.ListCandidates(
@@ -287,6 +301,24 @@ export class AllocationLifecycleService {
         const available = balancePlan.Balance.QtyAvailable - balancePlan.ReservedDelta;
         const quantity = Math.min(remaining, available);
         if (quantity <= 0) continue;
+        // IFB-14 (dual-review patch): the RequestedSerialNumber check above only guards the
+        // caller's stated intent -- it does nothing when a line doesn't request a specific serial
+        // but FEFO/candidate matching incidentally resolves a serial-tagged dimension whose balance
+        // itself already carries QtyOnHand > 1 (legacy data from before this fix, a cycle-count
+        // adjustment, or any other future writer not gated the way receiving now is). Without this,
+        // BuildAllocationLine would silently allocate >1 unit against one SerialNumber, reproducing
+        // the exact defect downstream in the pick task this story exists to prevent.
+        if (candidate.Dimension.SerialNumber !== null && quantity !== 1) {
+          throw new BusinessRuleException(
+            'Cannot allocate more than 1 unit from a single serial-tagged balance; the underlying inventory data is inconsistent',
+            {
+              OutboundOrderLineId: line.Id,
+              DimensionId: candidate.Dimension.Id,
+              SerialNumber: candidate.Dimension.SerialNumber,
+              Quantity: quantity,
+            },
+          );
+        }
         balancePlan.ReservedDelta += quantity;
         remaining -= quantity;
         totalAllocated += quantity;

@@ -198,6 +198,16 @@ export class ConfirmReceiptLineUseCase {
     if (sku.SerialControlled && !request.SerialNumber?.trim()) {
       throw new BusinessRuleException('SerialNumber is required for this SKU', { SkuId: sku.Id });
     }
+    // IFB-14: SerialNumber is a single scalar field -- one value cannot identify N>1 physical
+    // units. Receiving Quantity=3 with one SerialNumber previously silently discarded per-unit
+    // identity for 2 of the 3 units, all the way down into the inventory ledger. Fail loud instead
+    // of accepting data the rest of the system can't represent correctly.
+    if (sku.SerialControlled && request.ActualQuantity !== 1) {
+      throw new BusinessRuleException(
+        'SerialControlled SKU requires ActualQuantity = 1 per receipt line; split into separate lines for multi-unit serial capture',
+        { SkuId: sku.Id, ActualQuantity: request.ActualQuantity },
+      );
+    }
   }
 
   private AssertDuplicateReceiptLineMatches(existing: ReceiptLineEntity, request: ConfirmReceiptLineDto): void {

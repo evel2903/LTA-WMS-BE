@@ -290,6 +290,17 @@ export class PickTaskConfirmationService {
         AssignedUserId: mobileTask.AssignedUserId,
       });
     }
+    // IFB-14: task.SerialNumber is a single scalar -- one value cannot identify N>1 physical
+    // units. A task allocated against a specific serial but carrying Quantity!=1 means the
+    // allocation/receiving data upstream is already inconsistent; fail loud here rather than let
+    // ValidateScanEvidence silently confirm a scan that can't represent per-unit identity.
+    if (pickTask.SerialNumber !== null && pickTask.Quantity !== 1) {
+      throw new BusinessRuleException('SerialControlled pick task requires Quantity = 1 when a SerialNumber is set', {
+        PickTaskId: pickTask.Id,
+        SerialNumber: pickTask.SerialNumber,
+        Quantity: pickTask.Quantity,
+      });
+    }
   }
 
   private ValidateScanEvidence(
