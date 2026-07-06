@@ -49,8 +49,15 @@ describe('E2E InventorySerialLookupController (no DB)', () => {
   });
 
   it('GET /inventory-balances rejects invalid query params', async () => {
-    await request(app.getHttpServer()).get('/inventory-balances?Page=0').expect(400);
-    await request(app.getHttpServer()).get('/inventory-balances?PageSize=101').expect(400);
+    await request(app.getHttpServer()).get('/inventory-balances?SkuId=sku-1&Page=0').expect(400);
+    await request(app.getHttpServer()).get('/inventory-balances?SkuId=sku-1&PageSize=101').expect(400);
+
+    expect(listExecute).not.toHaveBeenCalled();
+  });
+
+  it('GET /inventory-balances rejects a request with no SkuId', async () => {
+    await request(app.getHttpServer()).get('/inventory-balances').expect(400);
+    await request(app.getHttpServer()).get('/inventory-balances?WarehouseId=wh-1').expect(400);
 
     expect(listExecute).not.toHaveBeenCalled();
   });

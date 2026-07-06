@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class ListInventorySerialLookupQuery {
   @IsOptional()
@@ -15,10 +15,12 @@ export class ListInventorySerialLookupQuery {
   @Max(100)
   public PageSize?: number;
 
-  @IsOptional()
+  // Required (not optional) — a SKU-less call would join+scan every balance
+  // in the warehouse; this endpoint is a SKU-scoped lookup, not a browser.
   @IsString()
+  @IsNotEmpty()
   @MaxLength(36)
-  public SkuId?: string;
+  public SkuId!: string;
 
   @IsOptional()
   @IsString()

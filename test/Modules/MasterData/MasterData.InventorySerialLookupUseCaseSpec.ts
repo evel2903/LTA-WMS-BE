@@ -15,11 +15,17 @@ class MemoryInventorySerialLookupRepository implements IInventorySerialLookupRep
     filter: InventorySerialLookupFilter,
   ): Promise<{ Items: InventorySerialLookupRow[]; TotalItems: number }> {
     let items = this.rows;
-    if (filter.SkuId) items = items.filter((row) => row.Dimension.SkuId === filter.SkuId);
-    if (filter.WarehouseId) items = items.filter((row) => row.Dimension.WarehouseId === filter.WarehouseId);
-    if (filter.OwnerId) items = items.filter((row) => row.Dimension.OwnerId === filter.OwnerId);
-    if (filter.SerialNumber) items = items.filter((row) => row.Dimension.SerialNumber === filter.SerialNumber);
-    if (filter.LotNumber) items = items.filter((row) => row.Dimension.LotNumber === filter.LotNumber);
+    const skuId = filter.SkuId?.trim();
+    const warehouseId = filter.WarehouseId?.trim();
+    const ownerId = filter.OwnerId?.trim();
+    const serialNumber = filter.SerialNumber?.trim();
+    const lotNumber = filter.LotNumber?.trim();
+
+    if (skuId) items = items.filter((row) => row.Dimension.SkuId === skuId);
+    if (warehouseId) items = items.filter((row) => row.Dimension.WarehouseId === warehouseId);
+    if (ownerId) items = items.filter((row) => row.Dimension.OwnerId === ownerId);
+    if (serialNumber) items = items.filter((row) => row.Dimension.SerialNumber === serialNumber);
+    if (lotNumber) items = items.filter((row) => row.Dimension.LotNumber === lotNumber);
 
     return { Items: items.slice(skip, skip + take), TotalItems: items.length };
   }
@@ -89,6 +95,18 @@ describe('ListInventorySerialLookupUseCase', () => {
 
     expect(result.Meta.TotalItems).toBe(1);
     expect(result.Items).toHaveLength(1);
+    expect(result.Items[0].DimensionId).toBe('dimension-match');
+  });
+
+  it('trims whitespace from filter values before matching', async () => {
+    const matching = MakeRow({
+      Dimension: MakeInventoryDimension({ Id: 'dimension-match', SerialNumber: 'SN-001' }),
+    });
+    const useCase = new ListInventorySerialLookupUseCase(new MemoryInventorySerialLookupRepository([matching]));
+
+    const result = await useCase.Execute({ SerialNumber: '  SN-001  ' });
+
+    expect(result.Meta.TotalItems).toBe(1);
     expect(result.Items[0].DimensionId).toBe('dimension-match');
   });
 
