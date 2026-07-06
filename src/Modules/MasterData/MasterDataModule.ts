@@ -78,6 +78,7 @@ import { ListInventoryDimensionsUseCase } from '@modules/MasterData/Application/
 import { InitializeInventoryBalanceUseCase } from '@modules/MasterData/Application/UseCases/InitializeInventoryBalanceUseCase';
 import { GetInventoryBalanceUseCase } from '@modules/MasterData/Application/UseCases/GetInventoryBalanceUseCase';
 import { ListInventoryBalancesUseCase } from '@modules/MasterData/Application/UseCases/ListInventoryBalancesUseCase';
+import { ListInventorySerialLookupUseCase } from '@modules/MasterData/Application/UseCases/ListInventorySerialLookupUseCase';
 import { ListMasterDataOwnershipPoliciesUseCase } from '@modules/MasterData/Application/UseCases/ListMasterDataOwnershipPoliciesUseCase';
 import { VerifyTier1MasterDataChecklistUseCase } from '@modules/MasterData/Application/UseCases/VerifyTier1MasterDataChecklistUseCase';
 import { InventoryDimensionKeyService } from '@modules/MasterData/Application/Services/InventoryDimensionKeyService';
@@ -132,6 +133,10 @@ import {
   INVENTORY_BALANCE_REPOSITORY,
 } from '@modules/MasterData/Application/Interfaces/IInventoryBalanceRepository';
 import {
+  IInventorySerialLookupRepository,
+  INVENTORY_SERIAL_LOOKUP_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IInventorySerialLookupRepository';
+import {
   IMasterDataOwnershipPolicyRepository,
   MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY,
 } from '@modules/MasterData/Application/Interfaces/IMasterDataOwnershipPolicyRepository';
@@ -168,6 +173,7 @@ import { ItemCoverageRepository } from '@modules/MasterData/Infrastructure/Persi
 import { InventoryStatusRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/InventoryStatusRepository';
 import { InventoryDimensionRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/InventoryDimensionRepository';
 import { InventoryBalanceRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/InventoryBalanceRepository';
+import { InventorySerialLookupRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/InventorySerialLookupRepository';
 import { MasterDataOwnershipPolicyRepository } from '@modules/MasterData/Infrastructure/Persistence/Repositories/MasterDataOwnershipPolicyRepository';
 import { SiteController } from '@modules/MasterData/Presentation/Controllers/SiteController';
 import { WarehouseController } from '@modules/MasterData/Presentation/Controllers/WarehouseController';
@@ -183,6 +189,7 @@ import { PackDefinitionController } from '@modules/MasterData/Presentation/Contr
 import { UomConversionController } from '@modules/MasterData/Presentation/Controllers/UomConversionController';
 import { SkuBarcodeController } from '@modules/MasterData/Presentation/Controllers/SkuBarcodeController';
 import { ItemCoverageController } from '@modules/MasterData/Presentation/Controllers/ItemCoverageController';
+import { InventoryBalanceController } from '@modules/MasterData/Presentation/Controllers/InventoryBalanceController';
 
 @Module({
   imports: [
@@ -222,6 +229,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     SkuBarcodeController,
     ItemCoverageController,
     InventoryStatusController,
+    InventoryBalanceController,
   ],
   providers: [
     { provide: SITE_REPOSITORY, useClass: SiteRepository },
@@ -240,6 +248,7 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
     { provide: INVENTORY_STATUS_REPOSITORY, useClass: InventoryStatusRepository },
     { provide: INVENTORY_DIMENSION_REPOSITORY, useClass: InventoryDimensionRepository },
     { provide: INVENTORY_BALANCE_REPOSITORY, useClass: InventoryBalanceRepository },
+    { provide: INVENTORY_SERIAL_LOOKUP_REPOSITORY, useClass: InventorySerialLookupRepository },
     { provide: MASTER_DATA_OWNERSHIP_POLICY_REPOSITORY, useClass: MasterDataOwnershipPolicyRepository },
     {
       provide: MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
@@ -831,6 +840,11 @@ import { ItemCoverageController } from '@modules/MasterData/Presentation/Control
       useFactory: (inventoryBalances: IInventoryBalanceRepository) =>
         new ListInventoryBalancesUseCase(inventoryBalances),
       inject: [INVENTORY_BALANCE_REPOSITORY],
+    },
+    {
+      provide: ListInventorySerialLookupUseCase,
+      useFactory: (lookup: IInventorySerialLookupRepository) => new ListInventorySerialLookupUseCase(lookup),
+      inject: [INVENTORY_SERIAL_LOOKUP_REPOSITORY],
     },
     {
       provide: ListMasterDataOwnershipPoliciesUseCase,
