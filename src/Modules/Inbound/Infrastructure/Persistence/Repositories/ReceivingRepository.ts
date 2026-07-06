@@ -123,6 +123,11 @@ export class ReceivingRepository implements IReceivingRepository {
     return entity ? ReceivingOrmMapper.ToLineDomain(entity) : null;
   }
 
+  public async FindReceiptLineBySkuAndSerial(skuId: string, serialNumber: string): Promise<ReceiptLineEntity | null> {
+    const entity = await this.lines.findOne({ where: { SkuId: skuId, SerialNumber: serialNumber } });
+    return entity ? ReceivingOrmMapper.ToLineDomain(entity) : null;
+  }
+
   public async CreateInboundDiscrepancy(
     discrepancy: InboundDiscrepancyEntity,
     manager?: EntityManager,

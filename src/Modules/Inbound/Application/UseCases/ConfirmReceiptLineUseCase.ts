@@ -88,6 +88,7 @@ export class ConfirmReceiptLineUseCase {
     const sku = await this.skus.FindById(actualSkuId);
     if (!sku) throw new BusinessRuleException('SKU not found for receipt line', { SkuId: actualSkuId });
     this.AssertCaptureRequiredBySku(sku, request);
+    await this.AssertSerialNotDuplicated(sku, request);
     const signals = this.DiscrepancySignals(request, planLine, actualSkuId, actualUomId);
     const now = new Date();
     const line = new ReceiptLineEntity({
@@ -207,6 +208,26 @@ export class ConfirmReceiptLineUseCase {
         'SerialControlled SKU requires ActualQuantity = 1 per receipt line; split into separate lines for multi-unit serial capture',
         { SkuId: sku.Id, ActualQuantity: request.ActualQuantity },
       );
+    }
+  }
+
+  // IFB-15: SerialNumber had no uniqueness check anywhere -- two receipt lines (same SKU) could
+  // be confirmed with the identical serial and nothing would ever flag it. Downstream, if the
+  // duplicated serial's other dimension attributes also match at putaway, InventoryDimensionKeyService
+  // silently merges two distinct physical units into one balance row. This runs after the
+  // idempotency-key retry check above, so a legitimate retry of the same payload (including its
+  // own serial) is never rejected by this guard -- only a NEW line reusing another line's serial is.
+  private async AssertSerialNotDuplicated(sku: SkuEntity, request: ConfirmReceiptLineDto): Promise<void> {
+    if (!sku.SerialControlled) return;
+    const serialNumber = request.SerialNumber?.trim();
+    if (!serialNumber) return;
+    const existing = await this.receiving.FindReceiptLineBySkuAndSerial(sku.Id, serialNumber);
+    if (existing) {
+      throw new BusinessRuleException('SerialNumber has already been received for this SKU', {
+        SkuId: sku.Id,
+        SerialNumber: serialNumber,
+        ExistingReceiptLineId: existing.Id,
+      });
     }
   }
 
