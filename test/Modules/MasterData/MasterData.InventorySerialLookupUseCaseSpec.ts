@@ -17,6 +17,7 @@ class MemoryInventorySerialLookupRepository implements IInventorySerialLookupRep
     let items = this.rows;
     if (filter.SkuId) items = items.filter((row) => row.Dimension.SkuId === filter.SkuId);
     if (filter.WarehouseId) items = items.filter((row) => row.Dimension.WarehouseId === filter.WarehouseId);
+    if (filter.OwnerId) items = items.filter((row) => row.Dimension.OwnerId === filter.OwnerId);
     if (filter.SerialNumber) items = items.filter((row) => row.Dimension.SerialNumber === filter.SerialNumber);
     if (filter.LotNumber) items = items.filter((row) => row.Dimension.LotNumber === filter.LotNumber);
 
@@ -62,7 +63,7 @@ describe('ListInventorySerialLookupUseCase', () => {
     });
   });
 
-  it('forwards SkuId/WarehouseId/SerialNumber/LotNumber filters to the repository', async () => {
+  it('forwards SkuId/WarehouseId/OwnerId/SerialNumber/LotNumber filters to the repository', async () => {
     const matching = MakeRow({
       Dimension: MakeInventoryDimension({ Id: 'dimension-match', SerialNumber: 'SN-001', LotNumber: 'LOT-001' }),
     });
@@ -71,6 +72,7 @@ describe('ListInventorySerialLookupUseCase', () => {
         Id: 'dimension-other',
         SkuId: 'sku-other',
         WarehouseId: 'warehouse-other',
+        OwnerId: 'owner-other',
         SerialNumber: 'SN-999',
         LotNumber: 'LOT-999',
       }),
@@ -80,6 +82,7 @@ describe('ListInventorySerialLookupUseCase', () => {
     const result = await useCase.Execute({
       SkuId: 'sku-active',
       WarehouseId: 'warehouse-active',
+      OwnerId: 'owner-active',
       SerialNumber: 'SN-001',
       LotNumber: 'LOT-001',
     });

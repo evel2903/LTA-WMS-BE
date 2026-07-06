@@ -30,15 +30,21 @@ export class InventorySerialLookupRepository implements IInventorySerialLookupRe
       .innerJoinAndSelect('dimension.Location', 'location')
       .innerJoinAndSelect('dimension.InventoryStatus', 'status');
 
-    if (filter.SkuId) qb = qb.andWhere('dimension.sku_id = :skuId', { skuId: filter.SkuId });
-    if (filter.WarehouseId)
-      qb = qb.andWhere('dimension.warehouse_id = :warehouseId', { warehouseId: filter.WarehouseId });
-    if (filter.SerialNumber)
-      qb = qb.andWhere('dimension.serial_number = :serialNumber', { serialNumber: filter.SerialNumber });
-    if (filter.LotNumber) qb = qb.andWhere('dimension.lot_number = :lotNumber', { lotNumber: filter.LotNumber });
+    const skuId = filter.SkuId?.trim();
+    const warehouseId = filter.WarehouseId?.trim();
+    const ownerId = filter.OwnerId?.trim();
+    const serialNumber = filter.SerialNumber?.trim();
+    const lotNumber = filter.LotNumber?.trim();
+
+    if (skuId) qb = qb.andWhere('dimension.sku_id = :skuId', { skuId });
+    if (warehouseId) qb = qb.andWhere('dimension.warehouse_id = :warehouseId', { warehouseId });
+    if (ownerId) qb = qb.andWhere('dimension.owner_id = :ownerId', { ownerId });
+    if (serialNumber) qb = qb.andWhere('dimension.serial_number = :serialNumber', { serialNumber });
+    if (lotNumber) qb = qb.andWhere('dimension.lot_number = :lotNumber', { lotNumber });
 
     const [entities, totalItems] = await qb
       .orderBy('balance.created_at', 'DESC')
+      .addOrderBy('balance.id', 'DESC')
       .skip(skip)
       .take(take)
       .getManyAndCount();

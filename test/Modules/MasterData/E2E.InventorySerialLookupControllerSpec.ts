@@ -8,9 +8,9 @@ import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { REQUIRE_PERMISSION_KEY } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
 import { ListInventorySerialLookupUseCase } from '@modules/MasterData/Application/UseCases/ListInventorySerialLookupUseCase';
-import { InventoryBalanceController } from '@modules/MasterData/Presentation/Controllers/InventoryBalanceController';
+import { InventorySerialLookupController } from '@modules/MasterData/Presentation/Controllers/InventorySerialLookupController';
 
-describe('E2E InventoryBalanceController (no DB)', () => {
+describe('E2E InventorySerialLookupController (no DB)', () => {
   let app: INestApplication;
 
   const listExecute = jest.fn();
@@ -18,7 +18,7 @@ describe('E2E InventoryBalanceController (no DB)', () => {
   beforeAll(async () => {
     const moduleRef = await overrideAccessGuards(
       Test.createTestingModule({
-        controllers: [InventoryBalanceController],
+        controllers: [InventorySerialLookupController],
         providers: [{ provide: ListInventorySerialLookupUseCase, useValue: { Execute: listExecute } }],
       }),
     ).compile();
@@ -37,10 +37,14 @@ describe('E2E InventoryBalanceController (no DB)', () => {
     listExecute.mockReset();
   });
 
-  it('declares Read:InventoryMovement permission', () => {
-    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, InventoryBalanceController.prototype.List)).toEqual({
+  it('declares Read:InventoryMovement permission with WarehouseId/OwnerId scope', () => {
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, InventorySerialLookupController.prototype.List)).toEqual({
       Action: ActionCode.Read,
       ObjectType: ObjectType.InventoryMovement,
+      Scope: {
+        WarehouseId: { In: 'query', Key: 'WarehouseId' },
+        OwnerId: { In: 'query', Key: 'OwnerId' },
+      },
     });
   });
 
@@ -55,7 +59,9 @@ describe('E2E InventoryBalanceController (no DB)', () => {
     listExecute.mockResolvedValue({ Items: [], Meta: { Page: 1, PageSize: 20, TotalItems: 0, TotalPages: 0 } });
 
     const response = await request(app.getHttpServer())
-      .get('/inventory-balances?Page=1&PageSize=20&SkuId=sku-1&WarehouseId=wh-1&SerialNumber=SN-1&LotNumber=LOT-1')
+      .get(
+        '/inventory-balances?Page=1&PageSize=20&SkuId=sku-1&WarehouseId=wh-1&OwnerId=owner-1&SerialNumber=SN-1&LotNumber=LOT-1',
+      )
       .expect(200);
 
     expect(listExecute).toHaveBeenCalledWith({
@@ -63,6 +69,7 @@ describe('E2E InventoryBalanceController (no DB)', () => {
       PageSize: 20,
       SkuId: 'sku-1',
       WarehouseId: 'wh-1',
+      OwnerId: 'owner-1',
       SerialNumber: 'SN-1',
       LotNumber: 'LOT-1',
     });

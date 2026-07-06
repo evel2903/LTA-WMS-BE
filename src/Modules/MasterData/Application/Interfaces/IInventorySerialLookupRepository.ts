@@ -6,6 +6,7 @@ export const INVENTORY_SERIAL_LOOKUP_REPOSITORY = Symbol('INVENTORY_SERIAL_LOOKU
 export interface InventorySerialLookupFilter {
   SkuId?: string;
   WarehouseId?: string;
+  OwnerId?: string;
   SerialNumber?: string;
   LotNumber?: string;
 }

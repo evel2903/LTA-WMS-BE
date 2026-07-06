@@ -17,6 +17,7 @@ export class ListInventorySerialLookupUseCase {
     const result = await this.lookup.List(paging.Skip, paging.Take, {
       SkuId: query.SkuId,
       WarehouseId: query.WarehouseId,
+      OwnerId: query.OwnerId,
       SerialNumber: query.SerialNumber,
       LotNumber: query.LotNumber,
     });

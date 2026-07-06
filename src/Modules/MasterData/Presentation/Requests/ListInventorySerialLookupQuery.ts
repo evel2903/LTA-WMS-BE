@@ -27,6 +27,11 @@ export class ListInventorySerialLookupQuery {
 
   @IsOptional()
   @IsString()
+  @MaxLength(36)
+  public OwnerId?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(100)
   public SerialNumber?: string;
 

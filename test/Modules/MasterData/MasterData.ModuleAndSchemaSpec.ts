@@ -91,9 +91,10 @@ describe('MasterData module and schema registration', () => {
     const controllers = (Reflect.getMetadata('controllers', MasterDataModule) as Array<{ name: string }>) ?? [];
     const controllerNames = controllers.map((controller) => controller.name);
 
-    expect(controllerNames).not.toEqual(
-      expect.arrayContaining(['InventoryDimensionController', 'InventoryBalanceController']),
-    );
+    // Checked individually (not via a single arrayContaining) so this test actually
+    // fails if either mutation controller reappears, instead of requiring both at once.
+    expect(controllerNames).not.toContain('InventoryDimensionController');
+    expect(controllerNames).not.toContain('InventoryBalanceController');
   });
 
   it('does not expose public mutation controllers for A6 ownership policy or Tier 1 checklist', () => {

@@ -189,7 +189,7 @@ import { PackDefinitionController } from '@modules/MasterData/Presentation/Contr
 import { UomConversionController } from '@modules/MasterData/Presentation/Controllers/UomConversionController';
 import { SkuBarcodeController } from '@modules/MasterData/Presentation/Controllers/SkuBarcodeController';
 import { ItemCoverageController } from '@modules/MasterData/Presentation/Controllers/ItemCoverageController';
-import { InventoryBalanceController } from '@modules/MasterData/Presentation/Controllers/InventoryBalanceController';
+import { InventorySerialLookupController } from '@modules/MasterData/Presentation/Controllers/InventorySerialLookupController';
 
 @Module({
   imports: [
@@ -229,7 +229,7 @@ import { InventoryBalanceController } from '@modules/MasterData/Presentation/Con
     SkuBarcodeController,
     ItemCoverageController,
     InventoryStatusController,
-    InventoryBalanceController,
+    InventorySerialLookupController,
   ],
   providers: [
     { provide: SITE_REPOSITORY, useClass: SiteRepository },

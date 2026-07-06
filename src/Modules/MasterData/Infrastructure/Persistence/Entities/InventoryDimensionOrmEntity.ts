@@ -52,12 +52,14 @@ export class InventoryDimensionOrmEntity {
   @Column({ name: 'lpn_code', type: 'varchar', length: 100, nullable: true })
   public LpnCode!: string | null;
 
+  @Index()
   @Column({ name: 'lot_number', type: 'varchar', length: 100, nullable: true })
   public LotNumber!: string | null;
 
   @Column({ name: 'expiry_date', type: 'date', nullable: true })
   public ExpiryDate!: Date | null;
 
+  @Index()
   @Column({ name: 'serial_number', type: 'varchar', length: 100, nullable: true })
   public SerialNumber!: string | null;
 
