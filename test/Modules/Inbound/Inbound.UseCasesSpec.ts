@@ -1433,6 +1433,54 @@ describe('Inbound plan use cases', () => {
     ).rejects.toThrow(BusinessRuleException);
   });
 
+  it('blocks receipt line confirm with ActualQuantity > 1 when the SKU has SerialControlled=true, even with a SerialNumber given (IFB-14)', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    await expect(
+      confirmReceiptLineUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          InboundPlanLineId: created.Lines[0].Id,
+          ActualQuantity: 3,
+          SerialNumber: 'SN-IFB14-001',
+          IdempotencyKey: 'ifb14-multi-unit-serial-1',
+          ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('allows receipt line confirm with ActualQuantity = 1 when the SKU has SerialControlled=true (IFB-14)', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 1,
+        SerialNumber: 'SN-IFB14-002',
+        IdempotencyKey: 'ifb14-single-unit-serial-1',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(line.SerialNumber).toBe('SN-IFB14-002');
+  });
+
   it('blocks receipt line confirm missing LotNumber when the SKU has LotControlled=true (IDC-02)', async () => {
     const bundle = repoBundle();
     bundle.skus.FindById.mockResolvedValue(sku({ LotControlled: true }));

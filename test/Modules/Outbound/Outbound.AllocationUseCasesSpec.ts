@@ -228,7 +228,11 @@ class MemoryPermissionChecker implements IPermissionChecker {
 
 function orderAggregate(
   status: OutboundOrderStatus = OutboundOrderStatus.Validated,
-  lineOverrides: { RequestedLotNumber?: string | null; RequestedSerialNumber?: string | null } = {},
+  lineOverrides: {
+    RequestedLotNumber?: string | null;
+    RequestedSerialNumber?: string | null;
+    OrderedQuantity?: number;
+  } = {},
 ): OutboundOrderAggregate {
   const now = new Date('2026-06-24T00:00:00.000Z');
   const order = new OutboundOrderEntity({
@@ -256,7 +260,7 @@ function orderAggregate(
     SkuCode: 'SKU-1',
     UomId: 'uom-1',
     UomCode: 'EA',
-    OrderedQuantity: 5,
+    OrderedQuantity: lineOverrides.OrderedQuantity ?? 5,
     RequestedLotNumber: lineOverrides.RequestedLotNumber,
     RequestedSerialNumber: lineOverrides.RequestedSerialNumber,
     CreatedAt: now,
@@ -311,7 +315,11 @@ function harness(
     candidates?: AllocationInventoryCandidate[];
     balances?: InventoryBalanceEntity[];
     permissionAllowed?: boolean;
-    lineOverrides?: { RequestedLotNumber?: string | null; RequestedSerialNumber?: string | null };
+    lineOverrides?: {
+      RequestedLotNumber?: string | null;
+      RequestedSerialNumber?: string | null;
+      OrderedQuantity?: number;
+    };
   } = {},
 ) {
   const orders = new MemoryOutboundOrderRepository(orderAggregate(options.status, options.lineOverrides));
@@ -561,7 +569,7 @@ describe('AllocationLifecycleService', () => {
         candidate({ balance: requestedBalance, dimension: requestedDimension }),
       ],
       balances: [fefoBalance, requestedBalance],
-      lineOverrides: { RequestedSerialNumber: 'SN-1' },
+      lineOverrides: { RequestedSerialNumber: 'SN-1', OrderedQuantity: 1 },
     });
 
     const result = await service.Allocate(
@@ -570,9 +578,45 @@ describe('AllocationLifecycleService', () => {
     );
 
     expect(result.Status).toBe(AllocationStatus.Allocated);
-    expect(result.Lines[0]).toMatchObject({ SourceDimensionId: 'dimension-requested', AllocatedQuantity: 5 });
-    expect(balances.balances.find((item) => item.Id === 'balance-requested')?.QtyReserved).toBe(5);
+    expect(result.Lines[0]).toMatchObject({ SourceDimensionId: 'dimension-requested', AllocatedQuantity: 1 });
+    expect(balances.balances.find((item) => item.Id === 'balance-requested')?.QtyReserved).toBe(1);
     expect(balances.balances.find((item) => item.Id === 'balance-fefo')?.QtyReserved).toBe(0);
+  });
+
+  it('blocks allocation when RequestedSerialNumber is set but OrderedQuantity != 1 (IFB-14)', async () => {
+    const someBalance = balance('balance-multi-serial', 'dimension-multi-serial', 10, 0);
+    const someDimension = dimension('dimension-multi-serial', 'owner-1', { SerialNumber: 'SN-1' });
+
+    const { service } = harness({
+      candidates: [candidate({ balance: someBalance, dimension: someDimension })],
+      balances: [someBalance],
+      lineOverrides: { RequestedSerialNumber: 'SN-1', OrderedQuantity: 3 },
+    });
+
+    await expect(
+      service.Allocate({ OutboundOrderId: 'outbound-1', IdempotencyKey: 'ifb14-multi-unit-serial-allocate' }, context),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('blocks allocation from a serial-tagged balance carrying more than 1 available unit, even when the line never requested a specific serial (IFB-14 dual-review patch)', async () => {
+    // Simulates stale/legacy inventory data: a balance whose dimension already has a SerialNumber
+    // but QtyOnHand/QtyAvailable > 1 -- the exact shape the receiving-side guard (AC1) now prevents
+    // going forward, but which could still exist from before this fix or via another writer.
+    const corruptBalance = balance('balance-corrupt-serial', 'dimension-corrupt-serial', 3, 0);
+    const corruptDimension = dimension('dimension-corrupt-serial', 'owner-1', { SerialNumber: 'SN-1' });
+
+    const { service } = harness({
+      candidates: [candidate({ balance: corruptBalance, dimension: corruptDimension })],
+      balances: [corruptBalance],
+      lineOverrides: { OrderedQuantity: 3 },
+    });
+
+    await expect(
+      service.Allocate(
+        { OutboundOrderId: 'outbound-1', IdempotencyKey: 'ifb14-corrupt-serial-balance-allocate' },
+        context,
+      ),
+    ).rejects.toThrow(BusinessRuleException);
   });
 
   it('allocates the exact requested lot, not the FEFO-preferred dimension (IDC-05)', async () => {
@@ -656,7 +700,7 @@ describe('AllocationLifecycleService', () => {
     const { service, balances, integrations } = harness({
       candidates: [candidate({ balance: otherBalance, dimension: otherDimension })],
       balances: [otherBalance],
-      lineOverrides: { RequestedSerialNumber: 'SN-MISSING' },
+      lineOverrides: { RequestedSerialNumber: 'SN-MISSING', OrderedQuantity: 1 },
     });
 
     const result = await service.Allocate(
@@ -671,7 +715,7 @@ describe('AllocationLifecycleService', () => {
 
     expect(result.Status).toBe(AllocationStatus.Failed);
     expect(result.TotalAllocatedQuantity).toBe(0);
-    expect(result.TotalBackorderedQuantity).toBe(5);
+    expect(result.TotalBackorderedQuantity).toBe(1);
     expect(result.ShortageReason).toBeTruthy();
     expect(balances.balances.find((item) => item.Id === 'balance-other-serial')?.QtyReserved).toBe(0);
     expect(integrations.outbox[0].EventType).toBe('AllocationFailed');
@@ -695,7 +739,7 @@ describe('AllocationLifecycleService', () => {
         candidate({ balance: bothBalance, dimension: bothDimension }),
       ],
       balances: [lotOnlyBalance, serialOnlyBalance, bothBalance],
-      lineOverrides: { RequestedLotNumber: 'LOT-X', RequestedSerialNumber: 'SN-X' },
+      lineOverrides: { RequestedLotNumber: 'LOT-X', RequestedSerialNumber: 'SN-X', OrderedQuantity: 1 },
     });
 
     const result = await service.Allocate(
@@ -704,8 +748,8 @@ describe('AllocationLifecycleService', () => {
     );
 
     expect(result.Status).toBe(AllocationStatus.Allocated);
-    expect(result.Lines[0]).toMatchObject({ SourceDimensionId: 'dimension-both', AllocatedQuantity: 5 });
-    expect(balances.balances.find((item) => item.Id === 'balance-both')?.QtyReserved).toBe(5);
+    expect(result.Lines[0]).toMatchObject({ SourceDimensionId: 'dimension-both', AllocatedQuantity: 1 });
+    expect(balances.balances.find((item) => item.Id === 'balance-both')?.QtyReserved).toBe(1);
     expect(balances.balances.find((item) => item.Id === 'balance-lot-only')?.QtyReserved).toBe(0);
     expect(balances.balances.find((item) => item.Id === 'balance-serial-only')?.QtyReserved).toBe(0);
   });

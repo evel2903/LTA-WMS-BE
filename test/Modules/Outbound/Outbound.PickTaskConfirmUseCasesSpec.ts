@@ -624,16 +624,16 @@ describe('PickTaskConfirmationService', () => {
 
   it('rejects pick confirmation with a WRONG_SERIAL code when the operator scans a different serial than the allocated dimension (IDC-05 AC5)', async () => {
     const { service, inventoryControl } = buildHarness({
-      pickTask: makePickTask({ SerialNumber: 'SN-1' }),
+      pickTask: makePickTask({ SerialNumber: 'SN-1', Quantity: 1 }),
       scans: [
         makeScan({ id: 'scan-location', scanType: MobileScanType.Location, rawValue: 'loc-source' }),
         makeScan({
           id: 'scan-item',
           scanType: MobileScanType.Item,
-          rawValue: '(01)00000000000001(21)SN-WRONG(30)5',
+          rawValue: '(01)00000000000001(21)SN-WRONG(30)1',
           normalizedValue: '00000000000001',
           resolvedObjectId: 'sku-1',
-          parsed: { Lot: 'LOT-1', Serial: 'SN-WRONG', Quantity: 5 },
+          parsed: { Lot: 'LOT-1', Serial: 'SN-WRONG', Quantity: 1 },
         }),
       ],
     });
@@ -686,16 +686,16 @@ describe('PickTaskConfirmationService', () => {
 
   it('confirms successfully when a dedicated Serial scan-type (not embedded in the Item scan) matches the allocated dimension (IDC-06 AC5)', async () => {
     const { service, inventoryControl } = buildHarness({
-      pickTask: makePickTask({ LotNumber: null, SerialNumber: 'SN-1' }),
+      pickTask: makePickTask({ LotNumber: null, SerialNumber: 'SN-1', Quantity: 1 }),
       scans: [
         makeScan({ id: 'scan-location', scanType: MobileScanType.Location, rawValue: 'loc-source' }),
         makeScan({
           id: 'scan-item',
           scanType: MobileScanType.Item,
-          rawValue: '(01)00000000000001(30)5',
+          rawValue: '(01)00000000000001(30)1',
           normalizedValue: '00000000000001',
           resolvedObjectId: 'sku-1',
-          parsed: { Quantity: 5 },
+          parsed: { Quantity: 1 },
         }),
         makeScan({ id: 'scan-serial', scanType: MobileScanType.Serial, rawValue: 'SN-1', normalizedValue: 'SN-1' }),
       ],
@@ -732,16 +732,16 @@ describe('PickTaskConfirmationService', () => {
 
   it('rejects pick confirmation with a WRONG_SERIAL code when a dedicated Serial scan-type mismatches, even without any Item-embedded serial (IDC-06 AC4)', async () => {
     const { service, inventoryControl } = buildHarness({
-      pickTask: makePickTask({ SerialNumber: 'SN-1' }),
+      pickTask: makePickTask({ SerialNumber: 'SN-1', Quantity: 1 }),
       scans: [
         makeScan({ id: 'scan-location', scanType: MobileScanType.Location, rawValue: 'loc-source' }),
         makeScan({
           id: 'scan-item',
           scanType: MobileScanType.Item,
-          rawValue: '(01)00000000000001(30)5',
+          rawValue: '(01)00000000000001(30)1',
           normalizedValue: '00000000000001',
           resolvedObjectId: 'sku-1',
-          parsed: { Quantity: 5 },
+          parsed: { Quantity: 1 },
         }),
         makeScan({
           id: 'scan-serial',
@@ -804,18 +804,42 @@ describe('PickTaskConfirmationService', () => {
     expect(inventoryControl.ChangeStatusInTransaction).not.toHaveBeenCalled();
   });
 
-  it('keeps confirming via the legacy Item-scan-embedded GS1 lot/serial when no dedicated scan-type is sent (IDC-06 AC6 regression)', async () => {
-    const { service, inventoryControl } = buildHarness({
-      pickTask: makePickTask({ LotNumber: null, SerialNumber: 'SN-1' }),
+  it('blocks pick confirmation when the task has a SerialNumber but Quantity != 1 (IFB-14)', async () => {
+    // Scans deliberately match the task exactly (Location/Item/Quantity/Serial all consistent) so
+    // that without the new guard this scenario would confirm cleanly -- proving the guard, not some
+    // unrelated scan mismatch, is what blocks it.
+    const { service } = buildHarness({
+      pickTask: makePickTask({ LotNumber: null, SerialNumber: 'SN-1', Quantity: 3 }),
       scans: [
         makeScan({ id: 'scan-location', scanType: MobileScanType.Location, rawValue: 'loc-source' }),
         makeScan({
           id: 'scan-item',
           scanType: MobileScanType.Item,
-          rawValue: '(01)00000000000001(21)SN-1(30)5',
+          rawValue: '(01)00000000000001(21)SN-1(30)3',
           normalizedValue: '00000000000001',
           resolvedObjectId: 'sku-1',
-          parsed: { Serial: 'SN-1', Quantity: 5 },
+          parsed: { Serial: 'SN-1', Quantity: 3 },
+        }),
+      ],
+    });
+
+    await expect(
+      service.Confirm('pick-task-1', { IdempotencyKey: 'ifb14-multi-unit-serial-pick-1' }, context),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('keeps confirming via the legacy Item-scan-embedded GS1 lot/serial when no dedicated scan-type is sent (IDC-06 AC6 regression)', async () => {
+    const { service, inventoryControl } = buildHarness({
+      pickTask: makePickTask({ LotNumber: null, SerialNumber: 'SN-1', Quantity: 1 }),
+      scans: [
+        makeScan({ id: 'scan-location', scanType: MobileScanType.Location, rawValue: 'loc-source' }),
+        makeScan({
+          id: 'scan-item',
+          scanType: MobileScanType.Item,
+          rawValue: '(01)00000000000001(21)SN-1(30)1',
+          normalizedValue: '00000000000001',
+          resolvedObjectId: 'sku-1',
+          parsed: { Serial: 'SN-1', Quantity: 1 },
         }),
       ],
     });
