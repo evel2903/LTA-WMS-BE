@@ -34,6 +34,7 @@ import { IInventoryBalanceRepository } from '@modules/MasterData/Application/Int
 import { IInventoryDimensionRepository } from '@modules/MasterData/Application/Interfaces/IInventoryDimensionRepository';
 import { IInventoryStatusRepository } from '@modules/MasterData/Application/Interfaces/IInventoryStatusRepository';
 import { ILocationRepository } from '@modules/MasterData/Application/Interfaces/ILocationRepository';
+import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { InventoryDimensionKeyService } from '@modules/MasterData/Application/Services/InventoryDimensionKeyService';
 import { InventoryBalanceEntity } from '@modules/MasterData/Domain/Entities/InventoryBalanceEntity';
 import { InventoryDimensionEntity } from '@modules/MasterData/Domain/Entities/InventoryDimensionEntity';
@@ -105,6 +106,7 @@ export class InventoryControlUseCase {
     private readonly dimensionKeyService: InventoryDimensionKeyService,
     private readonly reasonCatalog: IReasonCodeCatalog,
     private readonly audited: AuditedTransaction,
+    private readonly skus: ISkuRepository,
     private readonly permissionChecker?: IPermissionChecker,
   ) {}
 
@@ -367,6 +369,20 @@ export class InventoryControlUseCase {
           QtyOnHand: source.SourceBalance.QtyOnHand,
         });
       }
+      // Mirrors ApplyBalanceMovement's own `remainingSourceQty < QtyReserved` guard, but raised
+      // explicitly here as ConflictException (409, per AC3/AC6) instead of letting the shared
+      // helper's BusinessRuleException (400) bubble up — this operation always moves the full
+      // QtyOnHand, so remainingSourceQty is always 0 and this is the only way that guard can fire
+      // for a correction. ChangeStatus/MoveInternal keep their existing 400 behavior unchanged.
+      if (source.SourceBalance.QtyReserved > 0) {
+        throw new ConflictException('Inventory balance has reserved quantity and cannot be corrected', {
+          SourceDimensionId: source.SourceDimension.Id,
+          QtyReserved: source.SourceBalance.QtyReserved,
+        });
+      }
+      // A serial correction only makes sense for a SKU that is actually serial-tracked — QtyOnHand
+      // === 1 alone is a weak proxy (a lot-only SKU can legitimately have exactly 1 unit left).
+      await this.AssertSerialControlledSku(source.SourceDimension.SkuId);
       return await this.ExecutePostWithIdempotency(source, plan, context);
     } catch (error) {
       if (error instanceof InventoryControlDuplicateResult) {
@@ -400,6 +416,15 @@ export class InventoryControlUseCase {
     if (!request.SourceDimensionId) throw new BusinessRuleException('SourceDimensionId is required');
     if (!request.NewSerialNumber) throw new BusinessRuleException('NewSerialNumber is required');
     if (!request.IdempotencyKey) throw new BusinessRuleException('IdempotencyKey is required');
+  }
+
+  private async AssertSerialControlledSku(skuId: string): Promise<void> {
+    const sku = await this.skus.FindById(skuId);
+    if (!sku || !sku.SerialControlled) {
+      throw new BusinessRuleException('Serial correction is only allowed for serial-controlled SKUs', {
+        SkuId: skuId,
+      });
+    }
   }
 
   private NormalizeStatusRequest(request: ChangeInventoryStatusDto): ChangeInventoryStatusDto {
@@ -837,19 +862,29 @@ export class InventoryControlUseCase {
     sourceDimension: InventoryDimensionEntity,
     plan: MutationPlan,
   ): Promise<void> {
-    const candidates = await this.inventoryDimensions.List(0, 10, {
-      SkuId: sourceDimension.SkuId,
-      SerialNumber: plan.NewSerialNumber,
-    });
-    for (const candidate of candidates.Items) {
-      if (candidate.Id === sourceDimension.Id) continue;
-      const candidateBalance = await this.inventoryBalances.FindByDimensionId(candidate.Id);
-      if (candidateBalance && candidateBalance.QtyOnHand > 0) {
-        throw new ConflictException('NewSerialNumber already exists on another live inventory unit', {
-          NewSerialNumber: plan.NewSerialNumber,
-          ExistingDimensionId: candidate.Id,
-        });
+    const pageSize = 50;
+    let skip = 0;
+    let totalItems = Infinity;
+    // Paginate through every candidate — a single fixed-size page previously let collisions past
+    // the page boundary go undetected (caught via review: a SKU with >10 dimensions sharing a
+    // serial would silently skip the tail of the list).
+    while (skip < totalItems) {
+      const candidates = await this.inventoryDimensions.List(skip, pageSize, {
+        SkuId: sourceDimension.SkuId,
+        SerialNumber: plan.NewSerialNumber,
+      });
+      totalItems = candidates.TotalItems;
+      for (const candidate of candidates.Items) {
+        if (candidate.Id === sourceDimension.Id) continue;
+        const candidateBalance = await this.inventoryBalances.FindByDimensionId(candidate.Id);
+        if (candidateBalance && candidateBalance.QtyOnHand > 0) {
+          throw new ConflictException('NewSerialNumber already exists on another live inventory unit', {
+            NewSerialNumber: plan.NewSerialNumber,
+            ExistingDimensionId: candidate.Id,
+          });
+        }
       }
+      skip += pageSize;
     }
   }
 
@@ -1062,15 +1097,25 @@ export class InventoryControlUseCase {
     source: SourceInventoryContext,
     target: { TargetInventoryStatusCode: string; TargetLocationId: string; NewSerialNumber?: string },
   ): string {
+    // Switch on the explicit `operation` discriminator rather than probing request field presence
+    // (`'SourceBalanceId' in request`) — the discriminator is already available and doesn't break
+    // if a future DTO happens to share a field name.
+    const movementRequest =
+      operation === 'SerialCorrection' ? null : (request as ChangeInventoryStatusDto | MoveInventoryInternalDto);
     const payload = {
       Operation: operation,
-      SourceBalanceId: 'SourceBalanceId' in request ? request.SourceBalanceId : source.SourceBalance.Id,
+      SourceBalanceId: movementRequest ? movementRequest.SourceBalanceId : source.SourceBalance.Id,
       SourceDimensionId: source.SourceDimension.Id,
       SourceInventoryStatusCode: source.SourceStatus.StatusCode,
-      Quantity: 'Quantity' in request ? request.Quantity : undefined,
+      Quantity: movementRequest ? movementRequest.Quantity : undefined,
       TargetInventoryStatusCode: target.TargetInventoryStatusCode,
       TargetLocationId: target.TargetLocationId,
-      NewSerialNumber: target.NewSerialNumber ?? null,
+      // Left as `undefined` (not `?? null`) for StatusChange/InternalMove so JSON.stringify omits
+      // the key entirely — keeps their fingerprint hash byte-identical to before this field existed.
+      // Coercing to `null` here would change the hashed payload shape for those two pre-existing
+      // operations too, breaking idempotency-key replay for any in-flight transaction across a
+      // deploy of this change (their stored fingerprint was computed without this key at all).
+      NewSerialNumber: target.NewSerialNumber,
       ReasonCode: request.ReasonCode ?? null,
       ReasonNote: request.ReasonNote ?? null,
       EvidenceRefs: request.EvidenceRefs ?? [],

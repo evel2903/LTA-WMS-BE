@@ -262,6 +262,7 @@ import { PutawayRuleGate } from '@modules/InventoryExecution/Application/Service
         dimensionKeyService: InventoryDimensionKeyService,
         reasonCatalog: IReasonCodeCatalog,
         audited: AuditedTransaction,
+        skus: ISkuRepository,
         checker: IPermissionChecker,
       ) =>
         new InventoryControlUseCase(
@@ -274,6 +275,7 @@ import { PutawayRuleGate } from '@modules/InventoryExecution/Application/Service
           dimensionKeyService,
           reasonCatalog,
           audited,
+          skus,
           checker,
         ),
       inject: [
@@ -286,6 +288,7 @@ import { PutawayRuleGate } from '@modules/InventoryExecution/Application/Service
         InventoryDimensionKeyService,
         REASON_CODE_CATALOG,
         AuditedTransaction,
+        SKU_REPOSITORY,
         PERMISSION_CHECKER,
       ],
     },

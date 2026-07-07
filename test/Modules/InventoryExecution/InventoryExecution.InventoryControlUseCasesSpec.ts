@@ -1,4 +1,4 @@
-import { BusinessRuleException, ConflictException } from '@common/Exceptions/AppException';
+import { BusinessRuleException, ConflictException, ForbiddenAppException } from '@common/Exceptions/AppException';
 import { AuditContext, SystemAuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { AuditEntry } from '@modules/AccessControl/Application/DTOs/AuditEntry';
 import { PermissionDecision } from '@modules/AccessControl/Application/DTOs/PermissionCheckContext';
@@ -20,10 +20,12 @@ import {
   MakeInventoryDimension,
   MakeInventoryStatus,
   MakeLocation,
+  MakeSku,
   MemoryInventoryBalanceRepository,
   MemoryInventoryDimensionRepository,
   MemoryInventoryStatusRepository,
   MemoryLocationRepository,
+  MemorySkuRepository,
 } from '@test/Modules/MasterData/InventoryTestDoubles';
 import { InventoryDimensionKeyService } from '@modules/MasterData/Application/Services/InventoryDimensionKeyService';
 import { EntityManager } from 'typeorm';
@@ -111,6 +113,8 @@ class FakeReasonCatalog implements IReasonCodeCatalog {
 class FakePermissionChecker implements IPermissionChecker {
   public calls: Array<{ Action: ActionCode; ObjectType: ObjectType; WarehouseId?: string | null }> = [];
 
+  constructor(private readonly allowed: boolean = true) {}
+
   public async Check(context: {
     Action: ActionCode;
     ObjectType: ObjectType;
@@ -121,7 +125,7 @@ class FakePermissionChecker implements IPermissionChecker {
       ObjectType: context.ObjectType,
       WarehouseId: context.Scope?.WarehouseId,
     });
-    return { Allowed: true };
+    return { Allowed: this.allowed };
   }
 }
 
@@ -135,7 +139,15 @@ class FakeAuditedTransaction {
   }
 }
 
-function buildHarness(input: { statusCode?: string; sourceQty?: number; sourceReserved?: number } = {}) {
+function buildHarness(
+  input: {
+    statusCode?: string;
+    sourceQty?: number;
+    sourceReserved?: number;
+    serialControlled?: boolean;
+    permissionAllowed?: boolean;
+  } = {},
+) {
   const dimensionKeyService = new InventoryDimensionKeyService();
   const statuses = [
     MakeInventoryStatus({ Id: 'status-available', StatusCode: 'AVAILABLE', AllowsAllocation: true, AllowsPick: true }),
@@ -211,7 +223,8 @@ function buildHarness(input: { statusCode?: string; sourceQty?: number; sourceRe
   const integrations = new FakeIntegrationRepository();
   const reasonCatalog = new FakeReasonCatalog();
   const audited = new FakeAuditedTransaction();
-  const permission = new FakePermissionChecker();
+  const permission = new FakePermissionChecker(input.permissionAllowed ?? true);
+  const skus = new MemorySkuRepository([MakeSku({ SerialControlled: input.serialControlled ?? true })]);
   const useCase = new InventoryControlUseCase(
     inventoryTransactions,
     new MemoryInventoryStatusRepository(statuses),
@@ -222,6 +235,7 @@ function buildHarness(input: { statusCode?: string; sourceQty?: number; sourceRe
     dimensionKeyService,
     reasonCatalog,
     audited as unknown as AuditedTransaction,
+    skus,
     permission,
   );
 
@@ -234,6 +248,7 @@ function buildHarness(input: { statusCode?: string; sourceQty?: number; sourceRe
     reasonCatalog,
     audited,
     permission,
+    skus,
   };
 }
 
@@ -637,7 +652,7 @@ describe('InventoryExecution inventory control use case', () => {
       expect(balances.balances.get('balance-source')?.QtyOnHand).toBe(12);
     });
 
-    it('rejects when the balance already has reserved (allocated) quantity — no separate allocation query needed', async () => {
+    it('rejects with 409 when the balance already has reserved (allocated) quantity — no separate allocation query needed', async () => {
       const { useCase, balances } = buildHarness({ statusCode: 'AVAILABLE', sourceQty: 1, sourceReserved: 1 });
 
       await expect(
@@ -650,7 +665,7 @@ describe('InventoryExecution inventory control use case', () => {
           },
           contextFor('operator-1'),
         ),
-      ).rejects.toBeInstanceOf(BusinessRuleException);
+      ).rejects.toBeInstanceOf(ConflictException);
       expect(balances.balances.get('balance-source')?.QtyOnHand).toBe(1);
     });
 
@@ -845,6 +860,44 @@ describe('InventoryExecution inventory control use case', () => {
       await expect(
         useCase.CorrectSerialNumber({ ...request, NewSerialNumber: 'SER-003' }, contextFor('operator-1')),
       ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('rejects when the SKU is not serial-controlled, even if QtyOnHand happens to be 1', async () => {
+      const { useCase, balances } = buildHarness({ statusCode: 'AVAILABLE', sourceQty: 1, serialControlled: false });
+
+      await expect(
+        useCase.CorrectSerialNumber(
+          {
+            SourceDimensionId: 'dimension-source',
+            NewSerialNumber: 'SER-002',
+            ReasonCode: 'RC-V1-ADJUSTMENT',
+            IdempotencyKey: 'serial-key-1',
+          },
+          contextFor('operator-1'),
+        ),
+      ).rejects.toBeInstanceOf(BusinessRuleException);
+      expect(balances.balances.get('balance-source')?.QtyOnHand).toBe(1);
+    });
+
+    it('rejects when the caller lacks Adjust,InventoryMovement permission (Operator has no grant)', async () => {
+      const { useCase, balances } = buildHarness({
+        statusCode: 'AVAILABLE',
+        sourceQty: 1,
+        permissionAllowed: false,
+      });
+
+      await expect(
+        useCase.CorrectSerialNumber(
+          {
+            SourceDimensionId: 'dimension-source',
+            NewSerialNumber: 'SER-002',
+            ReasonCode: 'RC-V1-ADJUSTMENT',
+            IdempotencyKey: 'serial-key-1',
+          },
+          contextFor('operator-1'),
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenAppException);
+      expect(balances.balances.get('balance-source')?.QtyOnHand).toBe(1);
     });
   });
 });
