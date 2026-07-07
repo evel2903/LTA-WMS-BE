@@ -534,4 +534,317 @@ describe('InventoryExecution inventory control use case', () => {
       ConflictException,
     );
   });
+
+  describe('CorrectSerialNumber (IDC-09)', () => {
+    it('corrects the serial number: zeroes the source balance, creates a new dimension/balance pair with the new serial, and audits it', async () => {
+      const { useCase, balances, dimensions, integrations, audited, permission, reasonCatalog } = buildHarness({
+        statusCode: 'AVAILABLE',
+        sourceQty: 1,
+      });
+
+      const result = await useCase.CorrectSerialNumber(
+        {
+          SourceDimensionId: 'dimension-source',
+          NewSerialNumber: 'SER-002',
+          ReasonCode: 'rc-v1-adjustment',
+          ReasonNote: 'Fixed a mis-scanned serial',
+          EvidenceRefs: ['photo://label-1'],
+          IdempotencyKey: 'serial-key-1',
+        },
+        contextFor('operator-1'),
+      );
+
+      const targetDimension = [...dimensions.dimensions.values()].find(
+        (dimension) => dimension.Id === result.TargetBalance.DimensionId,
+      );
+      expect(result.EventType).toBe('InventorySerialCorrected');
+      expect(result.SourceBalance.QtyOnHand).toBe(0);
+      expect(result.TargetBalance.QtyOnHand).toBe(1);
+      expect(targetDimension).toMatchObject({
+        LocationId: 'loc-source',
+        LotNumber: 'LOT-001',
+        SerialNumber: 'SER-002',
+        CountryOfOrigin: 'VN',
+        CustomsStatus: 'BONDED',
+      });
+      expect(balances.balances.get('balance-source')?.QtyOnHand).toBe(0);
+      expect(integrations.outboxMessages[0].EventType).toBe('InventorySerialCorrected');
+      expect(reasonCatalog.calls[0]).toMatchObject({
+        Action: ActionCode.Adjust,
+        ObjectType: ObjectType.InventoryMovement,
+        ReasonCode: 'RC-V1-ADJUSTMENT',
+      });
+      expect(permission.calls).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ Action: ActionCode.Create, ObjectType: ObjectType.InventoryMovement }),
+          expect.objectContaining({ Action: ActionCode.Adjust, ObjectType: ObjectType.InventoryMovement }),
+        ]),
+      );
+      expect(audited.entries[0]).toMatchObject({
+        Action: ActionCode.Adjust,
+        ObjectType: ObjectType.InventoryMovement,
+        Result: AuditResult.Success,
+      });
+    });
+
+    it('rejects when NewSerialNumber equals the current SerialNumber', async () => {
+      const { useCase, balances } = buildHarness({ statusCode: 'AVAILABLE', sourceQty: 1 });
+
+      await expect(
+        useCase.CorrectSerialNumber(
+          {
+            SourceDimensionId: 'dimension-source',
+            NewSerialNumber: 'SER-001',
+            ReasonCode: 'RC-V1-ADJUSTMENT',
+            IdempotencyKey: 'serial-key-1',
+          },
+          contextFor('operator-1'),
+        ),
+      ).rejects.toBeInstanceOf(BusinessRuleException);
+      expect(balances.balances.get('balance-source')?.QtyOnHand).toBe(1);
+    });
+
+    it('rejects an empty NewSerialNumber', async () => {
+      const { useCase } = buildHarness({ statusCode: 'AVAILABLE', sourceQty: 1 });
+
+      await expect(
+        useCase.CorrectSerialNumber(
+          {
+            SourceDimensionId: 'dimension-source',
+            NewSerialNumber: '   ',
+            ReasonCode: 'RC-V1-ADJUSTMENT',
+            IdempotencyKey: 'serial-key-1',
+          },
+          contextFor('operator-1'),
+        ),
+      ).rejects.toBeInstanceOf(BusinessRuleException);
+    });
+
+    it('rejects correcting a balance holding more than 1 unit — a serial must identify exactly one physical unit', async () => {
+      const { useCase, balances } = buildHarness({ statusCode: 'AVAILABLE', sourceQty: 12 });
+
+      await expect(
+        useCase.CorrectSerialNumber(
+          {
+            SourceDimensionId: 'dimension-source',
+            NewSerialNumber: 'SER-002',
+            ReasonCode: 'RC-V1-ADJUSTMENT',
+            IdempotencyKey: 'serial-key-1',
+          },
+          contextFor('operator-1'),
+        ),
+      ).rejects.toBeInstanceOf(BusinessRuleException);
+      expect(balances.balances.get('balance-source')?.QtyOnHand).toBe(12);
+    });
+
+    it('rejects when the balance already has reserved (allocated) quantity — no separate allocation query needed', async () => {
+      const { useCase, balances } = buildHarness({ statusCode: 'AVAILABLE', sourceQty: 1, sourceReserved: 1 });
+
+      await expect(
+        useCase.CorrectSerialNumber(
+          {
+            SourceDimensionId: 'dimension-source',
+            NewSerialNumber: 'SER-002',
+            ReasonCode: 'RC-V1-ADJUSTMENT',
+            IdempotencyKey: 'serial-key-1',
+          },
+          contextFor('operator-1'),
+        ),
+      ).rejects.toBeInstanceOf(BusinessRuleException);
+      expect(balances.balances.get('balance-source')?.QtyOnHand).toBe(1);
+    });
+
+    it('rejects a movable-status violation the same way MoveInternal does (e.g. COUNTING_LOCKED)', async () => {
+      const { useCase, balances } = buildHarness({ statusCode: 'COUNTING_LOCKED', sourceQty: 1 });
+
+      await expect(
+        useCase.CorrectSerialNumber(
+          {
+            SourceDimensionId: 'dimension-source',
+            NewSerialNumber: 'SER-002',
+            ReasonCode: 'RC-V1-ADJUSTMENT',
+            IdempotencyKey: 'serial-key-1',
+          },
+          contextFor('operator-1'),
+        ),
+      ).rejects.toBeInstanceOf(BusinessRuleException);
+      expect(balances.balances.get('balance-source')?.QtyOnHand).toBe(1);
+    });
+
+    it('rejects when NewSerialNumber already lives on another dimension with a non-zero balance (no unit-merge)', async () => {
+      const { useCase, balances, dimensions } = buildHarness({ statusCode: 'AVAILABLE', sourceQty: 1 });
+      const dimensionKeyService = new InventoryDimensionKeyService();
+      const otherHash = dimensionKeyService.BuildHash({
+        OwnerId: 'owner-active',
+        SkuId: 'sku-active',
+        WarehouseId: 'warehouse-active',
+        LocationId: 'loc-source',
+        InventoryStatusId: 'status-available',
+        UomId: 'uom-ea',
+        LpnCode: 'LPN-001',
+        LotNumber: 'LOT-001',
+        SerialNumber: 'SER-002',
+        CountryOfOrigin: 'VN',
+        CustomsStatus: 'BONDED',
+      });
+      const otherDimension = MakeInventoryDimension({
+        Id: 'dimension-other',
+        OwnerId: 'owner-active',
+        SkuId: 'sku-active',
+        WarehouseId: 'warehouse-active',
+        LocationId: 'loc-source',
+        InventoryStatusId: 'status-available',
+        DimensionKeyHash: otherHash,
+        UomId: 'uom-ea',
+        LpnCode: 'LPN-001',
+        LotNumber: 'LOT-001',
+        SerialNumber: 'SER-002',
+        CountryOfOrigin: 'VN',
+        CustomsStatus: 'BONDED',
+      });
+      dimensions.dimensions.set(otherDimension.Id, otherDimension);
+      balances.balances.set(
+        'balance-other',
+        MakeInventoryBalance({ Id: 'balance-other', DimensionId: otherDimension.Id, QtyOnHand: 3, QtyReserved: 0 }),
+      );
+
+      await expect(
+        useCase.CorrectSerialNumber(
+          {
+            SourceDimensionId: 'dimension-source',
+            NewSerialNumber: 'SER-002',
+            ReasonCode: 'RC-V1-ADJUSTMENT',
+            IdempotencyKey: 'serial-key-1',
+          },
+          contextFor('operator-1'),
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(balances.balances.get('balance-source')?.QtyOnHand).toBe(1);
+      expect(balances.balances.get('balance-other')?.QtyOnHand).toBe(3);
+    });
+
+    it('rejects a collision even when the other live dimension is in a DIFFERENT lot/location (SkuId+SerialNumber scoped, not full dimension hash) — caught via live-testing', async () => {
+      const { useCase, balances, dimensions } = buildHarness({ statusCode: 'AVAILABLE', sourceQty: 1 });
+      const dimensionKeyService = new InventoryDimensionKeyService();
+      const otherHash = dimensionKeyService.BuildHash({
+        OwnerId: 'owner-active',
+        SkuId: 'sku-active',
+        WarehouseId: 'warehouse-active',
+        LocationId: 'loc-target',
+        InventoryStatusId: 'status-available',
+        UomId: 'uom-ea',
+        LpnCode: 'LPN-999',
+        LotNumber: 'LOT-999',
+        SerialNumber: 'SER-002',
+        CountryOfOrigin: 'VN',
+        CustomsStatus: 'BONDED',
+      });
+      const otherDimension = MakeInventoryDimension({
+        Id: 'dimension-other-lot',
+        OwnerId: 'owner-active',
+        SkuId: 'sku-active',
+        WarehouseId: 'warehouse-active',
+        LocationId: 'loc-target',
+        InventoryStatusId: 'status-available',
+        DimensionKeyHash: otherHash,
+        UomId: 'uom-ea',
+        LpnCode: 'LPN-999',
+        LotNumber: 'LOT-999',
+        SerialNumber: 'SER-002',
+        CountryOfOrigin: 'VN',
+        CustomsStatus: 'BONDED',
+      });
+      dimensions.dimensions.set(otherDimension.Id, otherDimension);
+      balances.balances.set(
+        'balance-other-lot',
+        MakeInventoryBalance({ Id: 'balance-other-lot', DimensionId: otherDimension.Id, QtyOnHand: 5, QtyReserved: 0 }),
+      );
+
+      await expect(
+        useCase.CorrectSerialNumber(
+          {
+            SourceDimensionId: 'dimension-source',
+            NewSerialNumber: 'SER-002',
+            ReasonCode: 'RC-V1-ADJUSTMENT',
+            IdempotencyKey: 'serial-key-1',
+          },
+          contextFor('operator-1'),
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(balances.balances.get('balance-source')?.QtyOnHand).toBe(1);
+      expect(balances.balances.get('balance-other-lot')?.QtyOnHand).toBe(5);
+    });
+
+    it('allows correcting into a dimension that exists but has a zero balance (not a live collision)', async () => {
+      const { useCase, balances, dimensions } = buildHarness({ statusCode: 'AVAILABLE', sourceQty: 1 });
+      const dimensionKeyService = new InventoryDimensionKeyService();
+      const zombieHash = dimensionKeyService.BuildHash({
+        OwnerId: 'owner-active',
+        SkuId: 'sku-active',
+        WarehouseId: 'warehouse-active',
+        LocationId: 'loc-source',
+        InventoryStatusId: 'status-available',
+        UomId: 'uom-ea',
+        LpnCode: 'LPN-001',
+        LotNumber: 'LOT-001',
+        SerialNumber: 'SER-002',
+        CountryOfOrigin: 'VN',
+        CustomsStatus: 'BONDED',
+      });
+      const zombieDimension = MakeInventoryDimension({
+        Id: 'dimension-zombie',
+        OwnerId: 'owner-active',
+        SkuId: 'sku-active',
+        WarehouseId: 'warehouse-active',
+        LocationId: 'loc-source',
+        InventoryStatusId: 'status-available',
+        DimensionKeyHash: zombieHash,
+        UomId: 'uom-ea',
+        LpnCode: 'LPN-001',
+        LotNumber: 'LOT-001',
+        SerialNumber: 'SER-002',
+        CountryOfOrigin: 'VN',
+        CustomsStatus: 'BONDED',
+      });
+      dimensions.dimensions.set(zombieDimension.Id, zombieDimension);
+      balances.balances.set(
+        'balance-zombie',
+        MakeInventoryBalance({ Id: 'balance-zombie', DimensionId: zombieDimension.Id, QtyOnHand: 0, QtyReserved: 0 }),
+      );
+
+      const result = await useCase.CorrectSerialNumber(
+        {
+          SourceDimensionId: 'dimension-source',
+          NewSerialNumber: 'SER-002',
+          ReasonCode: 'RC-V1-ADJUSTMENT',
+          IdempotencyKey: 'serial-key-1',
+        },
+        contextFor('operator-1'),
+      );
+
+      expect(result.TargetBalance.DimensionId).toBe('dimension-zombie');
+      expect(result.TargetBalance.QtyOnHand).toBe(1);
+    });
+
+    it('returns duplicate result for same idempotency payload and conflicts on a different NewSerialNumber', async () => {
+      const { useCase, inventoryTransactions, integrations } = buildHarness({ statusCode: 'AVAILABLE', sourceQty: 1 });
+      const request = {
+        SourceDimensionId: 'dimension-source',
+        NewSerialNumber: 'SER-002',
+        ReasonCode: 'RC-V1-ADJUSTMENT',
+        IdempotencyKey: 'serial-key-1',
+      };
+
+      const first = await useCase.CorrectSerialNumber(request, contextFor('operator-1'));
+      const second = await useCase.CorrectSerialNumber(request, contextFor('operator-1'));
+
+      expect(first.IsDuplicate).toBe(false);
+      expect(second.IsDuplicate).toBe(true);
+      expect(inventoryTransactions.transactions).toHaveLength(1);
+      expect(integrations.outboxMessages).toHaveLength(1);
+      await expect(
+        useCase.CorrectSerialNumber({ ...request, NewSerialNumber: 'SER-003' }, contextFor('operator-1')),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+  });
 });

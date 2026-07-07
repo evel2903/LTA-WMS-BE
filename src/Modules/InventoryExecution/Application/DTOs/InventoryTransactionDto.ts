@@ -118,6 +118,6 @@ export interface InventoryControlResultDto {
   SourceBalance: InventoryBalanceSnapshotDto;
   TargetBalance: InventoryBalanceSnapshotDto;
   OutboxMessageId: string | null;
-  EventType: 'InventoryStatusChanged' | 'InventoryMoved';
+  EventType: 'InventoryStatusChanged' | 'InventoryMoved' | 'InventorySerialCorrected';
   IsDuplicate: boolean;
 }

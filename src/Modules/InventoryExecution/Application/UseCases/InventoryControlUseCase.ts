@@ -15,6 +15,7 @@ import { AuditResult } from '@modules/AccessControl/Domain/Enums/AuditResult';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import {
   ChangeInventoryStatusDto,
+  CorrectSerialNumberDto,
   MoveInventoryInternalDto,
 } from '@modules/InventoryExecution/Application/DTOs/InventoryControlDto';
 import { InventoryControlResultDto } from '@modules/InventoryExecution/Application/DTOs/InventoryTransactionDto';
@@ -40,8 +41,8 @@ import { InventoryStatusEntity } from '@modules/MasterData/Domain/Entities/Inven
 import { LocationEntity } from '@modules/MasterData/Domain/Entities/LocationEntity';
 import { LocationStatus } from '@modules/MasterData/Domain/Enums/LocationStatus';
 
-type InventoryControlEventType = 'InventoryStatusChanged' | 'InventoryMoved';
-type InventoryControlOperation = 'StatusChange' | 'InternalMove';
+type InventoryControlEventType = 'InventoryStatusChanged' | 'InventoryMoved' | 'InventorySerialCorrected';
+type InventoryControlOperation = 'StatusChange' | 'InternalMove' | 'SerialCorrection';
 
 interface ReasonDecision {
   ReasonCode: string;
@@ -68,6 +69,8 @@ interface MutationPlan {
   EvidenceRefs: string[];
   IdempotencyKey: string;
   PayloadFingerprint: string;
+  /** Set only for 'SerialCorrection' — BuildTargetDimension uses this instead of copying the source SerialNumber. */
+  NewSerialNumber?: string;
 }
 
 interface BalanceMutationResult {
@@ -295,6 +298,110 @@ export class InventoryControlUseCase {
     return await this.PostInventoryControlInTransaction(source, plan, context, manager);
   }
 
+  /**
+   * IDC-09: correct a serial number captured incorrectly during receiving. Only safe while the
+   * dimension hasn't been allocated yet — reuses ApplyBalanceMovement's existing
+   * `remainingSourceQty < QtyReserved` guard unchanged, which already rejects this once any
+   * quantity is reserved by an outbound allocation (see AllocationLifecycleService.ts:184).
+   */
+  public async CorrectSerialNumber(
+    request: CorrectSerialNumberDto,
+    context: AuditContext = SystemAuditContext,
+  ): Promise<InventoryControlResultDto> {
+    const normalized = this.NormalizeSerialCorrectionRequest(request);
+    this.AssertSerialCorrectionRequest(normalized);
+    const sourceBalance = await this.inventoryBalances.FindByDimensionId(normalized.SourceDimensionId);
+    if (!sourceBalance) {
+      throw new NotFoundException('Source inventory balance not found for dimension', {
+        SourceDimensionId: normalized.SourceDimensionId,
+      });
+    }
+    const source = await this.LoadSourceInventory(sourceBalance.Id);
+
+    try {
+      await this.AssertStockControlPermission(source, context);
+      const reason = await this.ResolveReason(normalized.ReasonCode, ActionCode.Adjust, normalized.EvidenceRefs ?? []);
+      this.AssertMovableStatus(source.SourceStatus);
+      if (normalized.NewSerialNumber === source.SourceDimension.SerialNumber) {
+        throw new BusinessRuleException('NewSerialNumber must be different from the current SerialNumber', {
+          SerialNumber: normalized.NewSerialNumber,
+        });
+      }
+      const sourceLocation = await this.ResolveSourceLocation(source);
+      const plan = this.BuildPlan('SerialCorrection', source, {
+        TargetStatus: source.SourceStatus,
+        TargetLocation: sourceLocation,
+        Quantity: source.SourceBalance.QtyOnHand,
+        ReasonCode: reason.ReasonCode,
+        ReasonCodeId: reason.ReasonCodeId,
+        ReasonNote: normalized.ReasonNote ?? null,
+        EvidenceRefs: normalized.EvidenceRefs ?? [],
+        IdempotencyKey: normalized.IdempotencyKey,
+        NewSerialNumber: normalized.NewSerialNumber,
+        PayloadFingerprint: this.BuildPayloadFingerprint('SerialCorrection', normalized, source, {
+          TargetInventoryStatusCode: source.SourceStatus.StatusCode,
+          TargetLocationId: sourceLocation.Id,
+          NewSerialNumber: normalized.NewSerialNumber,
+        }),
+      });
+      const duplicate = await this.inventoryTransactions.FindTransactionByTypeAndIdempotencyKey(
+        plan.TransactionType,
+        plan.IdempotencyKey,
+      );
+      if (duplicate) return await this.BuildDuplicateResult(duplicate, plan);
+      // Both checked AFTER the duplicate lookup: a replay of an already-completed correction has
+      // legitimately zeroed this balance, and must return the cached result above, not these errors.
+      if (source.SourceBalance.QtyOnHand <= 0) {
+        throw new BusinessRuleException('Source inventory balance has no quantity on hand to correct', {
+          SourceBalanceId: source.SourceBalance.Id,
+        });
+      }
+      // A serial number identifies exactly one physical unit (ConfirmReceiptLineUseCase enforces
+      // ActualQuantity=1 for every SerialControlled receipt, per IFB-14). Correcting a serial onto
+      // a balance carrying more than 1 unit would falsely make N physical units share one identity —
+      // caught live: setting a serial on a lot-controlled qty=12 balance produced a nonsensical
+      // "1 serial / 12 tồn" row.
+      if (source.SourceBalance.QtyOnHand !== 1) {
+        throw new BusinessRuleException('Serial correction requires the balance to hold exactly 1 unit', {
+          SourceDimensionId: source.SourceDimension.Id,
+          QtyOnHand: source.SourceBalance.QtyOnHand,
+        });
+      }
+      return await this.ExecutePostWithIdempotency(source, plan, context);
+    } catch (error) {
+      if (error instanceof InventoryControlDuplicateResult) {
+        return error.Result;
+      }
+      if (error instanceof BusinessRuleException || error instanceof ConflictException) {
+        await this.AuditBlocked(
+          context,
+          source,
+          'SerialCorrection',
+          error.message,
+          (error.Details ?? {}) as Record<string, unknown>,
+        );
+      }
+      throw error;
+    }
+  }
+
+  private NormalizeSerialCorrectionRequest(request: CorrectSerialNumberDto): CorrectSerialNumberDto {
+    return {
+      SourceDimensionId: request.SourceDimensionId?.trim() ?? '',
+      NewSerialNumber: request.NewSerialNumber?.trim() ?? '',
+      ReasonCode: request.ReasonCode?.trim().toUpperCase() || null,
+      ReasonNote: request.ReasonNote?.trim() || null,
+      EvidenceRefs: (request.EvidenceRefs ?? []).map((item) => item.trim()).filter(Boolean),
+      IdempotencyKey: request.IdempotencyKey?.trim() ?? '',
+    };
+  }
+
+  private AssertSerialCorrectionRequest(request: CorrectSerialNumberDto): void {
+    if (!request.SourceDimensionId) throw new BusinessRuleException('SourceDimensionId is required');
+    if (!request.NewSerialNumber) throw new BusinessRuleException('NewSerialNumber is required');
+    if (!request.IdempotencyKey) throw new BusinessRuleException('IdempotencyKey is required');
+  }
+
   private NormalizeStatusRequest(request: ChangeInventoryStatusDto): ChangeInventoryStatusDto {
     return {
       SourceBalanceId: request.SourceBalanceId?.trim() ?? '',
@@ -458,14 +565,14 @@ export class InventoryControlUseCase {
       EvidenceRefs: string[];
       IdempotencyKey: string;
       PayloadFingerprint: string;
+      NewSerialNumber?: string;
     },
   ): MutationPlan {
     void source;
     return {
       Operation: operation,
-      TransactionType:
-        operation === 'StatusChange' ? InventoryTransactionType.StatusChange : InventoryTransactionType.InternalMove,
-      EventType: operation === 'StatusChange' ? 'InventoryStatusChanged' : 'InventoryMoved',
+      TransactionType: this.ResolveTransactionType(operation),
+      EventType: this.ResolveEventType(operation),
       TargetStatus: input.TargetStatus,
       TargetLocation: input.TargetLocation,
       Quantity: input.Quantity,
@@ -475,7 +582,32 @@ export class InventoryControlUseCase {
       EvidenceRefs: input.EvidenceRefs,
       IdempotencyKey: input.IdempotencyKey,
       PayloadFingerprint: input.PayloadFingerprint,
+      NewSerialNumber: input.NewSerialNumber,
     };
+  }
+
+  private ResolveTransactionType(operation: InventoryControlOperation): InventoryTransactionType {
+    switch (operation) {
+      case 'StatusChange':
+        return InventoryTransactionType.StatusChange;
+      case 'SerialCorrection':
+        return InventoryTransactionType.SerialCorrection;
+      case 'InternalMove':
+      default:
+        return InventoryTransactionType.InternalMove;
+    }
+  }
+
+  private ResolveEventType(operation: InventoryControlOperation): InventoryControlEventType {
+    switch (operation) {
+      case 'StatusChange':
+        return 'InventoryStatusChanged';
+      case 'SerialCorrection':
+        return 'InventorySerialCorrected';
+      case 'InternalMove':
+      default:
+        return 'InventoryMoved';
+    }
   }
 
   private async PostInventoryControl(
@@ -609,6 +741,10 @@ export class InventoryControlUseCase {
       });
     }
 
+    if (plan.Operation === 'SerialCorrection') {
+      await this.AssertNoLiveDimensionForCorrectedSerial(source.SourceDimension, plan);
+    }
+
     const targetDimension = await this.inventoryDimensions.FindOrCreateByHashForUpdate(
       this.BuildTargetDimension(source.SourceDimension, plan, actorUserId),
       manager,
@@ -645,12 +781,8 @@ export class InventoryControlUseCase {
     };
   }
 
-  private BuildTargetDimension(
-    sourceDimension: InventoryDimensionEntity,
-    plan: MutationPlan,
-    actorUserId: string | null,
-  ): InventoryDimensionEntity {
-    const input = {
+  private BuildTargetDimensionInput(sourceDimension: InventoryDimensionEntity, plan: MutationPlan) {
+    return {
       OwnerId: sourceDimension.OwnerId,
       SkuId: sourceDimension.SkuId,
       WarehouseId: sourceDimension.WarehouseId,
@@ -660,11 +792,19 @@ export class InventoryControlUseCase {
       LpnCode: sourceDimension.LpnCode,
       LotNumber: sourceDimension.LotNumber,
       ExpiryDate: sourceDimension.ExpiryDate,
-      SerialNumber: sourceDimension.SerialNumber,
+      SerialNumber: plan.NewSerialNumber ?? sourceDimension.SerialNumber,
       ProductionDate: sourceDimension.ProductionDate,
       CountryOfOrigin: sourceDimension.CountryOfOrigin,
       CustomsStatus: sourceDimension.CustomsStatus,
     };
+  }
+
+  private BuildTargetDimension(
+    sourceDimension: InventoryDimensionEntity,
+    plan: MutationPlan,
+    actorUserId: string | null,
+  ): InventoryDimensionEntity {
+    const input = this.BuildTargetDimensionInput(sourceDimension, plan);
     return new InventoryDimensionEntity({
       Id: randomUUID(),
       ...input,
@@ -676,6 +816,41 @@ export class InventoryControlUseCase {
       CreatedBy: actorUserId,
       UpdatedBy: actorUserId,
     });
+  }
+
+  /**
+   * IDC-09 guard: unlike MoveInternal/ChangeStatus (where merging into an existing target
+   * dimension's balance is the intended happy path), correcting a serial must NEVER merge into
+   * another live unit — two physical units sharing one serial silently combines their identity.
+   *
+   * Scoped to SkuId + SerialNumber only (NOT the full dimension hash) — a physical serial must be
+   * unique per SKU regardless of lot/location/status. A hash-only check would miss a collision
+   * against a live dimension in a different lot/location (caught via live-testing: correcting two
+   * dimensions in different lots to the same serial both succeeded before this fix).
+   *
+   * ponytail: `List()` has no `manager` param, so this check runs outside the write transaction —
+   * a concurrent correction could theoretically race between this check and the actual write.
+   * Acceptable for a low-frequency, human-triggered admin action; tighten by adding a locked
+   * existence-check to the port if this ever becomes a real contention point.
+   */
+  private async AssertNoLiveDimensionForCorrectedSerial(
+    sourceDimension: InventoryDimensionEntity,
+    plan: MutationPlan,
+  ): Promise<void> {
+    const candidates = await this.inventoryDimensions.List(0, 10, {
+      SkuId: sourceDimension.SkuId,
+      SerialNumber: plan.NewSerialNumber,
+    });
+    for (const candidate of candidates.Items) {
+      if (candidate.Id === sourceDimension.Id) continue;
+      const candidateBalance = await this.inventoryBalances.FindByDimensionId(candidate.Id);
+      if (candidateBalance && candidateBalance.QtyOnHand > 0) {
+        throw new ConflictException('NewSerialNumber already exists on another live inventory unit', {
+          NewSerialNumber: plan.NewSerialNumber,
+          ExistingDimensionId: candidate.Id,
+        });
+      }
+    }
   }
 
   private BuildBalance(
@@ -883,18 +1058,19 @@ export class InventoryControlUseCase {
 
   private BuildPayloadFingerprint(
     operation: InventoryControlOperation,
-    request: ChangeInventoryStatusDto | MoveInventoryInternalDto,
+    request: ChangeInventoryStatusDto | MoveInventoryInternalDto | (CorrectSerialNumberDto & { Quantity?: number }),
     source: SourceInventoryContext,
-    target: { TargetInventoryStatusCode: string; TargetLocationId: string },
+    target: { TargetInventoryStatusCode: string; TargetLocationId: string; NewSerialNumber?: string },
   ): string {
     const payload = {
       Operation: operation,
-      SourceBalanceId: request.SourceBalanceId,
+      SourceBalanceId: 'SourceBalanceId' in request ? request.SourceBalanceId : source.SourceBalance.Id,
       SourceDimensionId: source.SourceDimension.Id,
       SourceInventoryStatusCode: source.SourceStatus.StatusCode,
-      Quantity: request.Quantity,
+      Quantity: 'Quantity' in request ? request.Quantity : undefined,
       TargetInventoryStatusCode: target.TargetInventoryStatusCode,
       TargetLocationId: target.TargetLocationId,
+      NewSerialNumber: target.NewSerialNumber ?? null,
       ReasonCode: request.ReasonCode ?? null,
       ReasonNote: request.ReasonNote ?? null,
       EvidenceRefs: request.EvidenceRefs ?? [],

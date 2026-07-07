@@ -8,6 +8,7 @@ import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/Perm
 import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
 import { InventoryControlUseCase } from '@modules/InventoryExecution/Application/UseCases/InventoryControlUseCase';
 import { ChangeInventoryStatusRequest } from '@modules/InventoryExecution/Presentation/Requests/ChangeInventoryStatusRequest';
+import { CorrectSerialNumberRequest } from '@modules/InventoryExecution/Presentation/Requests/CorrectSerialNumberRequest';
 import { MoveInventoryInternalRequest } from '@modules/InventoryExecution/Presentation/Requests/MoveInventoryInternalRequest';
 
 @UseGuards(JwtAuthGuard, PermissionGuard)
@@ -31,5 +32,14 @@ export class InventoryControlController {
     @CurrentAuditContext() context: AuditContext,
   ) {
     return await this.inventoryControlUseCase.MoveInternal(request, context);
+  }
+
+  @Post('serial-corrections')
+  @RequirePermission(ActionCode.Adjust, ObjectType.InventoryMovement)
+  public async CorrectSerialNumber(
+    @Body() request: CorrectSerialNumberRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.inventoryControlUseCase.CorrectSerialNumber(request, context);
   }
 }
