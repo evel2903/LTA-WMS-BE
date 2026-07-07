@@ -96,3 +96,55 @@ describe('Site/Warehouse/Zone repositories', () => {
     await expect(repository.Update(Zone())).rejects.toBeInstanceOf(ConflictException);
   });
 });
+
+describe('WarehouseRepository.List WarehouseName search (IFB-16)', () => {
+  function buildRepository() {
+    const findAndCount = jest.fn().mockResolvedValue([[], 0]);
+    const repository = new WarehouseRepository({ findAndCount } as unknown as Repository<WarehouseOrmEntity>);
+    return { repository, findAndCount };
+  }
+
+  it('filters by WarehouseName using a case-insensitive partial match', async () => {
+    const { repository, findAndCount } = buildRepository();
+
+    await repository.List(0, 50, { WarehouseName: 'hcm' });
+
+    const where = findAndCount.mock.calls[0][0].where;
+    expect(where.WarehouseName.type).toBe('ilike');
+    expect(where.WarehouseName.value).toBe('%hcm%');
+  });
+
+  it('does not filter by WarehouseName when omitted (no regression)', async () => {
+    const { repository, findAndCount } = buildRepository();
+
+    await repository.List(0, 50, { Status: MasterDataStatus.Active });
+
+    const where = findAndCount.mock.calls[0][0].where;
+    expect(where.WarehouseName).toBeUndefined();
+    expect(where.Status).toBe(MasterDataStatus.Active);
+  });
+
+  it('combines WarehouseName with Status and SiteId filters', async () => {
+    const { repository, findAndCount } = buildRepository();
+
+    await repository.List(0, 50, {
+      WarehouseName: 'DC',
+      Status: MasterDataStatus.Active,
+      SiteId: 'site-1',
+    });
+
+    const where = findAndCount.mock.calls[0][0].where;
+    expect(where.WarehouseName.value).toBe('%DC%');
+    expect(where.Status).toBe(MasterDataStatus.Active);
+    expect(where.SiteId).toBe('site-1');
+  });
+
+  it('escapes LIKE wildcard characters typed by the user', async () => {
+    const { repository, findAndCount } = buildRepository();
+
+    await repository.List(0, 50, { WarehouseName: '100%_off' });
+
+    const where = findAndCount.mock.calls[0][0].where;
+    expect(where.WarehouseName.value).toBe('%100\\%\\_off%');
+  });
+});

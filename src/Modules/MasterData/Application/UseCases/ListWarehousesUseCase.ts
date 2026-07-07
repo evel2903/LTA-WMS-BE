@@ -18,6 +18,7 @@ export class ListWarehousesUseCase {
       SiteId: query.SiteId,
       Status: query.Status,
       WarehouseCode: query.WarehouseCode,
+      WarehouseName: query.WarehouseName,
     });
 
     return ToPagedResult(result.Items.map(WarehouseDtoMapper.ToDto), result.TotalItems, paging.Page, paging.PageSize);
