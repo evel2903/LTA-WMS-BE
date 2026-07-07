@@ -32,6 +32,7 @@ import {
   MemoryInventoryDimensionRepository,
   MemoryInventoryStatusRepository,
   MemoryLocationRepository,
+  MemorySkuRepository,
 } from '@test/Modules/MasterData/InventoryTestDoubles';
 
 const now = new Date('2026-06-23T06:00:00.000Z');
@@ -264,6 +265,7 @@ function buildHarness() {
     dimensionKeyService,
     reasonCatalog,
     audited as unknown as AuditedTransaction,
+    new MemorySkuRepository(),
     permission,
   );
   const cycleCount = new CycleCountWorkLifecycleService(

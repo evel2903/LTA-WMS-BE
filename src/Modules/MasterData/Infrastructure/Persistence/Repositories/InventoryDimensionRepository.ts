@@ -97,6 +97,7 @@ export class InventoryDimensionRepository implements IInventoryDimensionReposito
     if (filter.LocationId) where.LocationId = filter.LocationId;
     if (filter.InventoryStatusId) where.InventoryStatusId = filter.InventoryStatusId;
     if (filter.UomId !== undefined) where.UomId = filter.UomId === null ? IsNull() : filter.UomId;
+    if (filter.SerialNumber) where.SerialNumber = filter.SerialNumber;
 
     const [items, total] = await this.inventoryDimensions.findAndCount({
       where,

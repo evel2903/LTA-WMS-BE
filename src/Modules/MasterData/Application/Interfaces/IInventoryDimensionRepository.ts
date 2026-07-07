@@ -10,6 +10,7 @@ export interface InventoryDimensionListFilter {
   LocationId?: string;
   InventoryStatusId?: string;
   UomId?: string | null;
+  SerialNumber?: string;
 }
 
 export interface IInventoryDimensionRepository {

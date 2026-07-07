@@ -4,4 +4,5 @@ export enum InventoryTransactionType {
   InternalMove = 'InternalMove',
   CycleCountAdjustment = 'CycleCountAdjustment',
   GoodsIssue = 'GoodsIssue',
+  SerialCorrection = 'SerialCorrection',
 }

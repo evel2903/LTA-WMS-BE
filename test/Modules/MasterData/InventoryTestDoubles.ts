@@ -438,6 +438,7 @@ export class MemoryInventoryDimensionRepository implements IInventoryDimensionRe
     let items = [...this.dimensions.values()];
     if (filter.OwnerId) items = items.filter((dimension) => dimension.OwnerId === filter.OwnerId);
     if (filter.SkuId) items = items.filter((dimension) => dimension.SkuId === filter.SkuId);
+    if (filter.SerialNumber) items = items.filter((dimension) => dimension.SerialNumber === filter.SerialNumber);
     return { Items: items, TotalItems: items.length };
   }
 }
