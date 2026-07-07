@@ -879,6 +879,24 @@ describe('InventoryExecution inventory control use case', () => {
       expect(balances.balances.get('balance-source')?.QtyOnHand).toBe(1);
     });
 
+    it('rejects when the dimension references a SKU that no longer exists in the catalog', async () => {
+      const { useCase, balances, skus } = buildHarness({ statusCode: 'AVAILABLE', sourceQty: 1 });
+      skus.skus.delete('sku-active');
+
+      await expect(
+        useCase.CorrectSerialNumber(
+          {
+            SourceDimensionId: 'dimension-source',
+            NewSerialNumber: 'SER-002',
+            ReasonCode: 'RC-V1-ADJUSTMENT',
+            IdempotencyKey: 'serial-key-1',
+          },
+          contextFor('operator-1'),
+        ),
+      ).rejects.toBeInstanceOf(BusinessRuleException);
+      expect(balances.balances.get('balance-source')?.QtyOnHand).toBe(1);
+    });
+
     it('rejects when the caller lacks Adjust,InventoryMovement permission (Operator has no grant)', async () => {
       const { useCase, balances } = buildHarness({
         statusCode: 'AVAILABLE',
