@@ -314,6 +314,7 @@ const OPERATOR_GRANTS: RolePermissionGrant[] = [
     ObjectType.Shipment,
     ObjectType.Load,
     ObjectType.PrintJob,
+    ObjectType.InventoryMovement,
   ]),
   ...grant(RoleCode.Operator, ActionCode.Update, [
     ObjectType.Receipt,
