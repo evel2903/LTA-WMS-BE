@@ -34,10 +34,17 @@ import { LabelBlockingValidationResultDto } from '@modules/BarcodeLabel/Applicat
 import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/OutboxMessageEntity';
 import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
 import { IIntegrationRepository } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
+import { IInventoryBalanceRepository } from '@modules/MasterData/Application/Interfaces/IInventoryBalanceRepository';
+import { IInventoryDimensionRepository } from '@modules/MasterData/Application/Interfaces/IInventoryDimensionRepository';
+import { IInventoryStatusRepository } from '@modules/MasterData/Application/Interfaces/IInventoryStatusRepository';
 import { ILocationRepository } from '@modules/MasterData/Application/Interfaces/ILocationRepository';
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
+import { InventoryDimensionKeyService } from '@modules/MasterData/Application/Services/InventoryDimensionKeyService';
 import { DEFAULT_STAGING_LOCATION_CODE } from '@modules/MasterData/Domain/Constants/LocationConstants';
+import { InventoryBalanceEntity } from '@modules/MasterData/Domain/Entities/InventoryBalanceEntity';
+import { InventoryDimensionEntity } from '@modules/MasterData/Domain/Entities/InventoryDimensionEntity';
 import { LocationStatus } from '@modules/MasterData/Domain/Enums/LocationStatus';
+import { EntityManager } from 'typeorm';
 import { IWarehouseProfileRepository } from '@modules/WarehouseProfile/Application/Interfaces/IWarehouseProfileRepository';
 import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileEntity';
 
@@ -65,6 +72,10 @@ export class ReleaseInboundToPutawayUseCase {
     private readonly reasonCatalog: IReasonCodeCatalog,
     private readonly skus: ISkuRepository,
     private readonly locations: ILocationRepository,
+    private readonly inventoryDimensions: IInventoryDimensionRepository,
+    private readonly inventoryBalances: IInventoryBalanceRepository,
+    private readonly inventoryStatuses: IInventoryStatusRepository,
+    private readonly dimensionKeyService: InventoryDimensionKeyService,
     private readonly audited: AuditedTransaction,
     private readonly permissionChecker?: IPermissionChecker,
   ) {}
@@ -250,6 +261,7 @@ export class ReleaseInboundToPutawayUseCase {
     try {
       return await this.audited.Run(async (manager) => {
         const created = await this.receiving.CreateInboundPutawayRelease(release, manager);
+        await this.EnsureReadyForPutawayDimension(created, manager);
         await this.integrations.CreateOutboxMessage(outbox, manager);
         if (milestone) await this.coreFlows.CreateMilestone(milestone, manager);
         const result = ReceivingDtoMapper.ToInboundPutawayReleaseDto(created);
@@ -330,6 +342,88 @@ export class ReleaseInboundToPutawayUseCase {
       });
     }
     return { Id: location.Id, Code: location.LocationCode };
+  }
+
+  // IFB-17: release-to-putaway never created the READY_FOR_PUTAWAY dimension/balance the
+  // receiving flow needs -- neither this use case nor ReleasePutawayTaskUseCase touches
+  // InventoryDimension/InventoryBalance, and no outbox consumer exists anywhere in this codebase
+  // (confirmed via repo-wide grep) to do it asynchronously later. ConfirmPutawayTaskUseCase's
+  // source-side dimension lookup is strict (FindByHash, no fallback) by design (IFB-13's "no
+  // silent null propagation" lesson applies here too) -- so the dimension must exist BEFORE a
+  // putaway task can ever be confirmed. Created here, the earliest point with every field the
+  // dimension key needs and already inside this.audited.Run's transaction.
+  private async EnsureReadyForPutawayDimension(
+    release: InboundPutawayReleaseEntity,
+    manager: EntityManager,
+  ): Promise<void> {
+    const readyStatus = await this.inventoryStatuses.FindByCode(INVENTORY_READY_FOR_PUTAWAY);
+    if (!readyStatus) {
+      throw new BusinessRuleException('Required InventoryStatus foundation code is missing', {
+        Required: INVENTORY_READY_FOR_PUTAWAY,
+      });
+    }
+    if (!release.CurrentLocationId) {
+      throw new BusinessRuleException('Current staging location id is required to create inventory dimension', {
+        ReleaseId: release.Id,
+      });
+    }
+    const dimensionInput = {
+      OwnerId: release.OwnerId,
+      SkuId: release.SkuId,
+      WarehouseId: release.WarehouseId,
+      LocationId: release.CurrentLocationId,
+      InventoryStatusId: readyStatus.Id,
+      UomId: release.UomId,
+      LpnCode: release.LpnCode,
+      LotNumber: release.LotNumber,
+      ExpiryDate: release.ExpiryDate,
+      SerialNumber: release.SerialNumber,
+    };
+    const now = new Date();
+    const dimension = await this.inventoryDimensions.FindOrCreateByHashForUpdate(
+      new InventoryDimensionEntity({
+        Id: randomUUID(),
+        ...dimensionInput,
+        DimensionKeyHash: this.dimensionKeyService.BuildHash(dimensionInput),
+        SourceSystem: 'LTA-WMS',
+        ReferenceId: release.Id,
+        CreatedAt: now,
+        UpdatedAt: now,
+        CreatedBy: release.ReleasedBy,
+        UpdatedBy: release.ReleasedBy,
+      }),
+      manager,
+    );
+    const balance = await this.inventoryBalances.FindOrCreateByDimensionIdForUpdate(
+      new InventoryBalanceEntity({
+        Id: randomUUID(),
+        DimensionId: dimension.Id,
+        QtyOnHand: 0,
+        QtyReserved: 0,
+        SourceSystem: 'LTA-WMS',
+        ReferenceId: release.Id,
+        CreatedAt: now,
+        UpdatedAt: now,
+        CreatedBy: release.ReleasedBy,
+        UpdatedBy: release.ReleasedBy,
+      }),
+      manager,
+    );
+    await this.inventoryBalances.Update(
+      new InventoryBalanceEntity({
+        Id: balance.Id,
+        DimensionId: balance.DimensionId,
+        QtyOnHand: balance.QtyOnHand + release.Quantity,
+        QtyReserved: balance.QtyReserved,
+        SourceSystem: balance.SourceSystem ?? 'LTA-WMS',
+        ReferenceId: release.Id,
+        CreatedAt: balance.CreatedAt,
+        UpdatedAt: new Date(),
+        CreatedBy: balance.CreatedBy,
+        UpdatedBy: release.ReleasedBy,
+      }),
+      manager,
+    );
   }
 
   private async ResolveReadiness(line: ReceiptLineEntity): Promise<ReleaseReadiness> {

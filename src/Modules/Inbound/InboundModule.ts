@@ -77,6 +77,18 @@ import { InboundPlanController } from '@modules/Inbound/Presentation/Controllers
 import { QcTaskController } from '@modules/Inbound/Presentation/Controllers/QcTaskController';
 import { ReceiptController } from '@modules/Inbound/Presentation/Controllers/ReceiptController';
 import {
+  IInventoryBalanceRepository,
+  INVENTORY_BALANCE_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IInventoryBalanceRepository';
+import {
+  IInventoryDimensionRepository,
+  INVENTORY_DIMENSION_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IInventoryDimensionRepository';
+import {
+  IInventoryStatusRepository,
+  INVENTORY_STATUS_REPOSITORY,
+} from '@modules/MasterData/Application/Interfaces/IInventoryStatusRepository';
+import {
   ILocationRepository,
   LOCATION_REPOSITORY,
 } from '@modules/MasterData/Application/Interfaces/ILocationRepository';
@@ -87,6 +99,7 @@ import {
   IWarehouseRepository,
   WAREHOUSE_REPOSITORY,
 } from '@modules/MasterData/Application/Interfaces/IWarehouseRepository';
+import { InventoryDimensionKeyService } from '@modules/MasterData/Application/Services/InventoryDimensionKeyService';
 import { MasterDataModule } from '@modules/MasterData/MasterDataModule';
 import {
   IPartnerRepository,
@@ -408,6 +421,10 @@ import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRu
         reasonCatalog: IReasonCodeCatalog,
         skus: ISkuRepository,
         locations: ILocationRepository,
+        inventoryDimensions: IInventoryDimensionRepository,
+        inventoryBalances: IInventoryBalanceRepository,
+        inventoryStatuses: IInventoryStatusRepository,
+        dimensionKeyService: InventoryDimensionKeyService,
         audited: AuditedTransaction,
         permissionChecker: IPermissionChecker,
       ) =>
@@ -422,6 +439,10 @@ import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRu
           reasonCatalog,
           skus,
           locations,
+          inventoryDimensions,
+          inventoryBalances,
+          inventoryStatuses,
+          dimensionKeyService,
           audited,
           permissionChecker,
         ),
@@ -436,6 +457,10 @@ import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRu
         REASON_CODE_CATALOG,
         SKU_REPOSITORY,
         LOCATION_REPOSITORY,
+        INVENTORY_DIMENSION_REPOSITORY,
+        INVENTORY_BALANCE_REPOSITORY,
+        INVENTORY_STATUS_REPOSITORY,
+        InventoryDimensionKeyService,
         AuditedTransaction,
         PERMISSION_CHECKER,
       ],

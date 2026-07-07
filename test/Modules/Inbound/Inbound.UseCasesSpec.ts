@@ -28,6 +28,19 @@ import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/Recor
 import { EvaluateQcTaskUseCase } from '@modules/Inbound/Application/UseCases/EvaluateQcTaskUseCase';
 import { ConfirmInboundLpnUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundLpnUseCase';
 import { ReleaseInboundToPutawayUseCase } from '@modules/Inbound/Application/UseCases/ReleaseInboundToPutawayUseCase';
+import { ReleasePutawayTaskUseCase } from '@modules/InventoryExecution/Application/UseCases/ReleasePutawayTaskUseCase';
+import { ConfirmPutawayTaskUseCase } from '@modules/InventoryExecution/Application/UseCases/ConfirmPutawayTaskUseCase';
+import { IPutawayTaskRepository } from '@modules/InventoryExecution/Application/Interfaces/IPutawayTaskRepository';
+import { IInventoryTransactionRepository } from '@modules/InventoryExecution/Application/Interfaces/IInventoryTransactionRepository';
+import { ILocationProfileRepository } from '@modules/MasterData/Application/Interfaces/ILocationProfileRepository';
+import { ITaskExecutionRepository } from '@modules/TaskExecution/Application/Interfaces/ITaskExecutionRepository';
+import { PutawayTaskEntity } from '@modules/InventoryExecution/Domain/Entities/PutawayTaskEntity';
+import { PutawayTaskStatus } from '@modules/InventoryExecution/Domain/Enums/PutawayTaskStatus';
+import { InventoryMovementEntity } from '@modules/InventoryExecution/Domain/Entities/InventoryMovementEntity';
+import { InventoryTransactionEntity } from '@modules/InventoryExecution/Domain/Entities/InventoryTransactionEntity';
+import { LocationProfileEntity } from '@modules/MasterData/Domain/Entities/LocationProfileEntity';
+import { MobileTaskEntity } from '@modules/TaskExecution/Domain/Entities/MobileTaskEntity';
+import { BuildEmptyPutawayRuleGate } from '@test/TestDoubles/InventoryExecution/PutawayRuleGateTestDoubles';
 import { RecordQcResultUseCase } from '@modules/Inbound/Application/UseCases/RecordQcResultUseCase';
 import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCases/StartReceivingSessionUseCase';
 import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
@@ -63,6 +76,13 @@ import { SkuEntity } from '@modules/MasterData/Domain/Entities/SkuEntity';
 import { SkuStatus } from '@modules/MasterData/Domain/Enums/SkuStatus';
 import { UomEntity } from '@modules/MasterData/Domain/Entities/UomEntity';
 import { WarehouseEntity } from '@modules/MasterData/Domain/Entities/WarehouseEntity';
+import { InventoryDimensionKeyService } from '@modules/MasterData/Application/Services/InventoryDimensionKeyService';
+import {
+  MakeInventoryStatus,
+  MemoryInventoryBalanceRepository,
+  MemoryInventoryDimensionRepository,
+  MemoryInventoryStatusRepository,
+} from '@test/Modules/MasterData/InventoryTestDoubles';
 import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileEntity';
 import { WarehouseProfileStatus } from '@modules/WarehouseProfile/Domain/Enums/WarehouseProfileStatus';
 import { RuleDefinitionEntity } from '@modules/WarehouseProfile/Domain/Entities/RuleDefinitionEntity';
@@ -735,6 +755,13 @@ const repoBundle = () => {
   const permissionChecker = {
     Check: jest.fn<Promise<PermissionDecision>, [PermissionCheckContext]>(async () => ({ Allowed: true })),
   };
+  const inventoryStatuses = new MemoryInventoryStatusRepository([
+    MakeInventoryStatus({ Id: 'status-ready-for-putaway', StatusCode: 'READY_FOR_PUTAWAY' }),
+    MakeInventoryStatus({ Id: 'status-available-ifb17', StatusCode: 'AVAILABLE' }),
+  ]);
+  const inventoryDimensions = new MemoryInventoryDimensionRepository();
+  const inventoryBalances = new MemoryInventoryBalanceRepository();
+  const dimensionKeyService = new InventoryDimensionKeyService();
   const auditEntries: unknown[] = [];
   const audited = {
     Entries: auditEntries,
@@ -762,6 +789,10 @@ const repoBundle = () => {
     controlExceptionCatalog,
     labelBlocking,
     permissionChecker,
+    inventoryStatuses,
+    inventoryDimensions,
+    inventoryBalances,
+    dimensionKeyService,
     audited,
   };
 };
@@ -871,6 +902,10 @@ const releaseInboundToPutawayUseCase = (bundle: ReturnType<typeof repoBundle>) =
     bundle.reasonCatalog,
     bundle.skus as unknown as ISkuRepository,
     bundle.locations as unknown as ILocationRepository,
+    bundle.inventoryDimensions,
+    bundle.inventoryBalances,
+    bundle.inventoryStatuses,
+    bundle.dimensionKeyService,
     bundle.audited as unknown as AuditedTransaction,
     bundle.permissionChecker,
   );
@@ -3761,5 +3796,312 @@ describe('IRE-04 rule-driven LPN required (real RuleResolver + seeded WT-01)', (
     );
 
     expect(release.RuleCode).toBe('RULE-IN-LPN-SUGGEST-TEST');
+  });
+});
+
+class MemoryPutawayTaskRepository implements IPutawayTaskRepository {
+  public tasks: PutawayTaskEntity[] = [];
+
+  public async Create(task: PutawayTaskEntity): Promise<PutawayTaskEntity> {
+    this.tasks.push(task);
+    return task;
+  }
+
+  public async FindById(id: string): Promise<PutawayTaskEntity | null> {
+    return this.tasks.find((task) => task.Id === id) ?? null;
+  }
+
+  public async FindByIdForUpdate(id: string): Promise<PutawayTaskEntity | null> {
+    return this.FindById(id);
+  }
+
+  public async FindByInboundPutawayReleaseId(inboundPutawayReleaseId: string): Promise<PutawayTaskEntity | null> {
+    return this.tasks.find((task) => task.InboundPutawayReleaseId === inboundPutawayReleaseId) ?? null;
+  }
+
+  public async FindByIdempotencyKey(
+    inboundPutawayReleaseId: string,
+    idempotencyKey: string,
+  ): Promise<PutawayTaskEntity | null> {
+    return (
+      this.tasks.find(
+        (task) => task.InboundPutawayReleaseId === inboundPutawayReleaseId && task.IdempotencyKey === idempotencyKey,
+      ) ?? null
+    );
+  }
+
+  public async Save(task: PutawayTaskEntity): Promise<PutawayTaskEntity> {
+    const index = this.tasks.findIndex((item) => item.Id === task.Id);
+    if (index >= 0) this.tasks[index] = task;
+    else this.tasks.push(task);
+    return task;
+  }
+
+  public async List(
+    skip: number,
+    take: number,
+    filter: Parameters<IPutawayTaskRepository['List']>[2] = {},
+  ): Promise<{ Items: PutawayTaskEntity[]; TotalItems: number }> {
+    let items = this.tasks;
+    if (filter?.WarehouseId) items = items.filter((task) => task.WarehouseId === filter.WarehouseId);
+    return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+}
+
+class MemoryInventoryTransactionRepository implements IInventoryTransactionRepository {
+  public transactions: InventoryTransactionEntity[] = [];
+  public movements: InventoryMovementEntity[] = [];
+
+  public async CreateTransaction(transaction: InventoryTransactionEntity): Promise<InventoryTransactionEntity> {
+    this.transactions.push(transaction);
+    return transaction;
+  }
+
+  public async CreateMovement(movement: InventoryMovementEntity): Promise<InventoryMovementEntity> {
+    this.movements.push(movement);
+    return movement;
+  }
+
+  public async SaveTransaction(transaction: InventoryTransactionEntity): Promise<InventoryTransactionEntity> {
+    const index = this.transactions.findIndex((item) => item.Id === transaction.Id);
+    if (index >= 0) this.transactions[index] = transaction;
+    else this.transactions.push(transaction);
+    return transaction;
+  }
+
+  public async FindTransactionByIdempotencyKey(
+    putawayTaskId: string,
+    idempotencyKey: string,
+  ): Promise<InventoryTransactionEntity | null> {
+    return (
+      this.transactions.find(
+        (transaction) => transaction.PutawayTaskId === putawayTaskId && transaction.IdempotencyKey === idempotencyKey,
+      ) ?? null
+    );
+  }
+
+  public async FindTransactionByTypeAndIdempotencyKey(): Promise<InventoryTransactionEntity | null> {
+    return null;
+  }
+
+  public async FindMovementByTransactionId(transactionId: string): Promise<InventoryMovementEntity | null> {
+    return this.movements.find((movement) => movement.InventoryTransactionId === transactionId) ?? null;
+  }
+}
+
+class FakeTaskExecutionRepository implements ITaskExecutionRepository {
+  public tasks = new Map<string, MobileTaskEntity>();
+
+  public async FindCandidates(): Promise<MobileTaskEntity[]> {
+    return [...this.tasks.values()];
+  }
+
+  public async FindById(id: string): Promise<MobileTaskEntity | null> {
+    return this.tasks.get(id) ?? null;
+  }
+
+  public async FindByIdForUpdate(id: string): Promise<MobileTaskEntity | null> {
+    return this.FindById(id);
+  }
+
+  public async FindBySourceDocument(): Promise<MobileTaskEntity | null> {
+    return null;
+  }
+
+  public async FindScanEventsByTaskId(): Promise<never[]> {
+    return [];
+  }
+
+  public async Save(task: MobileTaskEntity): Promise<MobileTaskEntity> {
+    this.tasks.set(task.Id, task);
+    return task;
+  }
+
+  public async SaveScanEvent<T>(scan: T): Promise<T> {
+    return scan;
+  }
+
+  public async RunInTransaction<T>(work: (manager: never) => Promise<T>): Promise<T> {
+    return work(undefined as never);
+  }
+}
+
+describe('IFB-17 release-to-putaway creates the READY_FOR_PUTAWAY dimension/balance', () => {
+  const startAndConfirmLineForRelease = async (bundle: ReturnType<typeof repoBundle>, idempotencyKey: string) => {
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: `${idempotencyKey}-line`,
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: `${idempotencyKey}-qc` },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    return { session, line };
+  };
+
+  it('creates exactly one READY_FOR_PUTAWAY dimension and balance with QtyOnHand equal to the released quantity', async () => {
+    const bundle = repoBundle();
+    const { session, line } = await startAndConfirmLineForRelease(bundle, 'ifb17-create');
+
+    await releaseInboundToPutawayUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ifb17-create-release' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(bundle.inventoryDimensions.dimensions.size).toBe(1);
+    const dimension = [...bundle.inventoryDimensions.dimensions.values()][0];
+    expect(dimension.InventoryStatusId).toBe('status-ready-for-putaway');
+    expect(dimension.SkuId).toBe('sku-1');
+    expect(bundle.inventoryBalances.balances.size).toBe(1);
+    const balance = [...bundle.inventoryBalances.balances.values()][0];
+    expect(balance.DimensionId).toBe(dimension.Id);
+    expect(balance.QtyOnHand).toBe(12);
+  });
+
+  it('does not create a second dimension/balance or double the quantity on an idempotent retry', async () => {
+    const bundle = repoBundle();
+    const { session, line } = await startAndConfirmLineForRelease(bundle, 'ifb17-retry');
+
+    const request = { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ifb17-retry-release' };
+    const context = { ...SystemAuditContext, ActorUserId: 'user-1' };
+    const first = await releaseInboundToPutawayUseCase(bundle).Execute(request, context);
+    const second = await releaseInboundToPutawayUseCase(bundle).Execute(request, context);
+
+    expect(second.Id).toBe(first.Id);
+    expect(bundle.inventoryDimensions.dimensions.size).toBe(1);
+    expect(bundle.inventoryBalances.balances.size).toBe(1);
+    const balance = [...bundle.inventoryBalances.balances.values()][0];
+    expect(balance.QtyOnHand).toBe(12);
+  });
+
+  it('accumulates onto the same balance (does not overwrite) when two different releases hash to the same dimension', async () => {
+    const bundle = repoBundle();
+    // Two separate receipt lines for the same SKU/warehouse/location/UOM, neither carrying a
+    // Lot/Serial -- both resolve to the identical dimension key, so their releases (each its
+    // own IdempotencyKey) must ADD onto the one shared balance instead of replacing it.
+    const { session: session1, line: line1 } = await startAndConfirmLineForRelease(bundle, 'ifb17-accum-a');
+    const { line: line2 } = await startAndConfirmLineForRelease(bundle, 'ifb17-accum-b');
+
+    await releaseInboundToPutawayUseCase(bundle).Execute(
+      { ReceiptId: session1.ReceiptId, ReceiptLineId: line1.Id, IdempotencyKey: 'ifb17-accum-release-a' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await releaseInboundToPutawayUseCase(bundle).Execute(
+      { ReceiptId: session1.ReceiptId, ReceiptLineId: line2.Id, IdempotencyKey: 'ifb17-accum-release-b' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(bundle.inventoryDimensions.dimensions.size).toBe(1);
+    expect(bundle.inventoryBalances.balances.size).toBe(1);
+    const balance = [...bundle.inventoryBalances.balances.values()][0];
+    expect(balance.QtyOnHand).toBe(24);
+  });
+
+  it('lets a putaway task confirm successfully end to end without any dimension pre-seeded by the test (release -> putaway release -> confirm)', async () => {
+    const bundle = repoBundle();
+    const { session, line } = await startAndConfirmLineForRelease(bundle, 'ifb17-e2e');
+
+    const release = await releaseInboundToPutawayUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'ifb17-e2e-release' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    // Confirmed by the previous 2 tests: exactly this dimension/balance now exists, created by
+    // ReleaseInboundToPutawayUseCase itself -- nothing here manually seeds it (the whole point of
+    // IFB-17: before the fix, this next step always failed with "Source inventory dimension not
+    // found for putaway confirmation" on a genuinely fresh SKU/location).
+    const putawayTasks = new MemoryPutawayTaskRepository();
+    const locationProfile = new LocationProfileEntity({
+      Id: 'profile-dock-1',
+      ProfileCode: 'STORAGE',
+      ProfileName: 'Storage',
+      LocationType: 'Storage',
+      Status: MasterDataStatus.Active,
+      CreatedAt: now,
+      UpdatedAt: now,
+    });
+    const targetLocation = new LocationEntity({
+      Id: 'location-target-1',
+      WarehouseId: 'warehouse-1',
+      ZoneId: 'zone-target-1',
+      LocationCode: 'A-01',
+      LocationName: 'Aisle A-01',
+      LocationType: 'Storage',
+      LocationProfileId: 'profile-dock-1',
+      LocationStatus: LocationStatus.Active,
+      CapacityQty: 100,
+      CreatedAt: now,
+      UpdatedAt: now,
+    });
+    const putawayLocations = {
+      FindByWarehouseAndCode: bundle.locations.FindByWarehouseAndCode,
+      FindById: jest.fn(async (id: string) => (id === targetLocation.Id ? targetLocation : null)),
+      List: jest.fn(async () => ({ Items: [targetLocation], TotalItems: 1 })),
+    };
+    const locationProfiles = { FindById: jest.fn(async () => locationProfile) };
+    const taskExecution = new FakeTaskExecutionRepository();
+    const inventoryTransactions = new MemoryInventoryTransactionRepository();
+
+    const releasePutawayTaskUseCase = new ReleasePutawayTaskUseCase(
+      putawayTasks,
+      bundle.receiving as unknown as IReceivingRepository,
+      putawayLocations as unknown as ILocationRepository,
+      bundle.skus as unknown as ISkuRepository,
+      locationProfiles as unknown as ILocationProfileRepository,
+      BuildEmptyPutawayRuleGate('warehouse-1'),
+      bundle.integrations as unknown as IIntegrationRepository,
+      taskExecution,
+      bundle.reasonCatalog,
+      bundle.audited as unknown as AuditedTransaction,
+      bundle.permissionChecker,
+    );
+
+    const releasedTaskDto = await releasePutawayTaskUseCase.Execute(
+      {
+        InboundPutawayReleaseId: release.Id,
+        TargetLocationId: targetLocation.Id,
+        IdempotencyKey: 'ifb17-e2e-putaway-release',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const confirmPutawayTaskUseCase = new ConfirmPutawayTaskUseCase(
+      putawayTasks,
+      inventoryTransactions,
+      bundle.inventoryStatuses,
+      bundle.inventoryDimensions,
+      bundle.inventoryBalances,
+      bundle.integrations as unknown as IIntegrationRepository,
+      taskExecution,
+      bundle.dimensionKeyService,
+      bundle.reasonCatalog,
+      bundle.audited as unknown as AuditedTransaction,
+      bundle.permissionChecker,
+    );
+
+    const result = await confirmPutawayTaskUseCase.Execute(
+      releasedTaskDto.Id,
+      {
+        SourceLocationScan: releasedTaskDto.SourceLocationCode as string,
+        TargetLocationScan: releasedTaskDto.TargetLocationCode,
+        IdempotencyKey: 'ifb17-e2e-confirm',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(result.PutawayTask.TaskStatus).toBe(PutawayTaskStatus.Confirmed);
+    expect(result.SourceBalance.QtyOnHand).toBe(0);
+    expect(result.TargetBalance.QtyOnHand).toBe(12);
   });
 });
