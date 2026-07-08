@@ -350,8 +350,11 @@ export class ReleaseInboundToPutawayUseCase {
   // (confirmed via repo-wide grep) to do it asynchronously later. ConfirmPutawayTaskUseCase's
   // source-side dimension lookup is strict (FindByHash, no fallback) by design (IFB-13's "no
   // silent null propagation" lesson applies here too) -- so the dimension must exist BEFORE a
-  // putaway task can ever be confirmed. Created here, the earliest point with every field the
-  // dimension key needs and already inside this.audited.Run's transaction.
+  // putaway task can ever be confirmed. Created here rather than in ReleasePutawayTaskUseCase
+  // (which has the same fields and its own transaction too) because "released to putaway" should
+  // mean ready-for-putaway regardless of whether a putaway task is ever created for it, and a
+  // release can only reach this method once -- nothing guarantees ReleasePutawayTaskUseCase runs
+  // exactly once per release.
   private async EnsureReadyForPutawayDimension(
     release: InboundPutawayReleaseEntity,
     manager: EntityManager,
