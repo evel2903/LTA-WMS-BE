@@ -29,4 +29,9 @@ export class ListWarehousesQuery {
   @IsString()
   @MaxLength(50)
   public WarehouseCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  public WarehouseName?: string;
 }

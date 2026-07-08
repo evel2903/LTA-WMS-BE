@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, ILike, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
 import {
   IWarehouseRepository,
@@ -9,6 +9,12 @@ import {
 import { WarehouseEntity } from '@modules/MasterData/Domain/Entities/WarehouseEntity';
 import { WarehouseOrmMapper } from '@modules/MasterData/Infrastructure/Mappers/WarehouseOrmMapper';
 import { WarehouseOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/WarehouseOrmEntity';
+
+// ILike's pattern is a plain string, not a parameterized LIKE argument -- '%'/'_' typed by the
+// caller must be escaped or they act as SQL wildcards instead of literal characters (IFB-16).
+function EscapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, '\\$&');
+}
 
 @Injectable()
 export class WarehouseRepository implements IWarehouseRepository {
@@ -58,6 +64,11 @@ export class WarehouseRepository implements IWarehouseRepository {
     if (filter.SiteId) where.SiteId = filter.SiteId;
     if (filter.Status) where.Status = filter.Status;
     if (filter.WarehouseCode) where.WarehouseCode = filter.WarehouseCode;
+    // Review-fix (IFB-16): a whitespace-only search term (e.g. "   ") was truthy and reached
+    // ILike('%   %') -- most WarehouseName values contain a space, so this silently matched
+    // nearly every row instead of behaving like "no filter". Trim before the truthy check.
+    const warehouseNameSearch = filter.WarehouseName?.trim();
+    if (warehouseNameSearch) where.WarehouseName = ILike(`%${EscapeLikePattern(warehouseNameSearch)}%`);
 
     const [items, total] = await this.warehouses.findAndCount({
       where,

@@ -8,6 +8,7 @@ export type WarehouseListFilter = {
   SiteId?: string;
   Status?: MasterDataStatus;
   WarehouseCode?: string;
+  WarehouseName?: string;
 };
 
 export interface IWarehouseRepository {
