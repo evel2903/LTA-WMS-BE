@@ -330,7 +330,25 @@ export class ReleaseInboundToPutawayUseCase {
     receipt: ReceiptEntity,
   ): Promise<{ Id: string | null; Code: string }> {
     const code = request.CurrentLocationCode?.trim() || DEFAULT_STAGING_LOCATION_CODE;
-    if (request.CurrentLocationId) return { Id: request.CurrentLocationId, Code: code };
+    if (request.CurrentLocationId) {
+      // Review-fix (IFB-17): a caller-supplied CurrentLocationId used to be trusted as-is, unlike
+      // the code-lookup branch below -- IFB-17's dimension creation now writes a real
+      // FK-constrained row against it (inventory_dimensions.location_id -> locations.id), so a
+      // bad id must fail the same clean way instead of a raw DB FK-violation error or, worse,
+      // silently landing on a location in a different warehouse or an inactive one.
+      const suppliedLocation = await this.locations.FindById(request.CurrentLocationId);
+      if (
+        !suppliedLocation ||
+        suppliedLocation.WarehouseId !== receipt.WarehouseId ||
+        suppliedLocation.LocationStatus !== LocationStatus.Active
+      ) {
+        throw new BusinessRuleException('Current staging location not found for putaway release', {
+          WarehouseId: receipt.WarehouseId,
+          LocationId: request.CurrentLocationId,
+        });
+      }
+      return { Id: request.CurrentLocationId, Code: code };
+    }
     const location = await this.locations.FindByWarehouseAndCode(receipt.WarehouseId, code);
     // Dual-review finding: FindByWarehouseAndCode doesn't filter by status, so without this check a
     // deactivated staging location would silently resolve here even though ResolveTarget (the

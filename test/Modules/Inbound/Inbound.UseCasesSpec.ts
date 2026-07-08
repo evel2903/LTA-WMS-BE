@@ -699,6 +699,7 @@ const repoBundle = () => {
     FindByWarehouseAndCode: jest.fn<Promise<LocationEntity | null>, [string, string]>(async (_warehouseId, code) =>
       location({ LocationCode: code }),
     ),
+    FindById: jest.fn<Promise<LocationEntity | null>, [string]>(async (id) => location({ Id: id })),
   };
   const uoms = { FindById: jest.fn(async () => uom()) };
   const coreFlows = {
@@ -2955,6 +2956,164 @@ describe('Inbound plan use cases', () => {
           ReceiptId: session.ReceiptId,
           ReceiptLineId: line.Id,
           IdempotencyKey: 'release-inactive-location',
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.receiving.PutawayReleases).toHaveLength(0);
+  });
+
+  it('accepts a caller-supplied CurrentLocationId once it is verified to exist, belong to the release warehouse, and be Active (IFB-17 review-fix)', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-release-supplied-location',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'qc-release-supplied-location' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    const release = await releaseInboundToPutawayUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        CurrentLocationId: 'location-dock-2',
+        IdempotencyKey: 'release-supplied-location',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(bundle.locations.FindById).toHaveBeenCalledWith('location-dock-2');
+    expect(release.CurrentLocationId).toBe('location-dock-2');
+  });
+
+  it('rejects a caller-supplied CurrentLocationId that does not exist, instead of trusting it as-is (IFB-17 review-fix)', async () => {
+    const bundle = repoBundle();
+    bundle.locations.FindById.mockResolvedValueOnce(null);
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-release-bogus-location',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'qc-release-bogus-location' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          CurrentLocationId: 'location-does-not-exist',
+          IdempotencyKey: 'release-bogus-location',
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.receiving.PutawayReleases).toHaveLength(0);
+  });
+
+  it('rejects a caller-supplied CurrentLocationId that belongs to a different warehouse than the receipt (IFB-17 review-fix)', async () => {
+    const bundle = repoBundle();
+    bundle.locations.FindById.mockResolvedValueOnce(
+      location({ Id: 'location-other-warehouse', WarehouseId: 'warehouse-other' }),
+    );
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-release-cross-warehouse-location',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'qc-release-cross-warehouse-location' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          CurrentLocationId: 'location-other-warehouse',
+          IdempotencyKey: 'release-cross-warehouse-location',
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    expect(bundle.receiving.PutawayReleases).toHaveLength(0);
+  });
+
+  it('rejects a caller-supplied CurrentLocationId that resolves to an INACTIVE location (IFB-17 review-fix)', async () => {
+    const bundle = repoBundle();
+    bundle.locations.FindById.mockResolvedValueOnce(
+      location({ Id: 'location-inactive-supplied', LocationStatus: LocationStatus.Inactive }),
+    );
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-release-inactive-supplied-location',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        IdempotencyKey: 'qc-release-inactive-supplied-location',
+      },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          CurrentLocationId: 'location-inactive-supplied',
+          IdempotencyKey: 'release-inactive-supplied-location',
         },
         { ...SystemAuditContext, ActorUserId: 'user-1' },
       ),
