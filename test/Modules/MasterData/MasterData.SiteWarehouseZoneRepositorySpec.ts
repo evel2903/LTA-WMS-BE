@@ -147,4 +147,22 @@ describe('WarehouseRepository.List WarehouseName search (IFB-16)', () => {
     const where = findAndCount.mock.calls[0][0].where;
     expect(where.WarehouseName.value).toBe('%100\\%\\_off%');
   });
+
+  it('escapes a literal backslash typed by the user (review-fix)', async () => {
+    const { repository, findAndCount } = buildRepository();
+
+    await repository.List(0, 50, { WarehouseName: 'A\\B' });
+
+    const where = findAndCount.mock.calls[0][0].where;
+    expect(where.WarehouseName.value).toBe('%A\\\\B%');
+  });
+
+  it('treats a whitespace-only search term as no filter instead of matching everything (review-fix)', async () => {
+    const { repository, findAndCount } = buildRepository();
+
+    await repository.List(0, 50, { WarehouseName: '   ' });
+
+    const where = findAndCount.mock.calls[0][0].where;
+    expect(where.WarehouseName).toBeUndefined();
+  });
 });

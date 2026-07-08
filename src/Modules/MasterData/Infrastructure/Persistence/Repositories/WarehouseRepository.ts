@@ -64,7 +64,11 @@ export class WarehouseRepository implements IWarehouseRepository {
     if (filter.SiteId) where.SiteId = filter.SiteId;
     if (filter.Status) where.Status = filter.Status;
     if (filter.WarehouseCode) where.WarehouseCode = filter.WarehouseCode;
-    if (filter.WarehouseName) where.WarehouseName = ILike(`%${EscapeLikePattern(filter.WarehouseName)}%`);
+    // Review-fix (IFB-16): a whitespace-only search term (e.g. "   ") was truthy and reached
+    // ILike('%   %') -- most WarehouseName values contain a space, so this silently matched
+    // nearly every row instead of behaving like "no filter". Trim before the truthy check.
+    const warehouseNameSearch = filter.WarehouseName?.trim();
+    if (warehouseNameSearch) where.WarehouseName = ILike(`%${EscapeLikePattern(warehouseNameSearch)}%`);
 
     const [items, total] = await this.warehouses.findAndCount({
       where,
