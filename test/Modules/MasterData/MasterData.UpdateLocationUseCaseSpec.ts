@@ -16,6 +16,7 @@ import { WarehouseEntity } from '@modules/MasterData/Domain/Entities/WarehouseEn
 import { ZoneEntity } from '@modules/MasterData/Domain/Entities/ZoneEntity';
 import { LocationStatus } from '@modules/MasterData/Domain/Enums/LocationStatus';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
+import { BuildDemoDataCcLocationTreePlan } from '@shared/Database/Seed/DemoDataCcLocationTreeSeed';
 
 class FakeWarehouseRepository implements IWarehouseRepository {
   public FindById = jest.fn<Promise<WarehouseEntity | null>, [string]>();
@@ -385,5 +386,37 @@ describe('UpdateLocationUseCase', () => {
         BondedFlag: false,
       }),
     ).rejects.toBeInstanceOf(BusinessRuleException);
+  });
+
+  it('FFB-06: the real DEMO-DATA-LTA seed for LP-LTA-DOCK now enforces CompliancePolicy.BondedOnly (was a no-op before the seed data used canonical keys)', async () => {
+    const seededDockProfile = BuildDemoDataCcLocationTreePlan().Profiles.find(
+      (profile) => profile.ProfileCode === 'LP-LTA-DOCK',
+    );
+    expect(seededDockProfile).toBeDefined();
+    expect(seededDockProfile!.CompliancePolicy).toEqual({ BondedOnly: true });
+
+    const { locations, profiles, useCase } = buildUseCase();
+    locations.FindById.mockResolvedValue(Location({ Id: 'location-1', BondedFlag: false }));
+    profiles.FindById.mockResolvedValue(Profile({ CompliancePolicy: seededDockProfile!.CompliancePolicy }));
+
+    await expect(
+      useCase.Execute({ Id: 'location-1', LocationProfileId: 'profile-1', BondedFlag: false }),
+    ).rejects.toBeInstanceOf(BusinessRuleException);
+  });
+
+  it('[Review][Patch] the real DEMO-DATA-LTA seed for LP-LTA-DOCK now enforces CapacityPolicy.RequireCapacityQty (was a no-op before the seed data used canonical keys)', async () => {
+    const seededDockProfile = BuildDemoDataCcLocationTreePlan().Profiles.find(
+      (profile) => profile.ProfileCode === 'LP-LTA-DOCK',
+    );
+    expect(seededDockProfile).toBeDefined();
+    expect(seededDockProfile!.CapacityPolicy).toEqual({ RequireCapacityQty: true });
+
+    const { locations, profiles, useCase } = buildUseCase();
+    locations.FindById.mockResolvedValue(Location({ Id: 'location-1', CapacityQty: null }));
+    profiles.FindById.mockResolvedValue(Profile({ CapacityPolicy: seededDockProfile!.CapacityPolicy }));
+
+    await expect(useCase.Execute({ Id: 'location-1', LocationProfileId: 'profile-1' })).rejects.toBeInstanceOf(
+      BusinessRuleException,
+    );
   });
 });

@@ -44,6 +44,7 @@ import {
   MakePutawayDemoWarehouse,
 } from '@test/TestDoubles/InventoryExecution/PutawayRuleGateTestDoubles';
 import { EntityManager } from 'typeorm';
+import { BuildDemoDataCcLocationTreePlan } from '@shared/Database/Seed/DemoDataCcLocationTreeSeed';
 
 const now = new Date('2026-06-23T03:00:00.000Z');
 const contextFor = (actor: string): AuditContext => ({ ...SystemAuditContext, ActorUserId: actor });
@@ -416,6 +417,99 @@ describe('InventoryExecution putaway release use case', () => {
       ).rejects.toBeInstanceOf(BusinessRuleException);
       expect(putawayTasks.tasks).toHaveLength(0);
     }
+  });
+
+  it('FFB-06: OperationPolicy.putawayBlocked=true on the target profile blocks putaway with TARGET_PROFILE_BLOCKS_PUTAWAY', async () => {
+    const { useCase, putawayTasks } = buildUseCase({
+      profile: makeProfile({ OperationPolicy: { putawayBlocked: true } }),
+    });
+
+    let caught: unknown;
+    try {
+      await useCase.Execute(
+        { InboundPutawayReleaseId: 'release-1', TargetLocationId: 'loc-1', IdempotencyKey: 'ffb06-op-blocked-key' },
+        contextFor('operator-1'),
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    expect((caught as BusinessRuleException).Details).toMatchObject({
+      Failures: ['TARGET_PROFILE_BLOCKS_PUTAWAY'],
+    });
+    expect(putawayTasks.tasks).toHaveLength(0);
+  });
+
+  it('FFB-06: EligibilityPolicy.putawayBlocked=true on the target profile ALSO blocks putaway with TARGET_PROFILE_BLOCKS_PUTAWAY (either policy source blocks)', async () => {
+    const { useCase, putawayTasks } = buildUseCase({
+      profile: makeProfile({ EligibilityPolicy: { putawayBlocked: true } }),
+    });
+
+    let caught: unknown;
+    try {
+      await useCase.Execute(
+        { InboundPutawayReleaseId: 'release-1', TargetLocationId: 'loc-1', IdempotencyKey: 'ffb06-elig-blocked-key' },
+        contextFor('operator-1'),
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    expect((caught as BusinessRuleException).Details).toMatchObject({
+      Failures: ['TARGET_PROFILE_BLOCKS_PUTAWAY'],
+    });
+    expect(putawayTasks.tasks).toHaveLength(0);
+  });
+
+  it('FFB-06: OperationPolicy.putawayAllowed=false on the target profile blocks putaway with TARGET_PROFILE_PUTAWAY_NOT_ALLOWED', async () => {
+    const { useCase, putawayTasks } = buildUseCase({
+      profile: makeProfile({ OperationPolicy: { putawayAllowed: false } }),
+    });
+
+    let caught: unknown;
+    try {
+      await useCase.Execute(
+        { InboundPutawayReleaseId: 'release-1', TargetLocationId: 'loc-1', IdempotencyKey: 'ffb06-not-allowed-key' },
+        contextFor('operator-1'),
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    expect((caught as BusinessRuleException).Details).toMatchObject({
+      Failures: ['TARGET_PROFILE_PUTAWAY_NOT_ALLOWED'],
+    });
+    expect(putawayTasks.tasks).toHaveLength(0);
+  });
+
+  it('FFB-06: the real DEMO-DATA-LTA seed for LP-LTA-AISLE now blocks putaway (was a no-op before the seed data used canonical keys)', async () => {
+    const seededAisleProfile = BuildDemoDataCcLocationTreePlan().Profiles.find(
+      (profile) => profile.ProfileCode === 'LP-LTA-AISLE',
+    );
+    expect(seededAisleProfile).toBeDefined();
+
+    const { useCase, putawayTasks } = buildUseCase({
+      profile: makeProfile({ OperationPolicy: seededAisleProfile!.OperationPolicy }),
+    });
+
+    let caught: unknown;
+    try {
+      await useCase.Execute(
+        { InboundPutawayReleaseId: 'release-1', TargetLocationId: 'loc-1', IdempotencyKey: 'ffb06-seed-aisle-key' },
+        contextFor('operator-1'),
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    expect((caught as BusinessRuleException).Details).toMatchObject({
+      Failures: ['TARGET_PROFILE_BLOCKS_PUTAWAY'],
+    });
+    expect(putawayTasks.tasks).toHaveLength(0);
   });
 
   it('audits explicit target rejection with failed decision evidence', async () => {
