@@ -34,6 +34,7 @@ import { LocationEntity } from '@modules/MasterData/Domain/Entities/LocationEnti
 import { LocationProfileEntity } from '@modules/MasterData/Domain/Entities/LocationProfileEntity';
 import { LocationStatus } from '@modules/MasterData/Domain/Enums/LocationStatus';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
+import { BuildDemoDataCcLocationTreePlan } from '@shared/Database/Seed/DemoDataCcLocationTreeSeed';
 
 const now = new Date('2026-06-23T00:00:00.000Z');
 const ctx: AuditContext = {
@@ -723,6 +724,35 @@ describe('ReplenishmentTaskLifecycleService', () => {
           ReasonCode: 'RC-V1-REPLENISHMENT',
           EvidenceRefs: ['POLICY-FALSE'],
           IdempotencyKey: 'repl-release-policy-false',
+        },
+        ctx,
+      ),
+    ).rejects.toBeInstanceOf(BusinessRuleException);
+  });
+
+  it('FFB-06: the real DEMO-DATA-LTA seed for LP-LTA-QC now blocks replenishment via EligibilityPolicy (was a no-op before the seed data used canonical keys)', async () => {
+    const seededQcProfile = BuildDemoDataCcLocationTreePlan().Profiles.find(
+      (profile) => profile.ProfileCode === 'LP-LTA-QC',
+    );
+    expect(seededQcProfile).toBeDefined();
+    expect(seededQcProfile!.EligibilityPolicy).toEqual({ replenishmentBlocked: true });
+
+    const { service } = buildService({
+      profiles: new MemoryLocationProfileRepository([
+        makeProfile({ EligibilityPolicy: seededQcProfile!.EligibilityPolicy }),
+      ]),
+    });
+
+    await expect(
+      service.Release(
+        {
+          TriggerType: ReplenishmentTriggerType.Demand,
+          SourceBalanceId: 'balance-source',
+          TargetLocationId: 'pick-face-1',
+          Quantity: 12,
+          ReasonCode: 'RC-V1-REPLENISHMENT',
+          EvidenceRefs: ['SEED-QC-BLOCK'],
+          IdempotencyKey: 'repl-release-seed-qc-block',
         },
         ctx,
       ),

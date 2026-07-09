@@ -51,6 +51,15 @@ import { LocationEntity } from '@modules/MasterData/Domain/Entities/LocationEnti
 import { LocationProfileEntity } from '@modules/MasterData/Domain/Entities/LocationProfileEntity';
 import { LocationStatus } from '@modules/MasterData/Domain/Enums/LocationStatus';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
+import {
+  EligibilityPickFaceKeys,
+  MixLotPolicyKeys,
+  MixOwnerPolicyKeys,
+  MixSkuPolicyKeys,
+  OperationPickFaceKeys,
+  ReplenishmentAllowFlagKeys,
+  ReplenishmentBlockFlagKeys,
+} from '@modules/MasterData/Domain/ValueObjects/LocationProfilePolicySchema';
 
 interface ReasonDecision {
   ReasonCode: string;
@@ -862,9 +871,9 @@ export class ReplenishmentTaskLifecycleService {
     profile: LocationProfileEntity | null,
     sourceDimension: InventoryDimensionEntity,
   ): Promise<void> {
-    const mixSkuPolicy = this.ResolveMixPolicy(target.MixSkuPolicy, profile, ['MixSkuPolicy', 'mixSkuPolicy']);
-    const mixOwnerPolicy = this.ResolveMixPolicy(target.MixOwnerPolicy, profile, ['MixOwnerPolicy', 'mixOwnerPolicy']);
-    const mixLotPolicy = this.ResolveMixPolicy(target.MixLotPolicy, profile, ['MixLotPolicy', 'mixLotPolicy']);
+    const mixSkuPolicy = this.ResolveMixPolicy(target.MixSkuPolicy, profile, MixSkuPolicyKeys);
+    const mixOwnerPolicy = this.ResolveMixPolicy(target.MixOwnerPolicy, profile, MixOwnerPolicyKeys);
+    const mixLotPolicy = this.ResolveMixPolicy(target.MixLotPolicy, profile, MixLotPolicyKeys);
     const blockSkuMix = this.IsNoMixPolicy(mixSkuPolicy);
     const blockOwnerMix = this.IsNoMixPolicy(mixOwnerPolicy);
     const blockLotMix = this.IsNoMixPolicy(mixLotPolicy);
@@ -975,29 +984,24 @@ export class ReplenishmentTaskLifecycleService {
     const locationType = location.LocationType.toLowerCase();
     if (locationType.includes('pick') && locationType.includes('face')) return true;
     return (
-      this.PolicyFlag(profile?.EligibilityPolicy, ['pickFace', 'isPickFace', 'replenishmentTarget']) ||
-      this.PolicyFlag(profile?.OperationPolicy, ['pickFace', 'isPickFace', 'replenishmentAllowed'])
+      this.PolicyFlag(profile?.EligibilityPolicy, EligibilityPickFaceKeys) ||
+      this.PolicyFlag(profile?.OperationPolicy, OperationPickFaceKeys)
     );
   }
 
   private PolicyBlocks(policy?: Record<string, unknown> | null): boolean {
     return (
-      this.PolicyFlag(policy, [
-        'replenishmentBlocked',
-        'pickFaceBlocked',
-        'pickBlocked',
-        'blockReplenishment',
-        'replenishmentDisabled',
-      ]) || this.PolicyExplicitFalse(policy, ['replenishmentAllowed', 'allowReplenishment', 'canReplenish'])
+      this.PolicyFlag(policy, ReplenishmentBlockFlagKeys) ||
+      this.PolicyExplicitFalse(policy, ReplenishmentAllowFlagKeys)
     );
   }
 
-  private PolicyFlag(policy: Record<string, unknown> | null | undefined, keys: string[]): boolean {
+  private PolicyFlag(policy: Record<string, unknown> | null | undefined, keys: readonly string[]): boolean {
     if (!policy) return false;
     return keys.some((key) => policy[key] === true);
   }
 
-  private PolicyExplicitFalse(policy: Record<string, unknown> | null | undefined, keys: string[]): boolean {
+  private PolicyExplicitFalse(policy: Record<string, unknown> | null | undefined, keys: readonly string[]): boolean {
     if (!policy) return false;
     return keys.some((key) => policy[key] === false || String(policy[key]).toLowerCase() === 'false');
   }
@@ -1005,7 +1009,7 @@ export class ReplenishmentTaskLifecycleService {
   private ResolveMixPolicy(
     locationPolicy: string | null,
     profile: LocationProfileEntity | null,
-    profileKeys: string[],
+    profileKeys: readonly string[],
   ): string | null {
     if (locationPolicy) return locationPolicy;
     if (!profile) return null;

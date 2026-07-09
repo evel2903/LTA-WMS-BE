@@ -117,6 +117,56 @@ describe('E2E LocationProfileController (no DB)', () => {
     );
   });
 
+  it('FFB-06: POST /location-profiles rejects an unknown key inside a policy field', async () => {
+    await request(app.getHttpServer())
+      .post('/location-profiles')
+      .send({
+        ProfileCode: 'BIN-DRY',
+        ProfileName: 'Dry Bin',
+        LocationType: 'BIN',
+        Status: MasterDataStatus.Active,
+        CapacityPolicy: { palletSlots: 6 },
+      })
+      .expect(400);
+
+    expect(createExecute).not.toHaveBeenCalled();
+  });
+
+  it('FFB-06: POST /location-profiles rejects a known policy key with the wrong type', async () => {
+    await request(app.getHttpServer())
+      .post('/location-profiles')
+      .send({
+        ProfileCode: 'BIN-DRY',
+        ProfileName: 'Dry Bin',
+        LocationType: 'BIN',
+        Status: MasterDataStatus.Active,
+        CompliancePolicy: { RequiredTemperatureClass: 123 },
+      })
+      .expect(400);
+
+    expect(createExecute).not.toHaveBeenCalled();
+  });
+
+  it('FFB-06: POST /location-profiles accepts every canonical key across all 5 policies', async () => {
+    createExecute.mockResolvedValue({ Id: 'profile-1', ProfileCode: 'BIN-DRY' });
+
+    const fullPolicyBody = {
+      ProfileCode: 'BIN-DRY',
+      ProfileName: 'Dry Bin',
+      LocationType: 'BIN',
+      Status: MasterDataStatus.Active,
+      CapacityPolicy: { RequireCapacityQty: true },
+      EligibilityPolicy: { putawayBlocked: false, pickFace: true },
+      MixPolicy: { MixSkuPolicy: 'NoMix', mixLotPolicy: 'NoMix' },
+      CompliancePolicy: { RequiredTemperatureClass: 'AMBIENT', BondedOnly: false },
+      OperationPolicy: { putawayAllowed: true, replenishmentBlocked: false },
+    };
+
+    await request(app.getHttpServer()).post('/location-profiles').send(fullPolicyBody).expect(201);
+
+    expect(createExecute).toHaveBeenCalledWith(fullPolicyBody, expect.objectContaining({ ActorUserId: 'test-admin' }));
+  });
+
   it('PATCH /location-profiles/:id rejects empty required business fields', async () => {
     await request(app.getHttpServer()).patch('/location-profiles/profile-1').send({ ProfileCode: '' }).expect(400);
     await request(app.getHttpServer()).patch('/location-profiles/profile-1').send({ ProfileName: '' }).expect(400);

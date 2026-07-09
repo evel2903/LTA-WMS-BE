@@ -5,6 +5,12 @@ import { LocationOrmEntity } from '@modules/MasterData/Infrastructure/Persistenc
 import { LocationProfileOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/LocationProfileOrmEntity';
 import { WarehouseOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/WarehouseOrmEntity';
 import { ZoneOrmEntity } from '@modules/MasterData/Infrastructure/Persistence/Entities/ZoneOrmEntity';
+import {
+  CapacityPolicy,
+  CompliancePolicy,
+  EligibilityPolicy,
+  OperationPolicy,
+} from '@modules/MasterData/Domain/ValueObjects/LocationProfilePolicySchema';
 
 const DemoSourceSystem = 'DEMO-DATA-LTA';
 const ActiveStatus = 'Active';
@@ -14,8 +20,10 @@ type LocationProfileSeed = {
   ProfileCode: string;
   ProfileName: string;
   LocationType: string;
-  CapacityPolicy: Record<string, unknown>;
-  OperationPolicy: Record<string, unknown>;
+  CapacityPolicy: CapacityPolicy;
+  OperationPolicy: OperationPolicy;
+  EligibilityPolicy?: EligibilityPolicy;
+  CompliancePolicy?: CompliancePolicy;
 };
 
 type ZoneSeed = {
@@ -42,6 +50,7 @@ export type DemoDataCcLocationSeed = {
   MixSkuPolicy?: string;
   MixLotPolicy?: string;
   MixOwnerPolicy?: string;
+  BondedFlag?: boolean;
 };
 
 export type DemoDataCcLocationTreePlan = {
@@ -72,69 +81,87 @@ export const AssertDemoDataCcWritableLocationTreeRow = (
 };
 
 export const BuildDemoDataCcLocationTreePlan = (): DemoDataCcLocationTreePlan => {
+  // FFB-06: policy keys below use ONLY the canonical schema runtime actually reads
+  // (LocationProfilePolicySchema.ts) — replaces the old seed-invented vocabulary (palletSlots,
+  // allowReceiving, structuralNode, ...) that no enforcement code ever consulted, so these demo
+  // profiles previously could not exercise any capacity/eligibility/operation rule at all.
   const profiles: LocationProfileSeed[] = [
     {
       ProfileCode: 'LP-LTA-DOCK',
       ProfileName: 'LTA Dock/Staging',
       LocationType: 'DOCK',
-      CapacityPolicy: { palletSlots: 6 },
-      OperationPolicy: { allowReceiving: true, allowLoading: true },
+      CapacityPolicy: { RequireCapacityQty: true },
+      OperationPolicy: {},
+      // Receiving dock handles bonded/customs-cleared goods — exercises LocationPolicyValidator's
+      // real CompliancePolicy.BondedOnly check (Review finding: seed had 0 non-empty Compliance
+      // value, so no test could prove that rule fires from real seed data).
+      CompliancePolicy: { BondedOnly: true },
     },
     {
       ProfileCode: 'LP-LTA-QC',
       ProfileName: 'LTA QC Staging',
       LocationType: 'QC_STAGE',
-      CapacityPolicy: { palletSlots: 12 },
-      OperationPolicy: { allowQc: true },
+      CapacityPolicy: { RequireCapacityQty: true },
+      OperationPolicy: {},
+      // Unverified QC stock shouldn't feed replenishment — exercises ReplenishmentTaskLifecycleService
+      // .PolicyBlocks reading EligibilityPolicy independently of OperationPolicy (Review finding: seed
+      // had 0 non-empty Eligibility value, so no test could prove that rule fires from real seed data).
+      EligibilityPolicy: { replenishmentBlocked: true },
     },
     {
       ProfileCode: 'LP-LTA-AISLE',
       ProfileName: 'LTA Aisle',
       LocationType: 'AISLE',
-      CapacityPolicy: { structuralNode: true },
-      OperationPolicy: { allowInventory: false },
+      CapacityPolicy: {},
+      // Structural node, never holds inventory — blocks putaway (faithful translation of the old
+      // decorative allowInventory:false, now wired to a key ReleasePutawayTaskUseCase actually reads).
+      OperationPolicy: { putawayBlocked: true },
     },
     {
       ProfileCode: 'LP-LTA-RACK',
       ProfileName: 'LTA Rack',
       LocationType: 'RACK',
-      CapacityPolicy: { structuralNode: true },
-      OperationPolicy: { allowInventory: false },
+      CapacityPolicy: {},
+      OperationPolicy: { putawayBlocked: true },
     },
     {
       ProfileCode: 'LP-LTA-LEVEL',
       ProfileName: 'LTA Rack Level',
       LocationType: 'LEVEL',
-      CapacityPolicy: { structuralNode: true },
-      OperationPolicy: { allowInventory: false },
+      CapacityPolicy: {},
+      OperationPolicy: { putawayBlocked: true },
     },
     {
       ProfileCode: 'LP-LTA-RESERVE',
       ProfileName: 'LTA Reserve Pallet',
       LocationType: 'RESERVE',
-      CapacityPolicy: { palletSlots: 24, maxWeightKg: 18000 },
-      OperationPolicy: { allowPutaway: true, allowReplenishmentSource: true },
+      CapacityPolicy: { RequireCapacityQty: true },
+      OperationPolicy: {},
     },
     {
       ProfileCode: 'LP-LTA-PICKFACE',
       ProfileName: 'LTA Pick Face',
       LocationType: 'PICK_FACE',
-      CapacityPolicy: { palletSlots: 4, maxEachQty: 1200 },
-      OperationPolicy: { allowPicking: true, allowReplenishmentTarget: true },
+      CapacityPolicy: { RequireCapacityQty: true },
+      // Pick face IS the replenishment target (faithful translation of the old decorative
+      // allowReplenishmentTarget:true) — now wired to the key IsPickFace() actually reads.
+      OperationPolicy: { pickFace: true },
     },
     {
       ProfileCode: 'LP-LTA-PACK',
       ProfileName: 'LTA Packing Station',
       LocationType: 'PACKING',
-      CapacityPolicy: { workStations: 4 },
-      OperationPolicy: { allowPacking: true },
+      CapacityPolicy: { RequireCapacityQty: true },
+      OperationPolicy: {},
     },
     {
       ProfileCode: 'LP-LTA-QUARANTINE',
       ProfileName: 'LTA Quarantine Hold',
       LocationType: 'QUARANTINE',
-      CapacityPolicy: { palletSlots: 8 },
-      OperationPolicy: { allowHold: true, allowPicking: false },
+      CapacityPolicy: { RequireCapacityQty: true },
+      // Held stock shouldn't feed replenishment (faithful translation of the old decorative
+      // allowHold:true/allowPicking:false) — now wired to a key PolicyBlocks() actually reads.
+      OperationPolicy: { replenishmentBlocked: true },
     },
   ];
 
@@ -150,8 +177,8 @@ export const BuildDemoDataCcLocationTreePlan = (): DemoDataCcLocationTreePlan =>
 
   const locations: DemoDataCcLocationSeed[] = [
     loc('RCV-A01', 'Receiving aisle A01', 'LTA-RCV', 'LP-LTA-AISLE', 'AISLE', undefined, 10, 10),
-    loc('RCV-A01-D01', 'Dock nhận hàng 01', 'LTA-RCV', 'LP-LTA-DOCK', 'DOCK', 'RCV-A01', 11, 11, 6),
-    loc('RCV-A01-D02', 'Dock nhận hàng 02', 'LTA-RCV', 'LP-LTA-DOCK', 'DOCK', 'RCV-A01', 12, 12, 6),
+    loc('RCV-A01-D01', 'Dock nhận hàng 01', 'LTA-RCV', 'LP-LTA-DOCK', 'DOCK', 'RCV-A01', 11, 11, 6, true),
+    loc('RCV-A01-D02', 'Dock nhận hàng 02', 'LTA-RCV', 'LP-LTA-DOCK', 'DOCK', 'RCV-A01', 12, 12, 6, true),
     // IFB-13: real Location row for the default staging code ('RECEIVING') that
     // ReleaseInboundToPutawayUseCase resolves a putaway release's CurrentLocationId against when the
     // caller doesn't supply one explicitly. Without this row the lookup fails closed.
@@ -165,6 +192,7 @@ export const BuildDemoDataCcLocationTreePlan = (): DemoDataCcLocationTreePlan =>
       13,
       13,
       6,
+      true,
     ),
     loc('QC-A01', 'QC aisle A01', 'LTA-QC', 'LP-LTA-AISLE', 'AISLE', undefined, 20, 20),
     loc('QC-A01-STG01', 'QC staging 01', 'LTA-QC', 'LP-LTA-QC', 'QC_STAGE', 'QC-A01', 21, 21, 8),
@@ -236,8 +264,8 @@ export const BuildDemoDataCcLocationTreePlan = (): DemoDataCcLocationTreePlan =>
     loc('PACK-A01-ST01', 'Bàn đóng gói 01', 'LTA-PACK', 'LP-LTA-PACK', 'PACK_STATION', 'PACK-A01', 301, 301),
     loc('PACK-A01-ST02', 'Bàn đóng gói 02', 'LTA-PACK', 'LP-LTA-PACK', 'PACK_STATION', 'PACK-A01', 302, 302),
     loc('LOAD-A01', 'Loading aisle A01', 'LTA-LOAD', 'LP-LTA-AISLE', 'AISLE', undefined, 400, 400),
-    loc('LOAD-A01-D01', 'Cửa xuất hàng 01', 'LTA-LOAD', 'LP-LTA-DOCK', 'DOCK', 'LOAD-A01', 401, 401, 8),
-    loc('LOAD-A01-D02', 'Cửa xuất hàng 02', 'LTA-LOAD', 'LP-LTA-DOCK', 'DOCK', 'LOAD-A01', 402, 402, 8),
+    loc('LOAD-A01-D01', 'Cửa xuất hàng 01', 'LTA-LOAD', 'LP-LTA-DOCK', 'DOCK', 'LOAD-A01', 401, 401, 8, true),
+    loc('LOAD-A01-D02', 'Cửa xuất hàng 02', 'LTA-LOAD', 'LP-LTA-DOCK', 'DOCK', 'LOAD-A01', 402, 402, 8, true),
     loc('QAR-A01', 'Quarantine aisle A01', 'LTA-QAR', 'LP-LTA-AISLE', 'AISLE', undefined, 900, 900),
     loc('QAR-A01-HOLD01', 'Vị trí cách ly 01', 'LTA-QAR', 'LP-LTA-QUARANTINE', 'QUARANTINE', 'QAR-A01', 901, 901, 4),
   ];
@@ -255,6 +283,12 @@ const loc = (
   PickSequence?: number,
   PutawaySequence?: number,
   PalletSlot?: number,
+  // [Review][Patch] Defaults false for every location EXCEPT the 5 LP-LTA-DOCK ones below, which
+  // must be true — that profile's CompliancePolicy.BondedOnly:true (AC6 fix) is checked against
+  // location.BondedFlag by LocationPolicyValidator on every future UpdateLocationUseCase call, not
+  // just at seed time (seeding itself bypasses the validator via a direct .save()); leaving these
+  // seeded dock locations non-bonded would make every ordinary edit to them fail from day one.
+  BondedFlag = false,
 ): DemoDataCcLocationSeed => ({
   LocationCode,
   LocationName,
@@ -265,6 +299,7 @@ const loc = (
   PickSequence,
   PutawaySequence,
   PalletSlot,
+  BondedFlag,
   CapacityQty: PalletSlot ? PalletSlot * 100 : null,
   CapacityVolume: PalletSlot ? PalletSlot * 1.2 : null,
   CapacityWeight: PalletSlot ? PalletSlot * 750 : null,
@@ -314,9 +349,16 @@ export const SeedDemoDataCcLocationTree = async (dataSource: DataSource): Promis
     profile.Version = 1;
     profile.Status = ActiveStatus;
     profile.CapacityPolicy = input.CapacityPolicy;
-    profile.EligibilityPolicy = { ownerCodes: ['LTA'] };
-    profile.MixPolicy = { allowMultiSku: input.LocationType !== 'BIN', allowMultiLot: input.LocationType !== 'BIN' };
-    profile.CompliancePolicy = { demo: true };
+    // FFB-06: the old global EligibilityPolicy.ownerCodes and CompliancePolicy.demo were never read
+    // by any runtime code (owner restriction is enforced elsewhere via LocationEntity.OwnerRestriction)
+    // — replaced by each profile's own real, canonical, already-enforced value (defaulting to {} for
+    // profiles with no plausible Eligibility/Compliance need — not inventing enforcement out of scope).
+    // MixPolicy: none of this tree's location types is 'BIN', so the old allowMultiSku/allowMultiLot
+    // was always true (never restrictive) — {} preserves that "no mix restriction" intent exactly,
+    // since IsNoMixPolicy() only blocks on a recognized no-mix string value, never on an empty policy.
+    profile.EligibilityPolicy = input.EligibilityPolicy ?? {};
+    profile.MixPolicy = {};
+    profile.CompliancePolicy = input.CompliancePolicy ?? {};
     profile.OperationPolicy = input.OperationPolicy;
     profile.SourceSystem = DemoSourceSystem;
     profile.ReferenceId = input.ProfileCode;
@@ -381,7 +423,7 @@ export const SeedDemoDataCcLocationTree = async (dataSource: DataSource): Promis
     location.PalletSlot = input.PalletSlot ?? null;
     location.TemperatureClass = 'AMBIENT';
     location.DgCompatibilityGroup = null;
-    location.BondedFlag = false;
+    location.BondedFlag = input.BondedFlag ?? false;
     location.OwnerRestriction = input.OwnerRestriction ?? null;
     location.MixSkuPolicy = input.MixSkuPolicy ?? null;
     location.MixLotPolicy = input.MixLotPolicy ?? null;

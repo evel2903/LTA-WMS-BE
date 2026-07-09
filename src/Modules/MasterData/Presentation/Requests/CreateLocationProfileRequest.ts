@@ -1,5 +1,18 @@
 import { IsEnum, IsNotEmpty, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
+import {
+  CapacityPolicy,
+  CapacityPolicyFields,
+  CompliancePolicy,
+  CompliancePolicyFields,
+  EligibilityPolicy,
+  EligibilityPolicyFields,
+  MixPolicy,
+  MixPolicyFields,
+  OperationPolicy,
+  OperationPolicyFields,
+} from '@modules/MasterData/Domain/ValueObjects/LocationProfilePolicySchema';
+import { IsLocationProfilePolicy } from '@modules/MasterData/Presentation/Validators/IsLocationProfilePolicy';
 
 export class CreateLocationProfileRequest {
   @IsString()
@@ -22,23 +35,28 @@ export class CreateLocationProfileRequest {
 
   @IsOptional()
   @IsObject()
-  public CapacityPolicy?: Record<string, unknown>;
+  @IsLocationProfilePolicy(CapacityPolicyFields)
+  public CapacityPolicy?: CapacityPolicy;
 
   @IsOptional()
   @IsObject()
-  public EligibilityPolicy?: Record<string, unknown>;
+  @IsLocationProfilePolicy(EligibilityPolicyFields)
+  public EligibilityPolicy?: EligibilityPolicy;
 
   @IsOptional()
   @IsObject()
-  public MixPolicy?: Record<string, unknown>;
+  @IsLocationProfilePolicy(MixPolicyFields)
+  public MixPolicy?: MixPolicy;
 
   @IsOptional()
   @IsObject()
-  public CompliancePolicy?: Record<string, unknown>;
+  @IsLocationProfilePolicy(CompliancePolicyFields)
+  public CompliancePolicy?: CompliancePolicy;
 
   @IsOptional()
   @IsObject()
-  public OperationPolicy?: Record<string, unknown>;
+  @IsLocationProfilePolicy(OperationPolicyFields)
+  public OperationPolicy?: OperationPolicy;
 
   @IsOptional()
   @IsString()

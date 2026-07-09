@@ -1,4 +1,11 @@
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
+import {
+  CapacityPolicy,
+  CompliancePolicy,
+  EligibilityPolicy,
+  MixPolicy,
+  OperationPolicy,
+} from '@modules/MasterData/Domain/ValueObjects/LocationProfilePolicySchema';
 
 export class LocationProfileEntity {
   public readonly Id: string;
@@ -7,11 +14,11 @@ export class LocationProfileEntity {
   public LocationType: string;
   public Version: number;
   public Status: MasterDataStatus;
-  public CapacityPolicy: Record<string, unknown>;
-  public EligibilityPolicy: Record<string, unknown>;
-  public MixPolicy: Record<string, unknown>;
-  public CompliancePolicy: Record<string, unknown>;
-  public OperationPolicy: Record<string, unknown>;
+  public CapacityPolicy: CapacityPolicy;
+  public EligibilityPolicy: EligibilityPolicy;
+  public MixPolicy: MixPolicy;
+  public CompliancePolicy: CompliancePolicy;
+  public OperationPolicy: OperationPolicy;
   public SourceSystem: string | null;
   public ReferenceId: string | null;
   public readonly CreatedAt: Date;
@@ -26,11 +33,11 @@ export class LocationProfileEntity {
     LocationType: string;
     Version?: number;
     Status: MasterDataStatus;
-    CapacityPolicy?: Record<string, unknown> | null;
-    EligibilityPolicy?: Record<string, unknown> | null;
-    MixPolicy?: Record<string, unknown> | null;
-    CompliancePolicy?: Record<string, unknown> | null;
-    OperationPolicy?: Record<string, unknown> | null;
+    CapacityPolicy?: CapacityPolicy | null;
+    EligibilityPolicy?: EligibilityPolicy | null;
+    MixPolicy?: MixPolicy | null;
+    CompliancePolicy?: CompliancePolicy | null;
+    OperationPolicy?: OperationPolicy | null;
     SourceSystem?: string | null;
     ReferenceId?: string | null;
     CreatedAt: Date;
