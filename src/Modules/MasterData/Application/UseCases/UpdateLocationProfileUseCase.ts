@@ -12,6 +12,7 @@ import { MasterDataObjectGroup } from '@modules/MasterData/Domain/Enums/MasterDa
 import { UpdateLocationProfileDto } from '@modules/MasterData/Application/DTOs/UpdateLocationProfileDto';
 import { LocationProfileDto } from '@modules/MasterData/Application/DTOs/LocationProfileDto';
 import { ILocationProfileRepository } from '@modules/MasterData/Application/Interfaces/ILocationProfileRepository';
+import { ILocationRepository } from '@modules/MasterData/Application/Interfaces/ILocationRepository';
 import { LocationProfileDtoMapper } from '@modules/MasterData/Application/Mappers/LocationProfileDtoMapper';
 import { LocationProfileEntity } from '@modules/MasterData/Domain/Entities/LocationProfileEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
@@ -19,6 +20,7 @@ import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataSta
 export class UpdateLocationProfileUseCase {
   constructor(
     private readonly locationProfileRepository: ILocationProfileRepository,
+    private readonly locationRepository: ILocationRepository,
     private readonly ownershipPolicy?: MasterDataOwnershipPolicyService,
     private readonly auditedTransaction?: AuditedTransaction,
   ) {}
@@ -58,6 +60,15 @@ export class UpdateLocationProfileUseCase {
     const targetLocationType = request.LocationType ?? profile.LocationType;
     if (targetStatus === MasterDataStatus.Active && targetLocationType.trim().length === 0) {
       throw new BusinessRuleException('Active location profile requires LocationType');
+    }
+
+    if (targetLocationType !== profile.LocationType) {
+      const referencing = await this.locationRepository.List(0, 1, { LocationProfileId: profile.Id });
+      if (referencing.TotalItems > 0) {
+        throw new BusinessRuleException(
+          'Cannot change LocationType: one or more locations already reference this profile',
+        );
+      }
     }
 
     profile.ProfileCode = targetProfileCode;

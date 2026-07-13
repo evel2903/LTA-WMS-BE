@@ -2,6 +2,8 @@ import { BusinessRuleException, ConflictException, NotFoundException } from '@co
 import { CreateLocationProfileUseCase } from '@modules/MasterData/Application/UseCases/CreateLocationProfileUseCase';
 import { UpdateLocationProfileUseCase } from '@modules/MasterData/Application/UseCases/UpdateLocationProfileUseCase';
 import { ILocationProfileRepository } from '@modules/MasterData/Application/Interfaces/ILocationProfileRepository';
+import { ILocationRepository } from '@modules/MasterData/Application/Interfaces/ILocationRepository';
+import { LocationEntity } from '@modules/MasterData/Domain/Entities/LocationEntity';
 import { LocationProfileEntity } from '@modules/MasterData/Domain/Entities/LocationProfileEntity';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 
@@ -11,6 +13,18 @@ class FakeLocationProfileRepository implements ILocationProfileRepository {
   public Create = jest.fn<Promise<LocationProfileEntity>, [LocationProfileEntity]>();
   public Update = jest.fn<Promise<LocationProfileEntity>, [LocationProfileEntity]>();
   public List = jest.fn<Promise<{ Items: LocationProfileEntity[]; TotalItems: number }>, [number, number, unknown?]>();
+}
+
+class FakeLocationRepository implements ILocationRepository {
+  public FindById = jest.fn<Promise<LocationEntity | null>, [string]>();
+  public FindByWarehouseAndCode = jest.fn<Promise<LocationEntity | null>, [string, string]>();
+  public FindByPhysicalAddress = jest.fn<Promise<LocationEntity | null>, [string, string, unknown]>();
+  public Create = jest.fn<Promise<LocationEntity>, [LocationEntity]>();
+  public Update = jest.fn<Promise<LocationEntity>, [LocationEntity]>();
+  public List = jest
+    .fn<Promise<{ Items: LocationEntity[]; TotalItems: number }>, [number, number, unknown?]>()
+    .mockResolvedValue({ Items: [], TotalItems: 0 });
+  public ListForTree = jest.fn<Promise<LocationEntity[]>, [string, string?]>();
 }
 
 const Profile = (overrides: Partial<LocationProfileEntity> = {}) =>
@@ -111,24 +125,67 @@ describe('LocationProfile use cases', () => {
 
   it('updates a profile and keeps policy fields defaulted when omitted', async () => {
     const profiles = new FakeLocationProfileRepository();
+    const locations = new FakeLocationRepository();
     profiles.FindById.mockResolvedValue(Profile({ CapacityPolicy: { RequireCapacityQty: true } }));
     profiles.Update.mockImplementation(async (profile) => profile);
 
-    const useCase = new UpdateLocationProfileUseCase(profiles);
+    const useCase = new UpdateLocationProfileUseCase(profiles, locations);
     const updated = await useCase.Execute({ Id: 'profile-1', ProfileName: 'Dry Bin Updated' });
 
     expect(updated.ProfileName).toBe('Dry Bin Updated');
     expect(updated.CapacityPolicy).toEqual({ RequireCapacityQty: true });
+    expect(locations.List).not.toHaveBeenCalled();
   });
 
   it('throws NotFoundException when updating a missing profile', async () => {
     const profiles = new FakeLocationProfileRepository();
+    const locations = new FakeLocationRepository();
     profiles.FindById.mockResolvedValue(null);
 
-    const useCase = new UpdateLocationProfileUseCase(profiles);
+    const useCase = new UpdateLocationProfileUseCase(profiles, locations);
 
     await expect(useCase.Execute({ Id: 'missing-profile', ProfileName: 'Missing' })).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+
+  it('allows changing LocationType when no location references the profile', async () => {
+    const profiles = new FakeLocationProfileRepository();
+    const locations = new FakeLocationRepository();
+    profiles.FindById.mockResolvedValue(Profile({ LocationType: 'BIN' }));
+    profiles.Update.mockImplementation(async (profile) => profile);
+    locations.List.mockResolvedValue({ Items: [], TotalItems: 0 });
+
+    const useCase = new UpdateLocationProfileUseCase(profiles, locations);
+    const updated = await useCase.Execute({ Id: 'profile-1', LocationType: 'RACK' });
+
+    expect(updated.LocationType).toBe('RACK');
+    expect(locations.List).toHaveBeenCalledWith(0, 1, { LocationProfileId: 'profile-1' });
+  });
+
+  it('throws BusinessRuleException when changing LocationType while a location references the profile', async () => {
+    const profiles = new FakeLocationProfileRepository();
+    const locations = new FakeLocationRepository();
+    profiles.FindById.mockResolvedValue(Profile({ LocationType: 'BIN' }));
+    locations.List.mockResolvedValue({ Items: [], TotalItems: 1 });
+
+    const useCase = new UpdateLocationProfileUseCase(profiles, locations);
+
+    await expect(useCase.Execute({ Id: 'profile-1', LocationType: 'RACK' })).rejects.toBeInstanceOf(
+      BusinessRuleException,
+    );
+    expect(profiles.Update).not.toHaveBeenCalled();
+  });
+
+  it('does not check locations when LocationType is unchanged', async () => {
+    const profiles = new FakeLocationProfileRepository();
+    const locations = new FakeLocationRepository();
+    profiles.FindById.mockResolvedValue(Profile({ LocationType: 'BIN' }));
+    profiles.Update.mockImplementation(async (profile) => profile);
+
+    const useCase = new UpdateLocationProfileUseCase(profiles, locations);
+    await useCase.Execute({ Id: 'profile-1', LocationType: 'BIN', ProfileName: 'Renamed' });
+
+    expect(locations.List).not.toHaveBeenCalled();
   });
 });
