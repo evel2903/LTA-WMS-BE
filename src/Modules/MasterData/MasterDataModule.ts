@@ -405,10 +405,16 @@ import { InventorySerialLookupController } from '@modules/MasterData/Presentatio
       provide: UpdateLocationProfileUseCase,
       useFactory: (
         locationProfiles: ILocationProfileRepository,
+        locations: ILocationRepository,
         ownership: MasterDataOwnershipPolicyService,
         audited: AuditedTransaction,
-      ) => new UpdateLocationProfileUseCase(locationProfiles, ownership, audited),
-      inject: [LOCATION_PROFILE_REPOSITORY, MASTER_DATA_OWNERSHIP_POLICY_SERVICE, AuditedTransaction],
+      ) => new UpdateLocationProfileUseCase(locationProfiles, locations, ownership, audited),
+      inject: [
+        LOCATION_PROFILE_REPOSITORY,
+        LOCATION_REPOSITORY,
+        MASTER_DATA_OWNERSHIP_POLICY_SERVICE,
+        AuditedTransaction,
+      ],
     },
     {
       provide: CreateLocationUseCase,
