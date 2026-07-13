@@ -34,16 +34,18 @@ export class GetInboundOperationalStateUseCase {
         QcResults: [],
         Lpns: [],
         Releases: [],
+        Discrepancies: [],
       };
     }
 
-    const [sessions, lines, qcTasks, qcResults, lpns, releases] = await Promise.all([
+    const [sessions, lines, qcTasks, qcResults, lpns, releases, discrepancies] = await Promise.all([
       this.receiving.ListReceivingSessionsByInboundPlanId(id),
       this.receiving.ListReceiptLinesByReceiptId(receipt.Id),
       this.receiving.ListQcTasksByReceiptId(receipt.Id),
       this.receiving.ListQcResultsByReceiptId(receipt.Id),
       this.receiving.ListInboundLpnsByReceiptId(receipt.Id),
       this.receiving.ListInboundPutawayReleasesByReceiptId(receipt.Id),
+      this.receiving.ListInboundDiscrepanciesByReceiptId(receipt.Id),
     ]);
 
     const taskStatusById = new Map(qcTasks.map((task) => [task.Id, task.TaskStatus]));
@@ -61,6 +63,7 @@ export class GetInboundOperationalStateUseCase {
       ),
       Lpns: lpns.map((lpn) => ReceivingDtoMapper.ToInboundLpnDto(lpn)),
       Releases: releases.map((release) => ReceivingDtoMapper.ToInboundPutawayReleaseDto(release)),
+      Discrepancies: discrepancies.map((discrepancy) => ReceivingDtoMapper.ToDiscrepancyDto(discrepancy)),
     };
   }
 }

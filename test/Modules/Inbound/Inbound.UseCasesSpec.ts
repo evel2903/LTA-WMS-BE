@@ -467,6 +467,10 @@ class FakeReceivingRepository implements IReceivingRepository {
   public async ListInboundPutawayReleasesByReceiptId(receiptId: string): Promise<InboundPutawayReleaseEntity[]> {
     return this.PutawayReleases.filter((item) => item.ReceiptId === receiptId);
   }
+
+  public async ListInboundDiscrepanciesByReceiptId(receiptId: string): Promise<InboundDiscrepancyEntity[]> {
+    return this.Discrepancies.filter((item) => item.ReceiptId === receiptId);
+  }
 }
 
 class FakeExceptionCaseRepository implements IExceptionCaseRepository {
@@ -3202,6 +3206,7 @@ describe('GetInboundOperationalStateUseCase (IRM-01)', () => {
       QcResults: [],
       Lpns: [],
       Releases: [],
+      Discrepancies: [],
     });
   });
 
@@ -3256,6 +3261,13 @@ describe('GetInboundOperationalStateUseCase (IRM-01)', () => {
       ReceiptLineId: 'line-1',
       InventoryStatusCode: 'AVAILABLE',
     } as unknown as InboundPutawayReleaseEntity);
+    bundle.receiving.Discrepancies.push({
+      Id: 'discrepancy-1',
+      ReceiptId: receiptId,
+      ReceiptLineId: 'line-1',
+      DiscrepancyType: 'QuantityVariance',
+      Status: 'Routed',
+    } as unknown as InboundDiscrepancyEntity);
 
     const state = await operationalStateUseCase(bundle).Execute(planId, 'user-1');
 
@@ -3268,6 +3280,8 @@ describe('GetInboundOperationalStateUseCase (IRM-01)', () => {
     expect(state.QcResults[0].TaskStatus).toBe('Dispositioned');
     expect(state.Lpns[0].LpnCode).toBe('LPN-1');
     expect(state.Releases[0].InventoryStatusCode).toBe('AVAILABLE');
+    expect(state.Discrepancies).toHaveLength(1);
+    expect(state.Discrepancies[0].Status).toBe('Routed');
   });
 });
 
