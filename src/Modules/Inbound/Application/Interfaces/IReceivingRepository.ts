@@ -79,4 +79,5 @@ export interface IReceivingRepository {
   ListQcResultsByReceiptId(receiptId: string): Promise<QcResultEntity[]>;
   ListInboundLpnsByReceiptId(receiptId: string): Promise<InboundLpnEntity[]>;
   ListInboundPutawayReleasesByReceiptId(receiptId: string): Promise<InboundPutawayReleaseEntity[]>;
+  ListInboundDiscrepanciesByReceiptId(receiptId: string): Promise<InboundDiscrepancyEntity[]>;
 }

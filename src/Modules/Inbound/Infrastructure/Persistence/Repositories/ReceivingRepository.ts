@@ -337,6 +337,11 @@ export class ReceivingRepository implements IReceivingRepository {
     return entities.map(ReceivingOrmMapper.ToInboundPutawayReleaseDomain);
   }
 
+  public async ListInboundDiscrepanciesByReceiptId(receiptId: string): Promise<InboundDiscrepancyEntity[]> {
+    const entities = await this.discrepancies.find({ where: { ReceiptId: receiptId }, order: { CreatedAt: 'ASC' } });
+    return entities.map(ReceivingOrmMapper.ToDiscrepancyDomain);
+  }
+
   private HandleUniqueViolation(error: unknown, message: string): void {
     if ((error as { code?: string }).code === '23505') {
       throw new ConflictException(message);
