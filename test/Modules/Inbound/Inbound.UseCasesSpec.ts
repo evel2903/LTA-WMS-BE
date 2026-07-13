@@ -1523,6 +1523,84 @@ describe('Inbound plan use cases', () => {
     );
 
     expect(line.SerialNumber).toBe('SN-IFB14-002');
+    // IFB-20: 1 of 12 expected units received so far is not (yet) a provable variance.
+    expect(line.Status).toBe(ReceiptLineStatus.Received);
+    expect(line.DiscrepancySignals).not.toContain(ReceiptLineDiscrepancySignal.QuantityVariance);
+  });
+
+  it('IFB-20: does not flag QuantityVariance on any unit while cumulative received stays at or under ExpectedQuantity for a SerialControlled SKU', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(
+      {
+        ...createRequest(),
+        Lines: [{ LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 3, ExternalLineReference: '10' }],
+      },
+      SystemAuditContext,
+    );
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const useCase = confirmReceiptLineUseCase(bundle);
+    const confirmUnit = (serialNumber: string, idempotencyKey: string) =>
+      useCase.Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          InboundPlanLineId: created.Lines[0].Id,
+          ActualQuantity: 1,
+          SerialNumber: serialNumber,
+          IdempotencyKey: idempotencyKey,
+          ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      );
+
+    const unit1 = await confirmUnit('SN-IFB20-001', 'ifb20-unit-1');
+    const unit2 = await confirmUnit('SN-IFB20-002', 'ifb20-unit-2');
+    const unit3 = await confirmUnit('SN-IFB20-003', 'ifb20-unit-3');
+
+    for (const unit of [unit1, unit2, unit3]) {
+      expect(unit.Status).toBe(ReceiptLineStatus.Received);
+      expect(unit.DiscrepancySignals).not.toContain(ReceiptLineDiscrepancySignal.QuantityVariance);
+    }
+  });
+
+  it('IFB-20: flags QuantityVariance once cumulative received exceeds ExpectedQuantity for a SerialControlled SKU (over-receipt)', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(
+      {
+        ...createRequest(),
+        Lines: [{ LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 3, ExternalLineReference: '10' }],
+      },
+      SystemAuditContext,
+    );
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const useCase = confirmReceiptLineUseCase(bundle);
+    const confirmUnit = (serialNumber: string, idempotencyKey: string) =>
+      useCase.Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          InboundPlanLineId: created.Lines[0].Id,
+          ActualQuantity: 1,
+          SerialNumber: serialNumber,
+          IdempotencyKey: idempotencyKey,
+          ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      );
+
+    await confirmUnit('SN-IFB20-OVER-001', 'ifb20-over-unit-1');
+    await confirmUnit('SN-IFB20-OVER-002', 'ifb20-over-unit-2');
+    await confirmUnit('SN-IFB20-OVER-003', 'ifb20-over-unit-3');
+    const unit4 = await confirmUnit('SN-IFB20-OVER-004', 'ifb20-over-unit-4');
+
+    expect(unit4.Status).toBe(ReceiptLineStatus.Discrepancy);
+    expect(unit4.DiscrepancySignals).toContain(ReceiptLineDiscrepancySignal.QuantityVariance);
   });
 
   it('blocks receipt line confirm reusing a SerialNumber already received for the same SKU (IFB-15)', async () => {

@@ -89,7 +89,17 @@ export class ConfirmReceiptLineUseCase {
     if (!sku) throw new BusinessRuleException('SKU not found for receipt line', { SkuId: actualSkuId });
     this.AssertCaptureRequiredBySku(sku, request);
     await this.AssertSerialNotDuplicated(sku, request);
-    const signals = this.DiscrepancySignals(request, planLine, actualSkuId, actualUomId);
+    // IFB-20: a SerialControlled SKU is forced (above) to ActualQuantity=1 per call, so comparing
+    // a single call's quantity to the whole plan line's ExpectedQuantity always looks "wrong" for
+    // every unit of a multi-unit serial line. Only for SerialControlled SKUs, compare the running
+    // total received so far (across all existing receipt lines for this plan line) plus this call.
+    const cumulativeActualQuantity = sku.SerialControlled
+      ? request.ActualQuantity +
+        (await this.receiving.ListReceiptLinesByReceiptId(receipt.Id))
+          .filter((existingLine) => existingLine.InboundPlanLineId === planLine.Id)
+          .reduce((sum, existingLine) => sum + existingLine.ActualQuantity, 0)
+      : request.ActualQuantity;
+    const signals = this.DiscrepancySignals(request, planLine, actualSkuId, actualUomId, sku, cumulativeActualQuantity);
     const now = new Date();
     const line = new ReceiptLineEntity({
       Id: randomUUID(),
@@ -290,9 +300,20 @@ export class ConfirmReceiptLineUseCase {
     planLine: InboundPlanLineEntity,
     actualSkuId: string,
     actualUomId: string,
+    sku: SkuEntity,
+    cumulativeActualQuantity: number,
   ): ReceiptLineDiscrepancySignal[] {
     const signals: ReceiptLineDiscrepancySignal[] = [];
-    if (request.ActualQuantity !== planLine.ExpectedQuantity) {
+    // IFB-20: SerialControlled lines are received one unit per call, so only a running total
+    // that exceeds ExpectedQuantity is an unambiguous variance (over-receipt). A running total
+    // still under ExpectedQuantity is not flagged -- the system has no "closing" signal to say
+    // no more units are coming, so a partial total is never provably wrong yet. Non-serial SKUs
+    // keep the original single-call comparison unchanged (a single confirm already represents
+    // the whole receiving action for that line).
+    const hasQuantityVariance = sku.SerialControlled
+      ? cumulativeActualQuantity > planLine.ExpectedQuantity
+      : request.ActualQuantity !== planLine.ExpectedQuantity;
+    if (hasQuantityVariance) {
       signals.push(ReceiptLineDiscrepancySignal.QuantityVariance);
     }
     if (actualSkuId !== planLine.SkuId) signals.push(ReceiptLineDiscrepancySignal.WrongSku);
