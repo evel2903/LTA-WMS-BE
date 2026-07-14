@@ -93,10 +93,14 @@ export class ConfirmReceiptLineUseCase {
     // a single call's quantity to the whole plan line's ExpectedQuantity always looks "wrong" for
     // every unit of a multi-unit serial line. Only for SerialControlled SKUs, compare the running
     // total received so far (across all existing receipt lines for this plan line) plus this call.
+    // Review fix: scope the sum to actualSkuId too -- a prior call substituted to a different SKU
+    // is already flagged WrongSku on its own line and must not inflate THIS SKU's over-receipt count.
     const cumulativeActualQuantity = sku.SerialControlled
       ? request.ActualQuantity +
         (await this.receiving.ListReceiptLinesByReceiptId(receipt.Id))
-          .filter((existingLine) => existingLine.InboundPlanLineId === planLine.Id)
+          .filter(
+            (existingLine) => existingLine.InboundPlanLineId === planLine.Id && existingLine.SkuId === actualSkuId,
+          )
           .reduce((sum, existingLine) => sum + existingLine.ActualQuantity, 0)
       : request.ActualQuantity;
     const signals = this.DiscrepancySignals(request, planLine, actualSkuId, actualUomId, sku, cumulativeActualQuantity);
