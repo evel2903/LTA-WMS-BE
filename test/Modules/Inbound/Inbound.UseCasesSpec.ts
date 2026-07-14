@@ -4417,3 +4417,310 @@ describe('IFB-17 release-to-putaway creates the READY_FOR_PUTAWAY dimension/bala
     expect(result.TargetBalance.QtyOnHand).toBe(12);
   });
 });
+
+describe('IFB-21 release blocked for SerialControlled plan line until fully received', () => {
+  const confirmSerialUnit = async (
+    bundle: ReturnType<typeof repoBundle>,
+    receiptId: string,
+    planLineId: string,
+    serialNumber: string,
+    idempotencyKey: string,
+  ) =>
+    confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: receiptId,
+        InboundPlanLineId: planLineId,
+        ActualQuantity: 1,
+        SerialNumber: serialNumber,
+        IdempotencyKey: idempotencyKey,
+        ScanEvidence: { RawValue: `barcode-${idempotencyKey}`, ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+  const evaluateQcForLine = async (
+    bundle: ReturnType<typeof repoBundle>,
+    receiptId: string,
+    lineId: string,
+    idempotencyKey: string,
+  ) =>
+    evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: receiptId, ReceiptLineId: lineId, IdempotencyKey: idempotencyKey },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+
+  it('blocks release when only 1 of 3 expected units has been received for a SerialControlled SKU', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(
+      {
+        ...createRequest(),
+        Lines: [{ LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 3, ExternalLineReference: '10' }],
+      },
+      SystemAuditContext,
+    );
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const line1 = await confirmSerialUnit(
+      bundle,
+      session.ReceiptId,
+      created.Lines[0].Id,
+      'SN-IFB21-1',
+      'ifb21-block-unit-1',
+    );
+    await evaluateQcForLine(bundle, session.ReceiptId, line1.Id, 'ifb21-block-qc-1');
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: line1.Id, IdempotencyKey: 'ifb21-block-release-1' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('allows release for each unit once all 3 expected units of a SerialControlled SKU have been received', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(
+      {
+        ...createRequest(),
+        Lines: [{ LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 3, ExternalLineReference: '10' }],
+      },
+      SystemAuditContext,
+    );
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const line1 = await confirmSerialUnit(
+      bundle,
+      session.ReceiptId,
+      created.Lines[0].Id,
+      'SN-IFB21-FULL-1',
+      'ifb21-full-unit-1',
+    );
+    const line2 = await confirmSerialUnit(
+      bundle,
+      session.ReceiptId,
+      created.Lines[0].Id,
+      'SN-IFB21-FULL-2',
+      'ifb21-full-unit-2',
+    );
+    const line3 = await confirmSerialUnit(
+      bundle,
+      session.ReceiptId,
+      created.Lines[0].Id,
+      'SN-IFB21-FULL-3',
+      'ifb21-full-unit-3',
+    );
+    await evaluateQcForLine(bundle, session.ReceiptId, line1.Id, 'ifb21-full-qc-1');
+    await evaluateQcForLine(bundle, session.ReceiptId, line2.Id, 'ifb21-full-qc-2');
+    await evaluateQcForLine(bundle, session.ReceiptId, line3.Id, 'ifb21-full-qc-3');
+
+    const release1 = await releaseInboundToPutawayUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line1.Id, IdempotencyKey: 'ifb21-full-release-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const release2 = await releaseInboundToPutawayUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line2.Id, IdempotencyKey: 'ifb21-full-release-2' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const release3 = await releaseInboundToPutawayUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line3.Id, IdempotencyKey: 'ifb21-full-release-3' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(release1.InventoryStatusCode).toBe('READY_FOR_PUTAWAY');
+    expect(release2.InventoryStatusCode).toBe('READY_FOR_PUTAWAY');
+    expect(release3.InventoryStatusCode).toBe('READY_FOR_PUTAWAY');
+  });
+
+  it("review fix: a substituted-SKU receipt line does not count toward the correct SKU's cumulative quantity for release", async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(
+      {
+        ...createRequest(),
+        Lines: [{ LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 2, ExternalLineReference: '10' }],
+      },
+      SystemAuditContext,
+    );
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    // Unit 1: scanned as a DIFFERENT (substituted) SKU on the same plan line -- must not count
+    // toward sku-1's cumulative received quantity. Without the SkuId filter, this unit plus the
+    // one correct-SKU unit below would wrongly sum to 2 (== ExpectedQuantity), incorrectly
+    // allowing release when only 1 of 2 expected sku-1 units has actually been received.
+    await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        SkuId: 'sku-2',
+        ActualQuantity: 1,
+        SerialNumber: 'SN-IFB21-SUBSTITUTE',
+        IdempotencyKey: 'ifb21-sku-scope-substitute-unit',
+        ScanEvidence: { RawValue: 'barcode-substitute', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const correctLine = await confirmSerialUnit(
+      bundle,
+      session.ReceiptId,
+      created.Lines[0].Id,
+      'SN-IFB21-SKU-SCOPE-CORRECT',
+      'ifb21-sku-scope-correct-unit',
+    );
+    await evaluateQcForLine(bundle, session.ReceiptId, correctLine.Id, 'ifb21-sku-scope-qc');
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: correctLine.Id, IdempotencyKey: 'ifb21-sku-scope-release' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('blocks release when 2 of 3 expected units have been received for a SerialControlled SKU', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(
+      {
+        ...createRequest(),
+        Lines: [{ LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 3, ExternalLineReference: '10' }],
+      },
+      SystemAuditContext,
+    );
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const line1 = await confirmSerialUnit(
+      bundle,
+      session.ReceiptId,
+      created.Lines[0].Id,
+      'SN-IFB21-2OF3-1',
+      'ifb21-2of3-unit-1',
+    );
+    const line2 = await confirmSerialUnit(
+      bundle,
+      session.ReceiptId,
+      created.Lines[0].Id,
+      'SN-IFB21-2OF3-2',
+      'ifb21-2of3-unit-2',
+    );
+    await evaluateQcForLine(bundle, session.ReceiptId, line1.Id, 'ifb21-2of3-qc-1');
+    await evaluateQcForLine(bundle, session.ReceiptId, line2.Id, 'ifb21-2of3-qc-2');
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: line2.Id, IdempotencyKey: 'ifb21-2of3-release' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('includes the expected and cumulative quantity in both the thrown exception and the audit-blocked entry when release is blocked for an incomplete SerialControlled line', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(
+      {
+        ...createRequest(),
+        Lines: [{ LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 3, ExternalLineReference: '10' }],
+      },
+      SystemAuditContext,
+    );
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const line1 = await confirmSerialUnit(
+      bundle,
+      session.ReceiptId,
+      created.Lines[0].Id,
+      'SN-IFB21-PAYLOAD-1',
+      'ifb21-payload-unit-1',
+    );
+    await evaluateQcForLine(bundle, session.ReceiptId, line1.Id, 'ifb21-payload-qc-1');
+
+    let caught: unknown;
+    try {
+      await releaseInboundToPutawayUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: line1.Id, IdempotencyKey: 'ifb21-payload-release' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(BusinessRuleException);
+    expect((caught as BusinessRuleException).Details).toMatchObject({
+      ExpectedQuantity: 3,
+      CumulativeActualQuantity: 1,
+    });
+    expect(bundle.audited.Entries[bundle.audited.Entries.length - 1]).toMatchObject({
+      AfterJson: expect.objectContaining({
+        Decision: 'Blocked',
+        ReceiptLineId: line1.Id,
+        ExpectedQuantity: 3,
+        CumulativeActualQuantity: 1,
+      }),
+    });
+  });
+
+  it('allows release once cumulative received quantity exceeds ExpectedQuantity for a SerialControlled SKU (over-receipt)', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(
+      {
+        ...createRequest(),
+        Lines: [{ LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 2, ExternalLineReference: '10' }],
+      },
+      SystemAuditContext,
+    );
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const line1 = await confirmSerialUnit(
+      bundle,
+      session.ReceiptId,
+      created.Lines[0].Id,
+      'SN-IFB21-OVER-1',
+      'ifb21-over-unit-1',
+    );
+    const line2 = await confirmSerialUnit(
+      bundle,
+      session.ReceiptId,
+      created.Lines[0].Id,
+      'SN-IFB21-OVER-2',
+      'ifb21-over-unit-2',
+    );
+    // Unit 3 pushes the running total to 3 (over-receipt against ExpectedQuantity=2), which trips
+    // ConfirmReceiptLineUseCase's own QuantityVariance signal (IFB-20) and would force this unit's
+    // own QC decision into a permanent PENDING_QC -- irrelevant to the release guard under test here,
+    // so it is deliberately left un-QC'd/un-released. Unit 2 (received while cumulative was still
+    // <= ExpectedQuantity) has no discrepancy signal and is the one released below, to isolate the
+    // release guard's own cumulative-vs-expected comparison (3 > 2) from the unrelated QC gate.
+    await confirmSerialUnit(bundle, session.ReceiptId, created.Lines[0].Id, 'SN-IFB21-OVER-3', 'ifb21-over-unit-3');
+    await evaluateQcForLine(bundle, session.ReceiptId, line1.Id, 'ifb21-over-qc-1');
+    await evaluateQcForLine(bundle, session.ReceiptId, line2.Id, 'ifb21-over-qc-2');
+
+    const release2 = await releaseInboundToPutawayUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line2.Id, IdempotencyKey: 'ifb21-over-release-2' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(release2.InventoryStatusCode).toBe('READY_FOR_PUTAWAY');
+  });
+});

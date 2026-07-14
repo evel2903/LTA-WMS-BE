@@ -117,6 +117,44 @@ export class ReleaseInboundToPutawayUseCase {
       this.skus.FindById(line.SkuId),
     ]);
     if (!sku) throw new BusinessRuleException('SKU not found for release', { SkuId: line.SkuId });
+
+    // IFB-21: a SerialControlled SKU is received one unit per receipt-line (IFB-14), so a single
+    // receipt-line reaching this use case never means the plan line is fully received -- only that
+    // one unit was scanned. Without this check, releasing that one receipt-line marked the WHOLE
+    // plan line "Đã release" in the FE (InboundLineStage.ts's releaseDone flips true from any single
+    // matching release record) even though the remaining expected units were never received, with
+    // zero discrepancy signal anywhere (IFB-20 intentionally suppresses QuantityVariance for serial
+    // lines below ExpectedQuantity, to avoid false positives across sequential unit-by-unit scans --
+    // this guard is the missing completeness check that IFB-20 didn't cover). Non-serial SKUs are not
+    // affected: ConfirmReceiptLineUseCase.DiscrepancySignals already flags any exact-quantity mismatch
+    // on a single call, which routes to a mandatory QC checkpoint (EvaluateQcTaskUseCase) that already
+    // blocks release until resolved -- adding this guard there too would be redundant.
+    if (sku.SerialControlled) {
+      // IFB-21 review: scope by SkuId too, matching IFB-20's precedent -- a substituted-SKU
+      // receipt-line sharing this InboundPlanLineId must not contaminate this SKU's cumulative count.
+      const cumulativeActualQuantity = (await this.receiving.ListReceiptLinesByReceiptId(receipt.Id))
+        .filter(
+          (existingLine) =>
+            existingLine.InboundPlanLineId === line.InboundPlanLineId && existingLine.SkuId === line.SkuId,
+        )
+        .reduce((sum, existingLine) => sum + existingLine.ActualQuantity, 0);
+      const planLine = aggregate.Lines.find((planLineEntry) => planLineEntry.Id === line.InboundPlanLineId);
+      if (!planLine) throw new BusinessRuleException('Inbound plan line not found for release');
+      if (cumulativeActualQuantity < planLine.ExpectedQuantity) {
+        await this.AuditBlocked(
+          context,
+          receipt,
+          line,
+          'Cannot release: SerialControlled plan line has not received its full expected quantity yet',
+          { ExpectedQuantity: planLine.ExpectedQuantity, CumulativeActualQuantity: cumulativeActualQuantity },
+        );
+        throw new BusinessRuleException(
+          'Cannot release: SerialControlled plan line has not received its full expected quantity yet',
+          { ExpectedQuantity: planLine.ExpectedQuantity, CumulativeActualQuantity: cumulativeActualQuantity },
+        );
+      }
+    }
+
     const skuRequiresLpn = sku.LpnControlled === true;
     const profileRequiresLpn = this.ProfileRequiresLpn(profile);
     // Rule engine reads its OWN policy key (`lpnControlled`), independent of the legacy
