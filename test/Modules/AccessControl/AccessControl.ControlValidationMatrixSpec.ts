@@ -57,7 +57,7 @@ const buildCheckerWorld = async () => {
   const userRoles = new InMemoryUserRoleRepository();
   const dataScopes = new InMemoryDataScopeRepository();
   await SeedAccessControlRbac(roles, permissions, rolePermissions);
-  const checker = new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes);
+  const checker = new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes, roles);
 
   const assign = async (userId: string, code: RoleCode) => {
     const role = await roles.FindByCode(code);

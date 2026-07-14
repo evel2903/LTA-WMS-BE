@@ -158,7 +158,7 @@ async function seedAccessControlWorld(): Promise<AccessControlWorld> {
     rolePermissions,
     userRoles,
     dataScopes,
-    checker: new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes),
+    checker: new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes, roles),
   };
 }
 

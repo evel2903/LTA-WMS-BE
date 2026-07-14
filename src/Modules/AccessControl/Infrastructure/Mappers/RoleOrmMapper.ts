@@ -1,4 +1,3 @@
-import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
 import { RoleStatus } from '@modules/AccessControl/Domain/Enums/RoleStatus';
 import { RoleEntity } from '@modules/AccessControl/Domain/Entities/RoleEntity';
 import { RoleOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/RoleOrmEntity';
@@ -7,7 +6,7 @@ export class RoleOrmMapper {
   public static ToDomain(entity: RoleOrmEntity): RoleEntity {
     return new RoleEntity({
       Id: entity.Id,
-      RoleCode: entity.RoleCode as RoleCode,
+      RoleCode: entity.RoleCode,
       RoleName: entity.RoleName,
       Description: entity.Description,
       IsSystem: entity.IsSystem,

@@ -65,6 +65,11 @@ export class InMemoryRoleRepository implements IRoleRepository {
     return role;
   }
 
+  public async Update(role: RoleEntity): Promise<RoleEntity> {
+    this.roles.set(role.Id, role);
+    return role;
+  }
+
   public async List(skip: number, take: number): Promise<{ Items: RoleEntity[]; TotalItems: number }> {
     const items = [...this.roles.values()];
     return { Items: items.slice(skip, skip + take), TotalItems: items.length };

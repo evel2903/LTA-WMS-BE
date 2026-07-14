@@ -1,7 +1,6 @@
-import { Body, Controller, Delete, Get, Param, ParseEnumPipe, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
-import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
 import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
@@ -54,7 +53,7 @@ export class UserRoleController {
   @RequirePermission(ActionCode.Update, ObjectType.UserAssignment)
   public async RemoveRole(
     @Param('userId') userId: string,
-    @Param('roleCode', new ParseEnumPipe(RoleCode)) roleCode: RoleCode,
+    @Param('roleCode') roleCode: string,
     @CurrentAuditContext() context: AuditContext,
   ) {
     return await this.removeRoleFromUserUseCase.Execute({ UserId: userId, RoleCode: roleCode }, context);

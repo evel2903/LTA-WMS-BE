@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Role as LegacyRole } from '@common/Constants/Role';
 import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
+import { RoleStatus } from '@modules/AccessControl/Domain/Enums/RoleStatus';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { SeedAccessControlRbac } from '@modules/AccessControl/Application/Services/AccessControlRbacSeed';
@@ -72,5 +73,24 @@ describe('GetUserEffectivePermissionsUseCase', () => {
     // No duplicate permission entries.
     const codes = result.Permissions.map((p) => `${p.Action}:${p.ObjectType}`);
     expect(new Set(codes).size).toBe(codes.length);
+  });
+
+  it('D3: an Inactive role contributes neither its code nor its permissions', async () => {
+    const world = await buildSeededWorld();
+    const assign = new AssignRoleToUserUseCase(world.roles, world.userRoles);
+    const userId = randomUUID();
+    await assign.Execute({ UserId: userId, RoleCode: RoleCode.Operator });
+
+    const before = await world.effective.Execute(userId);
+    expect(before.Roles).toEqual([RoleCode.Operator]);
+    expect(hasPermission(before, ActionCode.Read, ObjectType.Warehouse)).toBe(true);
+
+    const operatorRole = await world.roles.FindByCode(RoleCode.Operator);
+    operatorRole!.Status = RoleStatus.Inactive;
+    await world.roles.Update(operatorRole!);
+
+    const after = await world.effective.Execute(userId);
+    expect(after.Roles).toEqual([]);
+    expect(after.Permissions).toEqual([]);
   });
 });

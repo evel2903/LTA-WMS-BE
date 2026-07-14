@@ -1,9 +1,8 @@
-import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
 import { RoleStatus } from '@modules/AccessControl/Domain/Enums/RoleStatus';
 
 export class RoleEntity {
   public readonly Id: string;
-  public RoleCode: RoleCode;
+  public RoleCode: string;
   public RoleName: string;
   public Description: string | null;
   public IsSystem: boolean;
@@ -15,7 +14,7 @@ export class RoleEntity {
 
   constructor(params: {
     Id: string;
-    RoleCode: RoleCode;
+    RoleCode: string;
     RoleName: string;
     Description?: string | null;
     IsSystem?: boolean;

@@ -78,7 +78,7 @@ describe('Permission enforcement E2E (ZoneController, real guard)', () => {
       new UserRoleEntity({ Id: randomUUID(), UserId: 'operator', RoleId: operatorRole!.Id, AssignedAt: new Date() }),
     );
 
-    const checker = new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes);
+    const checker = new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes, roles);
 
     const moduleRef = await Test.createTestingModule({
       controllers: [ZoneController],

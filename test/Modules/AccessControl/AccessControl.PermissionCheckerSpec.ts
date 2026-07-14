@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
+import { RoleStatus } from '@modules/AccessControl/Domain/Enums/RoleStatus';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { PrincipalType } from '@modules/AccessControl/Domain/Enums/PrincipalType';
@@ -23,7 +24,7 @@ const buildWorld = async () => {
   const userRoles = new InMemoryUserRoleRepository();
   const dataScopes = new InMemoryDataScopeRepository();
   await SeedAccessControlRbac(roles, permissions, rolePermissions);
-  const checker = new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes);
+  const checker = new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes, roles);
 
   const assign = async (userId: string, code: RoleCode) => {
     const role = await roles.FindByCode(code);
@@ -60,7 +61,7 @@ const buildWorld = async () => {
       }),
     );
   };
-  return { checker, assign, grantUserScope, grantRoleIncludeAll };
+  return { checker, roles, assign, grantUserScope, grantRoleIncludeAll };
 };
 
 describe('PermissionChecker', () => {
@@ -183,5 +184,28 @@ describe('PermissionChecker', () => {
       Scope: { RequesterUserId: 'someone-else' },
     });
     expect(otherApprove.Allowed).toBe(true);
+  });
+
+  it('D3: denies once the granting role is set Inactive', async () => {
+    const world = await buildWorld();
+    await world.assign('admin', RoleCode.WmsAdmin);
+
+    const before = await world.checker.Check({
+      UserId: 'admin',
+      Action: ActionCode.Create,
+      ObjectType: ObjectType.Role,
+    });
+    expect(before.Allowed).toBe(true);
+
+    const adminRole = await world.roles.FindByCode(RoleCode.WmsAdmin);
+    adminRole!.Status = RoleStatus.Inactive;
+    await world.roles.Update(adminRole!);
+
+    const after = await world.checker.Check({
+      UserId: 'admin',
+      Action: ActionCode.Create,
+      ObjectType: ObjectType.Role,
+    });
+    expect(after).toEqual({ Allowed: false, Reason: 'PERMISSION_DENIED' });
   });
 });

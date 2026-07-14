@@ -1,7 +1,6 @@
 import { NotFoundException } from '@common/Exceptions/AppException';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
-import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
 import { UserRoleEntity } from '@modules/AccessControl/Domain/Entities/UserRoleEntity';
 import {
   AuditContext,
@@ -25,7 +24,7 @@ export class RemoveRoleFromUserUseCase {
     input: { UserId: string; RoleCode: string },
     context: AuditContext = SystemAuditContext,
   ): Promise<{ Removed: boolean }> {
-    const role = await this.roleRepository.FindByCode(input.RoleCode as RoleCode);
+    const role = await this.roleRepository.FindByCode(input.RoleCode);
     if (!role) throw new NotFoundException('Role not found');
 
     const existing = await this.userRoleRepository.FindByUserAndRole(input.UserId, role.Id);
