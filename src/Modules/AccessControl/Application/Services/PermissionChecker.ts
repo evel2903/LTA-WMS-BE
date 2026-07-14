@@ -1,6 +1,7 @@
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { DataScopeType } from '@modules/AccessControl/Domain/Enums/DataScopeType';
 import { PrincipalType } from '@modules/AccessControl/Domain/Enums/PrincipalType';
+import { RoleStatus } from '@modules/AccessControl/Domain/Enums/RoleStatus';
 import {
   PermissionCheckContext,
   PermissionDecision,
@@ -8,6 +9,7 @@ import {
 } from '@modules/AccessControl/Application/DTOs/PermissionCheckContext';
 import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
 import { IUserRoleRepository } from '@modules/AccessControl/Application/Interfaces/IUserRoleRepository';
+import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/IRoleRepository';
 import { IRolePermissionRepository } from '@modules/AccessControl/Application/Interfaces/IRolePermissionRepository';
 import { IPermissionRepository } from '@modules/AccessControl/Application/Interfaces/IPermissionRepository';
 import { IDataScopeRepository, PrincipalRef } from '@modules/AccessControl/Application/Interfaces/IDataScopeRepository';
@@ -16,9 +18,10 @@ const SEGREGATED_ACTIONS = new Set<ActionCode>([ActionCode.Approve, ActionCode.O
 
 /**
  * Reads the caller's RBAC by UserId (request.user carries only legacy Role, not RBAC),
- * then: (1) deny-by-default if no role grants (action, object); (2) segregation block
- * for Approve/Override on own request; (3) data-scope match for any request-resident
- * scope axis. Objects without a scope axis (or requests with no scope value) skip step 3.
+ * then: (1) deny-by-default if no ACTIVE role grants (action, object) — an Inactive role
+ * contributes nothing (contract D3); (2) segregation block for Approve/Override on own
+ * request; (3) data-scope match for any request-resident scope axis. Objects without a
+ * scope axis (or requests with no scope value) skip step 3.
  */
 export class PermissionChecker implements IPermissionChecker {
   constructor(
@@ -26,6 +29,7 @@ export class PermissionChecker implements IPermissionChecker {
     private readonly rolePermissionRepository: IRolePermissionRepository,
     private readonly permissionRepository: IPermissionRepository,
     private readonly dataScopeRepository: IDataScopeRepository,
+    private readonly roleRepository: IRoleRepository,
   ) {}
 
   public async Check(context: PermissionCheckContext): Promise<PermissionDecision> {
@@ -35,7 +39,13 @@ export class PermissionChecker implements IPermissionChecker {
       return { Allowed: false, Reason: 'PERMISSION_DENIED' };
     }
 
-    const rolePermissions = await this.rolePermissionRepository.FindByRoleIds(roleIds);
+    const roles = await this.roleRepository.FindByIds(roleIds);
+    const activeRoleIds = roles.filter((role) => role.Status === RoleStatus.Active).map((role) => role.Id);
+    if (activeRoleIds.length === 0) {
+      return { Allowed: false, Reason: 'PERMISSION_DENIED' };
+    }
+
+    const rolePermissions = await this.rolePermissionRepository.FindByRoleIds(activeRoleIds);
     const permissionIds = [...new Set(rolePermissions.map((rp) => rp.PermissionId))];
     const permissions = await this.permissionRepository.FindByIds(permissionIds);
     const hasPermission = permissions.some((p) => p.Action === context.Action && p.ObjectType === context.ObjectType);
@@ -55,7 +65,7 @@ export class PermissionChecker implements IPermissionChecker {
     if (requestedAxes.length > 0) {
       const principals: PrincipalRef[] = [
         { Type: PrincipalType.User, Id: context.UserId },
-        ...roleIds.map((id) => ({ Type: PrincipalType.Role, Id: id })),
+        ...activeRoleIds.map((id) => ({ Type: PrincipalType.Role, Id: id })),
       ];
       const scopes = await this.dataScopeRepository.FindByPrincipals(principals);
       for (const axis of requestedAxes) {

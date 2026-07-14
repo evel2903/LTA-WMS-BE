@@ -1,5 +1,4 @@
 import { NotFoundException } from '@common/Exceptions/AppException';
-import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
 import { RoleDto } from '@modules/AccessControl/Application/DTOs/RoleDto';
 import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/IRoleRepository';
 import { IRolePermissionRepository } from '@modules/AccessControl/Application/Interfaces/IRolePermissionRepository';
@@ -14,7 +13,7 @@ export class GetRoleUseCase {
   ) {}
 
   public async Execute(roleCode: string): Promise<RoleDto> {
-    const role = await this.roleRepository.FindByCode(roleCode as RoleCode);
+    const role = await this.roleRepository.FindByCode(roleCode);
     if (!role) throw new NotFoundException('Role not found');
 
     const rolePermissions = await this.rolePermissionRepository.FindByRoleId(role.Id);

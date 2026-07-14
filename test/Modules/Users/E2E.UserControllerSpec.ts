@@ -152,7 +152,7 @@ describe('UserController real access guard (HB-02)', () => {
       new UserRoleEntity({ Id: randomUUID(), UserId: 'operator', RoleId: operatorRole!.Id, AssignedAt: new Date() }),
     );
 
-    const checker = new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes);
+    const checker = new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes, roles);
     const moduleRef = await Test.createTestingModule({
       controllers: [UserController],
       providers: [

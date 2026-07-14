@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
-import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
 import { RoleEntity } from '@modules/AccessControl/Domain/Entities/RoleEntity';
 import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/IRoleRepository';
 import { RoleOrmMapper } from '@modules/AccessControl/Infrastructure/Mappers/RoleOrmMapper';
@@ -20,7 +19,7 @@ export class RoleRepository implements IRoleRepository {
     return entity ? RoleOrmMapper.ToDomain(entity) : null;
   }
 
-  public async FindByCode(roleCode: RoleCode): Promise<RoleEntity | null> {
+  public async FindByCode(roleCode: string): Promise<RoleEntity | null> {
     const entity = await this.roles.findOne({ where: { RoleCode: roleCode } });
     return entity ? RoleOrmMapper.ToDomain(entity) : null;
   }
@@ -31,10 +30,22 @@ export class RoleRepository implements IRoleRepository {
     return entities.map(RoleOrmMapper.ToDomain);
   }
 
-  public async Create(role: RoleEntity): Promise<RoleEntity> {
+  public async Create(role: RoleEntity, manager?: EntityManager): Promise<RoleEntity> {
+    const repo = manager ? manager.getRepository(RoleOrmEntity) : this.roles;
     try {
-      const created = await this.roles.save(RoleOrmMapper.ToOrm(role));
+      const created = await repo.save(RoleOrmMapper.ToOrm(role));
       return RoleOrmMapper.ToDomain(created);
+    } catch (error) {
+      this.HandleUniqueViolation(error);
+      throw error;
+    }
+  }
+
+  public async Update(role: RoleEntity, manager?: EntityManager): Promise<RoleEntity> {
+    const repo = manager ? manager.getRepository(RoleOrmEntity) : this.roles;
+    try {
+      const updated = await repo.save(RoleOrmMapper.ToOrm(role));
+      return RoleOrmMapper.ToDomain(updated);
     } catch (error) {
       this.HandleUniqueViolation(error);
       throw error;

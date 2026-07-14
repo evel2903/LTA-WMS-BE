@@ -120,6 +120,7 @@ describe('C6 approval workflow (live Postgres)', () => {
       rolePermissionRepository,
       permissionRepository,
       dataScopeRepository,
+      roleRepository,
     );
     approverDirectory = new ApproverDirectory(permissionRepository, rolePermissionRepository);
     reasonCatalog = new ReasonCodeCatalog(reasonRepository);

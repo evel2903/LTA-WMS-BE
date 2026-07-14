@@ -161,6 +161,7 @@ describe('C7 override control (live Postgres)', () => {
       rolePermissionRepository,
       permissionRepository,
       dataScopeRepository,
+      roleRepository,
     );
     reasonCatalog = new ReasonCodeCatalog(reasonRepository);
 

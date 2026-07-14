@@ -24,6 +24,8 @@ import { ScopeExtractor } from '@modules/AccessControl/Presentation/Services/Sco
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { ListRolesUseCase } from '@modules/AccessControl/Application/UseCases/ListRolesUseCase';
 import { GetRoleUseCase } from '@modules/AccessControl/Application/UseCases/GetRoleUseCase';
+import { CreateRoleUseCase } from '@modules/AccessControl/Application/UseCases/CreateRoleUseCase';
+import { UpdateRoleUseCase } from '@modules/AccessControl/Application/UseCases/UpdateRoleUseCase';
 import { ListPermissionsUseCase } from '@modules/AccessControl/Application/UseCases/ListPermissionsUseCase';
 import { GetUserEffectivePermissionsUseCase } from '@modules/AccessControl/Application/UseCases/GetUserEffectivePermissionsUseCase';
 import { AssignRoleToUserUseCase } from '@modules/AccessControl/Application/UseCases/AssignRoleToUserUseCase';
@@ -203,8 +205,15 @@ import { ExceptionCaseController } from '@modules/AccessControl/Presentation/Con
         rolePermissions: IRolePermissionRepository,
         permissions: IPermissionRepository,
         dataScopes: IDataScopeRepository,
-      ) => new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes),
-      inject: [USER_ROLE_REPOSITORY, ROLE_PERMISSION_REPOSITORY, PERMISSION_REPOSITORY, DATA_SCOPE_REPOSITORY],
+        roles: IRoleRepository,
+      ) => new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes, roles),
+      inject: [
+        USER_ROLE_REPOSITORY,
+        ROLE_PERMISSION_REPOSITORY,
+        PERMISSION_REPOSITORY,
+        DATA_SCOPE_REPOSITORY,
+        ROLE_REPOSITORY,
+      ],
     },
     {
       provide: ListRolesUseCase,
@@ -219,6 +228,16 @@ import { ExceptionCaseController } from '@modules/AccessControl/Presentation/Con
         permissions: IPermissionRepository,
       ) => new GetRoleUseCase(roles, rolePermissions, permissions),
       inject: [ROLE_REPOSITORY, ROLE_PERMISSION_REPOSITORY, PERMISSION_REPOSITORY],
+    },
+    {
+      provide: CreateRoleUseCase,
+      useFactory: (roles: IRoleRepository, audited: AuditedTransaction) => new CreateRoleUseCase(roles, audited),
+      inject: [ROLE_REPOSITORY, AuditedTransaction],
+    },
+    {
+      provide: UpdateRoleUseCase,
+      useFactory: (roles: IRoleRepository, audited: AuditedTransaction) => new UpdateRoleUseCase(roles, audited),
+      inject: [ROLE_REPOSITORY, AuditedTransaction],
     },
     {
       provide: ListPermissionsUseCase,

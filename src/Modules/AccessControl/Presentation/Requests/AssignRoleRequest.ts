@@ -1,7 +1,8 @@
-import { IsEnum } from 'class-validator';
-import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
+import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 export class AssignRoleRequest {
-  @IsEnum(RoleCode)
-  public RoleCode!: RoleCode;
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  public RoleCode!: string;
 }
