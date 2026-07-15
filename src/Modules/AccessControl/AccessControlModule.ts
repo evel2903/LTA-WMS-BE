@@ -26,6 +26,8 @@ import { ListRolesUseCase } from '@modules/AccessControl/Application/UseCases/Li
 import { GetRoleUseCase } from '@modules/AccessControl/Application/UseCases/GetRoleUseCase';
 import { CreateRoleUseCase } from '@modules/AccessControl/Application/UseCases/CreateRoleUseCase';
 import { UpdateRoleUseCase } from '@modules/AccessControl/Application/UseCases/UpdateRoleUseCase';
+import { SetRolePermissionsUseCase } from '@modules/AccessControl/Application/UseCases/SetRolePermissionsUseCase';
+import { ResetRolePermissionsUseCase } from '@modules/AccessControl/Application/UseCases/ResetRolePermissionsUseCase';
 import { ListPermissionsUseCase } from '@modules/AccessControl/Application/UseCases/ListPermissionsUseCase';
 import { GetUserEffectivePermissionsUseCase } from '@modules/AccessControl/Application/UseCases/GetUserEffectivePermissionsUseCase';
 import { AssignRoleToUserUseCase } from '@modules/AccessControl/Application/UseCases/AssignRoleToUserUseCase';
@@ -238,6 +240,40 @@ import { ExceptionCaseController } from '@modules/AccessControl/Presentation/Con
       provide: UpdateRoleUseCase,
       useFactory: (roles: IRoleRepository, audited: AuditedTransaction) => new UpdateRoleUseCase(roles, audited),
       inject: [ROLE_REPOSITORY, AuditedTransaction],
+    },
+    {
+      provide: SetRolePermissionsUseCase,
+      useFactory: (
+        roles: IRoleRepository,
+        rolePermissions: IRolePermissionRepository,
+        permissions: IPermissionRepository,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+      ) => new SetRolePermissionsUseCase(roles, rolePermissions, permissions, reasonCatalog, audited),
+      inject: [
+        ROLE_REPOSITORY,
+        ROLE_PERMISSION_REPOSITORY,
+        PERMISSION_REPOSITORY,
+        REASON_CODE_CATALOG,
+        AuditedTransaction,
+      ],
+    },
+    {
+      provide: ResetRolePermissionsUseCase,
+      useFactory: (
+        roles: IRoleRepository,
+        rolePermissions: IRolePermissionRepository,
+        permissions: IPermissionRepository,
+        reasonCatalog: IReasonCodeCatalog,
+        audited: AuditedTransaction,
+      ) => new ResetRolePermissionsUseCase(roles, rolePermissions, permissions, reasonCatalog, audited),
+      inject: [
+        ROLE_REPOSITORY,
+        ROLE_PERMISSION_REPOSITORY,
+        PERMISSION_REPOSITORY,
+        REASON_CODE_CATALOG,
+        AuditedTransaction,
+      ],
     },
     {
       provide: ListPermissionsUseCase,

@@ -48,6 +48,10 @@ export class InMemoryRoleRepository implements IRoleRepository {
     return this.roles.get(id) ?? null;
   }
 
+  public async FindByIdForUpdate(id: string): Promise<RoleEntity | null> {
+    return this.roles.get(id) ?? null;
+  }
+
   public async FindByCode(roleCode: RoleCode): Promise<RoleEntity | null> {
     return [...this.roles.values()].find((role) => role.RoleCode === roleCode) ?? null;
   }
@@ -144,6 +148,10 @@ export class InMemoryRolePermissionRepository implements IRolePermissionReposito
     }
     this.rolePermissions.set(rolePermission.Id, rolePermission);
     return rolePermission;
+  }
+
+  public async Delete(id: string): Promise<void> {
+    this.rolePermissions.delete(id);
   }
 }
 
