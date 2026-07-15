@@ -19,6 +19,13 @@ export class RoleRepository implements IRoleRepository {
     return entity ? RoleOrmMapper.ToDomain(entity) : null;
   }
 
+  public async FindByIdForUpdate(id: string, manager: EntityManager): Promise<RoleEntity | null> {
+    const entity = await manager
+      .getRepository(RoleOrmEntity)
+      .findOne({ where: { Id: id }, lock: { mode: 'pessimistic_write' } });
+    return entity ? RoleOrmMapper.ToDomain(entity) : null;
+  }
+
   public async FindByCode(roleCode: string): Promise<RoleEntity | null> {
     const entity = await this.roles.findOne({ where: { RoleCode: roleCode } });
     return entity ? RoleOrmMapper.ToDomain(entity) : null;
