@@ -39,7 +39,7 @@ const acceptanceEvidence: AcceptanceEvidence[] = [
       {
         path: 'test/Modules/Inbound/Inbound.UseCasesSpec.ts',
         markers: [
-          'dedupes duplicate source document by business key without double CoreFlow or outbox effect',
+          'dedupes duplicate source document by business key without a second plan',
           'releases READY_FOR_PUTAWAY receipt line to putaway with label validation, outbox and CoreFlow milestone',
         ],
       },

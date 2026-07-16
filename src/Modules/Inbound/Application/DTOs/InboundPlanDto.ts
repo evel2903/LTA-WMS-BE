@@ -84,6 +84,37 @@ export interface ListInboundPlansDto {
   Status?: InboundPlanDocumentStatus;
 }
 
+export interface ConfirmInboundPlanDto {
+  Id: string;
+}
+
+export interface CancelInboundPlanDto {
+  Id: string;
+}
+
+export interface UpdateInboundPlanLineDto {
+  LineNumber: number;
+  SkuId: string;
+  UomId: string;
+  ExpectedQuantity: number;
+  ExternalLineReference?: string | null;
+}
+
+export interface UpdateInboundPlanDto {
+  Id: string;
+  SourceSystem: string;
+  SourceDocumentType: string;
+  SourceDocumentNumber: string;
+  SupplierId: string;
+  OwnerId: string;
+  WarehouseId: string;
+  WarehouseProfileId?: string | null;
+  ExpectedArrivalAt?: Date | string | null;
+  // Re-review fix (P1 decision): optimistic concurrency token -- see UpdateInboundPlanUseCase.
+  ExpectedUpdatedAt: Date | string;
+  Lines: UpdateInboundPlanLineDto[];
+}
+
 export interface RecordGateInDto {
   Id: string;
   GateInAt: Date | string;

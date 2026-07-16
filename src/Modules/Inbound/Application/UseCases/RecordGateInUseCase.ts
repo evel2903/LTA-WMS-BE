@@ -17,6 +17,7 @@ import { InboundPlanDto, RecordGateInDto } from '@modules/Inbound/Application/DT
 import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/IInboundPlanRepository';
 import { InboundPlanDtoMapper } from '@modules/Inbound/Application/Mappers/InboundPlanDtoMapper';
 import { AssertInboundPlanPermission } from '@modules/Inbound/Application/Services/InboundPlanPermission';
+import { AssertInboundPlanNotCancelled } from '@modules/Inbound/Application/Services/InboundPlanStatusGuards';
 import { InboundGateInStatus } from '@modules/Inbound/Domain/Enums/InboundGateInStatus';
 import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
 
@@ -29,28 +30,78 @@ export class RecordGateInUseCase {
   ) {}
 
   public async Execute(request: RecordGateInDto, context: AuditContext = SystemAuditContext): Promise<InboundPlanDto> {
-    const aggregate = await this.inboundPlans.FindById(request.Id);
-    if (!aggregate) throw new NotFoundException('Inbound plan not found');
-    await AssertInboundPlanPermission(this.permissionChecker, context.ActorUserId, ActionCode.Update, aggregate.Plan);
+    // Fail-fast pre-check + idempotent fast path (no lock/transaction cost for a bad id,
+    // missing scope, or a plain repeat of an already-recorded gate-in).
+    const preCheck = await this.inboundPlans.FindById(request.Id);
+    if (!preCheck) throw new NotFoundException('Inbound plan not found');
+    await AssertInboundPlanPermission(this.permissionChecker, context.ActorUserId, ActionCode.Update, preCheck.Plan);
+    // Re-review fix (P1): gate-in was never blocked on Cancelled -- a voided plan could
+    // still have gate-in recorded against it. This codebase deliberately still allows
+    // Draft (an open, documented scope decision), so this is a Cancelled-only exclusion,
+    // not a broader status allow-list.
+    AssertInboundPlanNotCancelled(preCheck.Plan.Status);
 
-    if (aggregate.Plan.GateInStatus === InboundGateInStatus.Recorded) {
-      if (aggregate.Plan.GateReference === request.GateReference) {
-        return InboundPlanDtoMapper.ToDto(aggregate);
+    if (preCheck.Plan.GateInStatus === InboundGateInStatus.Recorded) {
+      if (preCheck.Plan.GateReference === request.GateReference) {
+        return InboundPlanDtoMapper.ToDto(preCheck);
       }
       throw new BusinessRuleException('Gate-in has already been recorded for this inbound plan');
     }
 
-    const before = InboundPlanDtoMapper.ToDto(aggregate);
-    aggregate.Plan.RecordGateIn({
-      GateInAt: new Date(request.GateInAt),
-      GateReference: request.GateReference,
-      VehicleNumber: request.VehicleNumber ?? null,
-      DriverName: request.DriverName ?? null,
-      EvidenceRefs: request.EvidenceRefs ?? [],
-      UpdatedBy: context.ActorUserId,
-    });
+    // IFB-24 review fix: this use case used to mutate+save the UNLOCKED `aggregate` read
+    // above -- InboundPlanRepository.UpdatePlan writes the FULL row (Object.assign then
+    // save()), so if a concurrent Confirm/Cancel/Update committed between that read and
+    // this write, its Status/CoreFlowInstanceId change would be silently reverted to the
+    // stale pre-read values here, orphaning the CoreFlow/outbox rows Confirm just created.
+    // Re-fetching via FindByIdForUpdate (pessimistic_write) INSIDE the transaction and
+    // mutating/saving THAT entity closes the gap -- untouched fields carry forward
+    // whatever the most recently committed transaction set them to.
+    return this.audited.Run(async (manager) => {
+      const aggregate = await this.inboundPlans.FindByIdForUpdate(request.Id, manager);
+      if (!aggregate) throw new NotFoundException('Inbound plan not found');
+      // Re-review fix (authorization TOCTOU): re-check permission against the LOCKED
+      // (current) Warehouse/Owner scope -- see ConfirmInboundPlanUseCase's identical fix.
+      await AssertInboundPlanPermission(this.permissionChecker, context.ActorUserId, ActionCode.Update, aggregate.Plan);
+      // Re-review fix (P1): re-check Cancelled under the lock too -- the plan could have
+      // been cancelled in the race window between the unlocked pre-check above and this
+      // lock (Cancel only requires Draft, so a still-Draft plan racing here is exposed).
+      AssertInboundPlanNotCancelled(aggregate.Plan.Status);
 
-    const write = async (manager?: Parameters<IInboundPlanRepository['UpdatePlan']>[1]) => {
+      if (aggregate.Plan.GateInStatus === InboundGateInStatus.Recorded) {
+        if (aggregate.Plan.GateReference !== request.GateReference) {
+          throw new BusinessRuleException('Gate-in has already been recorded for this inbound plan');
+        }
+        // Idempotent retry that raced past the fast-path check above -- no mutation, no
+        // milestone, but AuditedTransaction.Run still requires an entry.
+        const dto = InboundPlanDtoMapper.ToDto(aggregate);
+        return {
+          result: dto,
+          entry: MergeAuditContext(context, {
+            Action: ActionCode.Update,
+            ObjectType: ObjectType.InboundPlan,
+            ObjectId: aggregate.Plan.Id,
+            ObjectCode: aggregate.Plan.BusinessReference,
+            BeforeJson: dto as unknown as Record<string, unknown>,
+            AfterJson: dto as unknown as Record<string, unknown>,
+            EvidenceRefs: request.EvidenceRefs ?? null,
+            ReferenceType: 'InboundGateIn',
+            ReferenceId: aggregate.Plan.Id,
+            WarehouseId: aggregate.Plan.WarehouseId,
+            OwnerId: aggregate.Plan.OwnerId,
+          }),
+        };
+      }
+
+      const before = InboundPlanDtoMapper.ToDto(aggregate);
+      aggregate.Plan.RecordGateIn({
+        GateInAt: new Date(request.GateInAt),
+        GateReference: request.GateReference,
+        VehicleNumber: request.VehicleNumber ?? null,
+        DriverName: request.DriverName ?? null,
+        EvidenceRefs: request.EvidenceRefs ?? [],
+        UpdatedBy: context.ActorUserId,
+      });
+
       const updatedPlan = await this.inboundPlans.UpdatePlan(aggregate.Plan, manager);
       if (updatedPlan.CoreFlowInstanceId) {
         await this.coreFlows.CreateMilestone(
@@ -67,11 +118,8 @@ export class RecordGateInUseCase {
           manager,
         );
       }
-      return InboundPlanDtoMapper.ToDto({ Plan: updatedPlan, Lines: aggregate.Lines });
-    };
+      const result = InboundPlanDtoMapper.ToDto({ Plan: updatedPlan, Lines: aggregate.Lines });
 
-    return this.audited.Run(async (manager) => {
-      const result = await write(manager);
       return {
         result,
         entry: MergeAuditContext(context, {

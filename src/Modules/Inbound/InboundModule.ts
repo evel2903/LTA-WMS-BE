@@ -35,8 +35,11 @@ import {
   ISpreadsheetService,
   SPREADSHEET_SERVICE,
 } from '@modules/Spreadsheet/Application/Interfaces/ISpreadsheetService';
+import { CancelInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CancelInboundPlanUseCase';
+import { ConfirmInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundPlanUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
 import { ImportInboundPlanLinesUseCase } from '@modules/Inbound/Application/UseCases/ImportInboundPlanLinesUseCase';
+import { UpdateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/UpdateInboundPlanUseCase';
 import {
   ISkuCodeBatchLookup,
   IUomCodeBatchLookup,
@@ -156,22 +159,43 @@ import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRu
         warehouses: IWarehouseRepository,
         skus: ISkuRepository,
         uoms: IUomRepository,
-        coreFlows: ICoreFlowRepository,
-        integrations: IIntegrationRepository,
         profiles: IWarehouseProfileRepository,
         audited: AuditedTransaction,
+      ) => new CreateInboundPlanUseCase(inboundPlans, partners, owners, warehouses, skus, uoms, profiles, audited),
+      inject: [
+        INBOUND_PLAN_REPOSITORY,
+        PARTNER_REPOSITORY,
+        OWNER_REPOSITORY,
+        WAREHOUSE_REPOSITORY,
+        SKU_REPOSITORY,
+        UOM_REPOSITORY,
+        WAREHOUSE_PROFILE_REPOSITORY,
+        AuditedTransaction,
+      ],
+    },
+    {
+      provide: UpdateInboundPlanUseCase,
+      useFactory: (
+        inboundPlans: IInboundPlanRepository,
+        partners: IPartnerRepository,
+        owners: IOwnerRepository,
+        warehouses: IWarehouseRepository,
+        skus: ISkuRepository,
+        uoms: IUomRepository,
+        profiles: IWarehouseProfileRepository,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
       ) =>
-        new CreateInboundPlanUseCase(
+        new UpdateInboundPlanUseCase(
           inboundPlans,
           partners,
           owners,
           warehouses,
           skus,
           uoms,
-          coreFlows,
-          integrations,
           profiles,
           audited,
+          permissionChecker,
         ),
       inject: [
         INBOUND_PLAN_REPOSITORY,
@@ -180,11 +204,36 @@ import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRu
         WAREHOUSE_REPOSITORY,
         SKU_REPOSITORY,
         UOM_REPOSITORY,
-        CORE_FLOW_REPOSITORY,
-        INTEGRATION_REPOSITORY,
         WAREHOUSE_PROFILE_REPOSITORY,
         AuditedTransaction,
+        PERMISSION_CHECKER,
       ],
+    },
+    {
+      provide: ConfirmInboundPlanUseCase,
+      useFactory: (
+        inboundPlans: IInboundPlanRepository,
+        coreFlows: ICoreFlowRepository,
+        integrations: IIntegrationRepository,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) => new ConfirmInboundPlanUseCase(inboundPlans, coreFlows, integrations, audited, permissionChecker),
+      inject: [
+        INBOUND_PLAN_REPOSITORY,
+        CORE_FLOW_REPOSITORY,
+        INTEGRATION_REPOSITORY,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
+    {
+      provide: CancelInboundPlanUseCase,
+      useFactory: (
+        inboundPlans: IInboundPlanRepository,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) => new CancelInboundPlanUseCase(inboundPlans, audited, permissionChecker),
+      inject: [INBOUND_PLAN_REPOSITORY, AuditedTransaction, PERMISSION_CHECKER],
     },
     {
       provide: ImportInboundPlanLinesUseCase,

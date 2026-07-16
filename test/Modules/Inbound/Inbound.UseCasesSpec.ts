@@ -18,9 +18,12 @@ import { WorkflowMilestoneStatus } from '@modules/CoreFlow/Domain/Enums/Workflow
 import { InboundPlanDto } from '@modules/Inbound/Application/DTOs/InboundPlanDto';
 import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/IInboundPlanRepository';
 import { IReceivingRepository } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
+import { CancelInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CancelInboundPlanUseCase';
 import { CaptureInboundDiscrepancyUseCase } from '@modules/Inbound/Application/UseCases/CaptureInboundDiscrepancyUseCase';
+import { ConfirmInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundPlanUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
+import { UpdateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/UpdateInboundPlanUseCase';
 import { GetInboundOperationalStateUseCase } from '@modules/Inbound/Application/UseCases/GetInboundOperationalStateUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
@@ -149,10 +152,22 @@ class FakeInboundRepository implements IInboundPlanRepository {
     return plan;
   }
 
+  public async ReplaceLines(planId: string, lines: InboundPlanLineEntity[]): Promise<InboundPlanLineEntity[]> {
+    this.Lines = this.Lines.filter((line) => line.InboundPlanId !== planId);
+    this.Lines.push(...lines);
+    return lines;
+  }
+
   public async FindById(id: string): Promise<{ Plan: InboundPlanEntity; Lines: InboundPlanLineEntity[] } | null> {
     const plan = this.Plans.find((item) => item.Id === id);
     if (!plan) return null;
     return { Plan: plan, Lines: this.Lines.filter((line) => line.InboundPlanId === id) };
+  }
+
+  public async FindByIdForUpdate(
+    id: string,
+  ): Promise<{ Plan: InboundPlanEntity; Lines: InboundPlanLineEntity[] } | null> {
+    return this.FindById(id);
   }
 
   public async FindByBusinessKey(
@@ -810,11 +825,46 @@ const createUseCase = (bundle: ReturnType<typeof repoBundle>) =>
     bundle.warehouses as unknown as IWarehouseRepository,
     bundle.skus as unknown as ISkuRepository,
     bundle.uoms as unknown as IUomRepository,
-    bundle.coreFlows as unknown as ICoreFlowRepository,
-    bundle.integrations as unknown as IIntegrationRepository,
     bundle.profiles as unknown as IWarehouseProfileRepository,
     bundle.audited as unknown as AuditedTransaction,
   );
+
+const confirmInboundPlanUseCase = (bundle: ReturnType<typeof repoBundle>) =>
+  new ConfirmInboundPlanUseCase(
+    bundle.inbound,
+    bundle.coreFlows as unknown as ICoreFlowRepository,
+    bundle.integrations as unknown as IIntegrationRepository,
+    bundle.audited as unknown as AuditedTransaction,
+    bundle.permissionChecker,
+  );
+
+const updateInboundPlanUseCase = (bundle: ReturnType<typeof repoBundle>) =>
+  new UpdateInboundPlanUseCase(
+    bundle.inbound,
+    bundle.partners as unknown as IPartnerRepository,
+    bundle.owners as unknown as IOwnerRepository,
+    bundle.warehouses as unknown as IWarehouseRepository,
+    bundle.skus as unknown as ISkuRepository,
+    bundle.uoms as unknown as IUomRepository,
+    bundle.profiles as unknown as IWarehouseProfileRepository,
+    bundle.audited as unknown as AuditedTransaction,
+    bundle.permissionChecker,
+  );
+
+const cancelInboundPlanUseCase = (bundle: ReturnType<typeof repoBundle>) =>
+  new CancelInboundPlanUseCase(
+    bundle.inbound,
+    bundle.audited as unknown as AuditedTransaction,
+    bundle.permissionChecker,
+  );
+
+// IFB-24: real flow is Draft -> Confirm -> gate-in/receiving/... -- CoreFlowInstanceId
+// is null until Confirm, so any test exercising CoreFlow milestones needs this,
+// not just createUseCase(bundle).Execute(...) alone.
+const createConfirmedPlan = async (bundle: ReturnType<typeof repoBundle>) => {
+  const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+  return confirmInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+};
 
 const recordGateInUseCase = (bundle: ReturnType<typeof repoBundle>) =>
   new RecordGateInUseCase(
@@ -927,22 +977,21 @@ const recordQcResultUseCase = (bundle: ReturnType<typeof repoBundle>) =>
   );
 
 describe('Inbound plan use cases', () => {
-  it('creates inbound plan, lines, CoreFlow trace and InboundPlanReceived outbox event', async () => {
+  // IFB-24: plans are born Draft, with no CoreFlow instance/outbox event yet --
+  // those move to ConfirmInboundPlanUseCase (see the 'Confirm/Update/Cancel'
+  // describe block below).
+  it('creates inbound plan as Draft, lines persisted, no CoreFlow/outbox side effects yet', async () => {
     const bundle = repoBundle();
     const result = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
 
-    expect(result.Status).toBe(InboundPlanDocumentStatus.Planned);
+    expect(result.Status).toBe(InboundPlanDocumentStatus.Draft);
+    expect(result.CoreFlowInstanceId).toBeNull();
     expect(result.GateInStatus).toBe(InboundGateInStatus.NotRecorded);
     expect(result.Lines).toHaveLength(1);
     expect(result.IsDuplicate).toBe(false);
     expect(bundle.inbound.CreateCalls).toBe(1);
-    expect(bundle.coreFlows.CreateInstance).toHaveBeenCalledWith(
-      expect.objectContaining({ CurrentStage: CoreFlowStageCode.Inbound }),
-    );
-    expect(bundle.integrations.CreateOutboxMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ EventType: 'InboundPlanReceived', Status: OutboxMessageStatus.Pending }),
-      undefined,
-    );
+    expect(bundle.coreFlows.CreateInstance).not.toHaveBeenCalled();
+    expect(bundle.integrations.CreateOutboxMessage).not.toHaveBeenCalled();
     expect(bundle.audited.Entries).toHaveLength(1);
     expect(bundle.audited.Entries[0]).toMatchObject({
       Action: ActionCode.Create,
@@ -952,7 +1001,7 @@ describe('Inbound plan use cases', () => {
     });
   });
 
-  it('dedupes duplicate source document by business key without double CoreFlow or outbox effect', async () => {
+  it('dedupes duplicate source document by business key without a second plan', async () => {
     const bundle = repoBundle();
     const useCase = createUseCase(bundle);
 
@@ -961,8 +1010,6 @@ describe('Inbound plan use cases', () => {
 
     expect(duplicate.IsDuplicate).toBe(true);
     expect(bundle.inbound.CreateCalls).toBe(1);
-    expect(bundle.coreFlows.Instances).toHaveLength(1);
-    expect(bundle.integrations.Outbox).toHaveLength(1);
     expect(bundle.audited.Entries).toHaveLength(2);
     expect(bundle.audited.Entries[1]).toMatchObject({ ReferenceType: 'InboundPlanDuplicate' });
   });
@@ -980,8 +1027,6 @@ describe('Inbound plan use cases', () => {
     expect(duplicate.IsDuplicate).toBe(true);
     expect(bundle.inbound.CreateCalls).toBe(2);
     expect(bundle.inbound.Plans).toHaveLength(1);
-    expect(bundle.coreFlows.Instances).toHaveLength(1);
-    expect(bundle.integrations.Outbox).toHaveLength(1);
   });
 
   it('rejects missing supplier before persistence and downstream effects', async () => {
@@ -1009,10 +1054,1019 @@ describe('Inbound plan use cases', () => {
     expect(bundle.coreFlows.CreateInstance).not.toHaveBeenCalled();
     expect(bundle.integrations.CreateOutboxMessage).not.toHaveBeenCalled();
   });
+});
 
-  it('records gate-in milestone on plan and CoreFlow', async () => {
+describe('IFB-24: Confirm/Update/Cancel inbound plan use cases', () => {
+  it('confirms a Draft plan to Planned, creating the CoreFlow instance and InboundPlanReceived outbox event', async () => {
     const bundle = repoBundle();
     const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+
+    const confirmed = await confirmInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    expect(confirmed.Status).toBe(InboundPlanDocumentStatus.Planned);
+    expect(confirmed.CoreFlowInstanceId).not.toBeNull();
+    expect(bundle.coreFlows.CreateInstance).toHaveBeenCalledWith(
+      expect.objectContaining({ CurrentStage: CoreFlowStageCode.Inbound }),
+      undefined,
+    );
+    expect(bundle.integrations.CreateOutboxMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ EventType: 'InboundPlanReceived', Status: OutboxMessageStatus.Pending }),
+      undefined,
+    );
+    expect(bundle.audited.Entries[bundle.audited.Entries.length - 1]).toMatchObject({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.InboundPlan,
+      ReferenceType: 'InboundPlanConfirm',
+    });
+  });
+
+  it('rejects confirming a plan that is not Draft', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const useCase = confirmInboundPlanUseCase(bundle);
+    await useCase.Execute({ Id: created.Id }, SystemAuditContext);
+
+    await expect(useCase.Execute({ Id: created.Id }, SystemAuditContext)).rejects.toThrow(BusinessRuleException);
+    // Confirming twice must not create a second CoreFlow instance or outbox event.
+    expect(bundle.coreFlows.Instances).toHaveLength(1);
+    expect(bundle.integrations.Outbox).toHaveLength(1);
+  });
+
+  it('replaces header and lines while Draft', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+
+    const updated = await updateInboundPlanUseCase(bundle).Execute(
+      {
+        Id: created.Id,
+        SourceSystem: 'ERP',
+        SourceDocumentType: 'ASN',
+        SourceDocumentNumber: 'ASN-10001',
+        SupplierId: 'supplier-1',
+        OwnerId: 'owner-1',
+        WarehouseId: 'warehouse-1',
+        WarehouseProfileId: 'profile-1',
+        ExpectedArrivalAt: new Date('2026-07-01T00:00:00.000Z'),
+        ExpectedUpdatedAt: created.UpdatedAt,
+        Lines: [
+          { LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 99, ExternalLineReference: 'edited-1' },
+          { LineNumber: 2, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 5, ExternalLineReference: 'edited-2' },
+        ],
+      },
+      SystemAuditContext,
+    );
+
+    expect(updated.ExpectedArrivalAt).toEqual(new Date('2026-07-01T00:00:00.000Z'));
+    expect(updated.Lines).toHaveLength(2);
+    expect(updated.Lines.map((line) => line.ExpectedQuantity).sort()).toEqual([5, 99]);
+    // Full replace, not append/merge -- the original single line (qty 12, ref '10') must be gone.
+    expect(bundle.inbound.Lines.filter((line) => line.InboundPlanId === created.Id)).toHaveLength(2);
+    expect(bundle.inbound.Lines.some((line) => line.ExpectedQuantity === 12)).toBe(false);
+    expect(bundle.audited.Entries[bundle.audited.Entries.length - 1]).toMatchObject({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.InboundPlan,
+      ReferenceType: 'InboundPlan',
+    });
+  });
+
+  it('rejects updating a plan that is not Draft', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    await confirmInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    await expect(
+      updateInboundPlanUseCase(bundle).Execute(
+        { Id: created.Id, ...createRequest(), ExpectedArrivalAt: new Date(), ExpectedUpdatedAt: created.UpdatedAt },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects updating into a business key already used by another plan', async () => {
+    const bundle = repoBundle();
+    const planA = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const planB = await createUseCase(bundle).Execute(
+      { ...createRequest(), SourceDocumentNumber: 'ASN-10002' },
+      SystemAuditContext,
+    );
+
+    await expect(
+      updateInboundPlanUseCase(bundle).Execute(
+        {
+          Id: planB.Id,
+          ...createRequest(),
+          SourceDocumentNumber: 'ASN-10001',
+          ExpectedUpdatedAt: planB.UpdatedAt,
+        },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow(ConflictException);
+    expect(planA.Id).not.toBe(planB.Id);
+  });
+
+  it('soft-cancels a Draft plan to Cancelled', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+
+    const cancelled = await cancelInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    expect(cancelled.Status).toBe(InboundPlanDocumentStatus.Cancelled);
+    expect(bundle.audited.Entries[bundle.audited.Entries.length - 1]).toMatchObject({
+      Action: ActionCode.DeleteCancel,
+      ObjectType: ObjectType.InboundPlan,
+      ReferenceType: 'InboundPlanCancel',
+    });
+  });
+
+  it('rejects cancelling a plan that is not Draft', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    await confirmInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    await expect(cancelInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext)).rejects.toThrow(
+      BusinessRuleException,
+    );
+  });
+});
+
+describe('IFB-24 review fix: permission scope, locked-transition, request validation', () => {
+  it('rejects moving a plan into a Warehouse/Owner scope the actor has no Update grant on, even though the old scope is allowed', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    bundle.warehouses.FindById.mockResolvedValueOnce(
+      new WarehouseEntity({
+        Id: 'warehouse-2',
+        SiteId: 'site-1',
+        WarehouseCode: 'WT-02',
+        WarehouseName: 'Warehouse WT-02',
+        WarehouseTypeCode: 'WT-02',
+        Status: MasterDataStatus.Active,
+        CreatedAt: now,
+        UpdatedAt: now,
+      }),
+    );
+    bundle.permissionChecker.Check.mockImplementation(async (context) =>
+      context.Scope?.WarehouseId === 'warehouse-2' ? { Allowed: false, Reason: 'OUT_OF_SCOPE' } : { Allowed: true },
+    );
+
+    await expect(
+      updateInboundPlanUseCase(bundle).Execute(
+        { Id: created.Id, ...createRequest(), WarehouseId: 'warehouse-2', ExpectedUpdatedAt: created.UpdatedAt },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(ForbiddenAppException);
+    // Denied before any mutation -- the plan must be untouched.
+    expect(bundle.inbound.Plans.find((plan) => plan.Id === created.Id)?.WarehouseId).toBe('warehouse-1');
+  });
+
+  it("evaluates Confirm's Draft-only guard against the locked read, not the earlier pre-check read (closes the concurrent-confirm race)", async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    // Simulate a concurrent winner: by the time this transaction acquires the lock,
+    // another already-committed Confirm has moved the row to Planned. FindById (the
+    // fail-fast pre-check) still sees the stale Draft snapshot it read earlier.
+    const lockedPlan = bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!;
+    const findByIdForUpdateSpy = jest.spyOn(bundle.inbound, 'FindByIdForUpdate').mockResolvedValueOnce({
+      Plan: new InboundPlanEntity({ ...lockedPlan, Status: InboundPlanDocumentStatus.Planned }),
+      Lines: [],
+    });
+
+    await expect(confirmInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext)).rejects.toThrow(
+      BusinessRuleException,
+    );
+    expect(findByIdForUpdateSpy).toHaveBeenCalledWith(created.Id, undefined);
+    // Must not create a second CoreFlow/outbox off the stale pre-check read.
+    expect(bundle.coreFlows.Instances).toHaveLength(0);
+    expect(bundle.integrations.Outbox).toHaveLength(0);
+  });
+
+  it("evaluates Update's Draft-only guard against the locked read, not the earlier pre-check read", async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const lockedPlan = bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!;
+    jest.spyOn(bundle.inbound, 'FindByIdForUpdate').mockResolvedValueOnce({
+      Plan: new InboundPlanEntity({ ...lockedPlan, Status: InboundPlanDocumentStatus.Planned }),
+      Lines: [],
+    });
+
+    await expect(
+      updateInboundPlanUseCase(bundle).Execute(
+        { Id: created.Id, ...createRequest(), ExpectedUpdatedAt: created.UpdatedAt },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it("evaluates Cancel's Draft-only guard against the locked read, not the earlier pre-check read", async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const lockedPlan = bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!;
+    jest.spyOn(bundle.inbound, 'FindByIdForUpdate').mockResolvedValueOnce({
+      Plan: new InboundPlanEntity({ ...lockedPlan, Status: InboundPlanDocumentStatus.Planned }),
+      Lines: [],
+    });
+
+    await expect(cancelInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext)).rejects.toThrow(
+      BusinessRuleException,
+    );
+  });
+
+  it('rejects a non-integer LineNumber', async () => {
+    const bundle = repoBundle();
+    await expect(
+      createUseCase(bundle).Execute(
+        { ...createRequest(), Lines: [{ LineNumber: 1.5, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 12 }] },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects duplicate LineNumbers within the same request', async () => {
+    const bundle = repoBundle();
+    await expect(
+      updateInboundPlanUseCase(bundle).Execute(
+        {
+          Id: 'does-not-matter',
+          ...createRequest(),
+          ExpectedUpdatedAt: new Date().toISOString(),
+          Lines: [
+            { LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 12 },
+            { LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 5 },
+          ],
+        },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects a blank/whitespace-only header field', async () => {
+    const bundle = repoBundle();
+    await expect(
+      createUseCase(bundle).Execute({ ...createRequest(), SourceDocumentNumber: '   ' }, SystemAuditContext),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('preserves a concurrently-committed Confirm (Status/CoreFlowInstanceId) when recording gate-in -- closes the RecordGateIn lock-scope gap found by adversarial review', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    // A real (non-live-reference) snapshot -- the fake mutates entities in place, so
+    // capturing the array element directly would "stay fresh" through Confirm's mutation
+    // and defeat the point of this test (it must reflect the world BEFORE Confirm ran).
+    // Rebuilt via the constructor (not a plain spread) so it keeps its entity methods.
+    const stalePreCheckSnapshot = new InboundPlanEntity({
+      ...bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!,
+    });
+    await confirmInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+    // RecordGateInUseCase's fail-fast pre-check reads a STALE (pre-Confirm) snapshot --
+    // simulating Confirm committing in the window between this call's pre-check and its
+    // locked write.
+    jest.spyOn(bundle.inbound, 'FindById').mockResolvedValueOnce({ Plan: stalePreCheckSnapshot, Lines: [] });
+
+    const gateIn = await recordGateInUseCase(bundle).Execute(
+      { Id: created.Id, GateInAt: now, GateReference: 'GATE-A-001' },
+      SystemAuditContext,
+    );
+
+    expect(gateIn.Status).toBe(InboundPlanDocumentStatus.Planned);
+    expect(gateIn.CoreFlowInstanceId).not.toBeNull();
+    expect(gateIn.GateInStatus).toBe(InboundGateInStatus.Recorded);
+  });
+
+  it('preserves a concurrently-committed Confirm (Status/CoreFlowInstanceId) when accepting a gate-in readiness override -- closes the ValidateReceivingReadiness lock-scope gap found by adversarial review', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundGateInRequired: true, gateInOverrideAllowed: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    // A real (non-live-reference) snapshot -- the fake mutates entities in place, so
+    // capturing the array element directly would "stay fresh" through Confirm's mutation
+    // and defeat the point of this test (it must reflect the world BEFORE Confirm ran).
+    // Rebuilt via the constructor (not a plain spread) so it keeps its entity methods.
+    const stalePreCheckSnapshot = new InboundPlanEntity({
+      ...bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!,
+    });
+    await confirmInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+    jest.spyOn(bundle.inbound, 'FindById').mockResolvedValueOnce({ Plan: stalePreCheckSnapshot, Lines: [] });
+
+    await readinessUseCase(bundle).Execute(
+      { Id: created.Id, AttemptOverride: true, ReasonCode: 'RC-V1-HANDOFF' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const stored = await bundle.inbound.FindById(created.Id);
+    expect(stored?.Plan.Status).toBe(InboundPlanDocumentStatus.Planned);
+    expect(stored?.Plan.CoreFlowInstanceId).not.toBeNull();
+    expect(stored?.Plan.GateInStatus).toBe(InboundGateInStatus.OverrideAccepted);
+  });
+});
+
+describe('IFB-24 re-review fix: override race, non-HTTP validation gaps', () => {
+  it('re-checks GateInStatus after acquiring the row lock so a concurrent RecordGateIn cannot be clobbered by a stale override', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundGateInRequired: true, gateInOverrideAllowed: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const lockedPlan = bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!;
+    // Simulate a concurrent RecordGateIn winning the race: the outer Execute() unlocked
+    // read (already captured before this mock) still saw gate-in as not-yet-recorded, so
+    // it proceeded into the override path -- but by the time HandleOverride acquires its
+    // row lock, gate-in has already been legitimately recorded for real.
+    jest.spyOn(bundle.inbound, 'FindByIdForUpdate').mockResolvedValueOnce({
+      Plan: new InboundPlanEntity({
+        ...lockedPlan,
+        GateInStatus: InboundGateInStatus.Recorded,
+        GateInAt: now,
+        GateReference: 'GATE-RACE-001',
+      }),
+      Lines: [],
+    });
+    const updatePlanSpy = jest.spyOn(bundle.inbound, 'UpdatePlan');
+
+    const result = await readinessUseCase(bundle).Execute(
+      { Id: created.Id, AttemptOverride: true, ReasonCode: 'RC-V1-HANDOFF' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(result.Decision).toBe('Allowed');
+    expect(result.GateInRecorded).toBe(true);
+    expect(result.OverrideAccepted).toBe(false);
+    // Must not overwrite the legitimately-recorded gate-in with an override mutation.
+    expect(updatePlanSpy).not.toHaveBeenCalled();
+  });
+
+  it('re-checks GateInStatus after acquiring the row lock so a concurrent duplicate override cannot be double-applied (symmetric OverrideAccepted case)', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundGateInRequired: true, gateInOverrideAllowed: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const lockedPlan = bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!;
+    // Simulate a concurrent override winning the race instead of a RecordGateIn -- same
+    // guard, symmetric target status.
+    jest.spyOn(bundle.inbound, 'FindByIdForUpdate').mockResolvedValueOnce({
+      Plan: new InboundPlanEntity({ ...lockedPlan, GateInStatus: InboundGateInStatus.OverrideAccepted }),
+      Lines: [],
+    });
+    const updatePlanSpy = jest.spyOn(bundle.inbound, 'UpdatePlan');
+
+    const result = await readinessUseCase(bundle).Execute(
+      { Id: created.Id, AttemptOverride: true, ReasonCode: 'RC-V1-HANDOFF' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(result.Decision).toBe('OverrideAccepted');
+    expect(result.OverrideAccepted).toBe(true);
+    expect(updatePlanSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects a null line entry from a non-HTTP caller instead of throwing a raw TypeError', async () => {
+    const bundle = repoBundle();
+    await expect(
+      createUseCase(bundle).Execute(
+        { ...createRequest(), Lines: [null] as unknown as ReturnType<typeof createRequest>['Lines'] },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects NaN and Infinity ExpectedQuantity from a non-HTTP caller', async () => {
+    const bundle = repoBundle();
+    await expect(
+      createUseCase(bundle).Execute(
+        { ...createRequest(), Lines: [{ LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: NaN }] },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+    await expect(
+      createUseCase(bundle).Execute(
+        {
+          ...createRequest(),
+          Lines: [{ LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: Infinity }],
+        },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects an Invalid Date ExpectedArrivalAt from a non-HTTP caller', async () => {
+    const bundle = repoBundle();
+    await expect(
+      createUseCase(bundle).Execute({ ...createRequest(), ExpectedArrivalAt: 'not-a-real-date' }, SystemAuditContext),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+});
+
+describe('IFB-24 second re-review fix: authorization TOCTOU on the locked aggregate', () => {
+  // Every test here mocks FindByIdForUpdate to return the plan in a DIFFERENT
+  // Warehouse than the real underlying plan (still warehouse-1, which the outer
+  // pre-check permission call sees and allows) -- simulating a concurrent Update
+  // moving the plan's scope in the race window between the outer pre-check and this
+  // use case's own row lock. permissionChecker.Check is then made to deny ONLY
+  // warehouse-2, so a rejection here can only come from a check against the LOCKED
+  // aggregate, not the stale pre-check read.
+
+  it('re-checks permission against the locked scope on Confirm', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const lockedPlan = bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!;
+    jest.spyOn(bundle.inbound, 'FindByIdForUpdate').mockResolvedValueOnce({
+      Plan: new InboundPlanEntity({ ...lockedPlan, WarehouseId: 'warehouse-2' }),
+      Lines: [],
+    });
+    bundle.permissionChecker.Check.mockImplementation(async (context) =>
+      context.Scope?.WarehouseId === 'warehouse-2' ? { Allowed: false, Reason: 'OUT_OF_SCOPE' } : { Allowed: true },
+    );
+
+    await expect(
+      confirmInboundPlanUseCase(bundle).Execute({ Id: created.Id }, { ...SystemAuditContext, ActorUserId: 'user-1' }),
+    ).rejects.toThrow(ForbiddenAppException);
+    expect(bundle.coreFlows.Instances).toHaveLength(0);
+    expect(bundle.integrations.Outbox).toHaveLength(0);
+  });
+
+  it('re-checks permission against the locked scope on Cancel', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const lockedPlan = bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!;
+    jest.spyOn(bundle.inbound, 'FindByIdForUpdate').mockResolvedValueOnce({
+      Plan: new InboundPlanEntity({ ...lockedPlan, WarehouseId: 'warehouse-2' }),
+      Lines: [],
+    });
+    bundle.permissionChecker.Check.mockImplementation(async (context) =>
+      context.Scope?.WarehouseId === 'warehouse-2' ? { Allowed: false, Reason: 'OUT_OF_SCOPE' } : { Allowed: true },
+    );
+
+    await expect(
+      cancelInboundPlanUseCase(bundle).Execute({ Id: created.Id }, { ...SystemAuditContext, ActorUserId: 'user-1' }),
+    ).rejects.toThrow(ForbiddenAppException);
+    expect(bundle.inbound.Plans.find((plan) => plan.Id === created.Id)?.Status).toBe(InboundPlanDocumentStatus.Draft);
+  });
+
+  it('re-checks permission against the locked (leaving) scope on Update, on top of the old/new scope checks already run outside the lock', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const lockedPlan = bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!;
+    // A THIRD scope (warehouse-3) that neither the old-scope nor the new-scope checks
+    // outside the lock would ever see -- only reachable via the locked re-check.
+    jest.spyOn(bundle.inbound, 'FindByIdForUpdate').mockResolvedValueOnce({
+      Plan: new InboundPlanEntity({ ...lockedPlan, WarehouseId: 'warehouse-3' }),
+      Lines: [],
+    });
+    bundle.permissionChecker.Check.mockImplementation(async (context) =>
+      context.Scope?.WarehouseId === 'warehouse-3' ? { Allowed: false, Reason: 'OUT_OF_SCOPE' } : { Allowed: true },
+    );
+
+    await expect(
+      updateInboundPlanUseCase(bundle).Execute(
+        { Id: created.Id, ...createRequest(), ExpectedUpdatedAt: created.UpdatedAt },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(ForbiddenAppException);
+  });
+
+  it('re-checks permission against the locked scope on RecordGateIn', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const lockedPlan = bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!;
+    jest.spyOn(bundle.inbound, 'FindByIdForUpdate').mockResolvedValueOnce({
+      Plan: new InboundPlanEntity({ ...lockedPlan, WarehouseId: 'warehouse-2' }),
+      Lines: [],
+    });
+    bundle.permissionChecker.Check.mockImplementation(async (context) =>
+      context.Scope?.WarehouseId === 'warehouse-2' ? { Allowed: false, Reason: 'OUT_OF_SCOPE' } : { Allowed: true },
+    );
+
+    await expect(
+      recordGateInUseCase(bundle).Execute(
+        { Id: created.Id, GateInAt: now, GateReference: 'GATE-TOCTOU-001' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(ForbiddenAppException);
+    expect(bundle.inbound.Plans.find((plan) => plan.Id === created.Id)?.GateInStatus).toBe(
+      InboundGateInStatus.NotRecorded,
+    );
+  });
+
+  it('re-checks Override permission against the locked scope on ValidateReceivingReadiness', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundGateInRequired: true, gateInOverrideAllowed: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const lockedPlan = bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!;
+    jest.spyOn(bundle.inbound, 'FindByIdForUpdate').mockResolvedValueOnce({
+      Plan: new InboundPlanEntity({ ...lockedPlan, WarehouseId: 'warehouse-2' }),
+      Lines: [],
+    });
+    bundle.permissionChecker.Check.mockImplementation(async (context) =>
+      context.Scope?.WarehouseId === 'warehouse-2' ? { Allowed: false, Reason: 'OUT_OF_SCOPE' } : { Allowed: true },
+    );
+
+    await expect(
+      readinessUseCase(bundle).Execute(
+        { Id: created.Id, AttemptOverride: true, ReasonCode: 'RC-V1-HANDOFF' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(ForbiddenAppException);
+    expect(bundle.inbound.Plans.find((plan) => plan.Id === created.Id)?.GateInStatus).toBe(
+      InboundGateInStatus.NotRecorded,
+    );
+  });
+});
+
+describe('IFB-24 third re-review fix: authorization TOCTOU part 2 (destination scope, profile/policy re-check)', () => {
+  it('re-checks the destination Warehouse/Owner scope again inside the lock on Update, not just outside it', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    bundle.warehouses.FindById.mockResolvedValueOnce(
+      new WarehouseEntity({
+        Id: 'warehouse-2',
+        SiteId: 'site-1',
+        WarehouseCode: 'WT-02',
+        WarehouseName: 'Warehouse WT-02',
+        WarehouseTypeCode: 'WT-02',
+        Status: MasterDataStatus.Active,
+        CreatedAt: now,
+        UpdatedAt: now,
+      }),
+    );
+    // Simulate the actor's grant on warehouse-2 being revoked in the race window between
+    // the outer (pre-lock) destination-scope check and the locked re-check added this
+    // round: the FIRST Check call for warehouse-2 is allowed (so the outer check
+    // legitimately passes and the code proceeds into the transaction), the SECOND --
+    // which can only be the new locked re-check -- is denied.
+    let warehouse2Calls = 0;
+    bundle.permissionChecker.Check.mockImplementation(async (context) => {
+      if (context.Scope?.WarehouseId === 'warehouse-2') {
+        warehouse2Calls += 1;
+        return warehouse2Calls === 1 ? { Allowed: true } : { Allowed: false, Reason: 'OUT_OF_SCOPE' };
+      }
+      return { Allowed: true };
+    });
+
+    await expect(
+      updateInboundPlanUseCase(bundle).Execute(
+        // WarehouseProfileId cleared -- profile-1 is scoped to warehouse-1, and this test
+        // is specifically about the Warehouse/Owner scope re-check, not profile matching.
+        {
+          Id: created.Id,
+          ...createRequest(),
+          WarehouseId: 'warehouse-2',
+          WarehouseProfileId: null,
+          ExpectedUpdatedAt: created.UpdatedAt,
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(ForbiddenAppException);
+    expect(warehouse2Calls).toBe(2);
+    // Must not have partially applied the move.
+    expect(bundle.inbound.Plans.find((plan) => plan.Id === created.Id)?.WarehouseId).toBe('warehouse-1');
+  });
+
+  it('re-resolves WarehouseProfile and re-checks the override-allowed policy again inside the lock on ValidateReceivingReadiness, not just outside it', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    // First resolve is Execute()'s own read (outside the lock) -- allowed, so the code
+    // legitimately enters the override path. Second resolve is the new locked re-check
+    // added this round -- simulates the profile's policy (or scope/active status) having
+    // changed in the race window before the lock was acquired.
+    bundle.profiles.FindById.mockResolvedValueOnce(
+      profile({ inboundGateInRequired: true, gateInOverrideAllowed: true }),
+    ).mockResolvedValueOnce(profile({ inboundGateInRequired: true, gateInOverrideAllowed: false }));
+
+    await expect(
+      readinessUseCase(bundle).Execute(
+        { Id: created.Id, AttemptOverride: true, ReasonCode: 'RC-V1-HANDOFF' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+    const stored = await bundle.inbound.FindById(created.Id);
+    expect(stored?.Plan.GateInStatus).toBe(InboundGateInStatus.NotRecorded);
+  });
+});
+
+describe('IFB-24 fourth re-review fix: optimistic concurrency + stale-result/master-data', () => {
+  it('rejects Update with a 409 when the plan was edited by someone else since the caller last read it, and does not overwrite their change', async () => {
+    // The staleness check compares millisecond Date.getTime() values -- two back-to-back
+    // in-memory Execute() calls can otherwise land in the SAME wall-clock millisecond
+    // (observed as a flaky failure under a fast/warm full-suite run), so pin the system
+    // clock and advance it explicitly between writers to make the mismatch deterministic.
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    try {
+      jest.setSystemTime(new Date('2026-07-16T00:00:00.000Z'));
+      const bundle = repoBundle();
+      const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+
+      // Writer A: a real, successful Update -- bumps UpdatedAt.
+      jest.setSystemTime(new Date('2026-07-16T00:00:01.000Z'));
+      const afterA = await updateInboundPlanUseCase(bundle).Execute(
+        {
+          Id: created.Id,
+          ...createRequest(),
+          SourceDocumentNumber: 'ASN-10001-A',
+          ExpectedUpdatedAt: created.UpdatedAt,
+        },
+        SystemAuditContext,
+      );
+      expect(afterA.SourceDocumentNumber).toBe('ASN-10001-A');
+
+      // Writer B: opened their form from the SAME original snapshot as A (still echoing
+      // created.UpdatedAt, now stale since A committed) -- must 409, not silently clobber A.
+      jest.setSystemTime(new Date('2026-07-16T00:00:02.000Z'));
+      await expect(
+        updateInboundPlanUseCase(bundle).Execute(
+          {
+            Id: created.Id,
+            ...createRequest(),
+            SourceDocumentNumber: 'ASN-10001-B',
+            ExpectedUpdatedAt: created.UpdatedAt,
+          },
+          SystemAuditContext,
+        ),
+      ).rejects.toThrow(ConflictException);
+
+      const stored = await bundle.inbound.FindById(created.Id);
+      expect(stored?.Plan.SourceDocumentNumber).toBe('ASN-10001-A');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('re-validates supplier/owner/warehouse freshness inside the lock on Update, rejecting a reference deactivated after the outer pre-check', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+
+    // First call is Execute()'s own outer (pre-lock) read -- active, so the code
+    // legitimately proceeds. Second call is the new locked re-check added this round --
+    // simulates the supplier being deactivated in the race window before the lock.
+    bundle.partners.FindById.mockResolvedValueOnce(supplier()).mockResolvedValueOnce(
+      new PartnerEntity({ ...supplier(), Status: PartnerStatus.Inactive }),
+    );
+
+    await expect(
+      updateInboundPlanUseCase(bundle).Execute(
+        { Id: created.Id, ...createRequest(), ExpectedUpdatedAt: created.UpdatedAt },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    // Must not have partially applied the edit.
+    const stored = await bundle.inbound.FindById(created.Id);
+    expect(stored?.Plan.UpdatedAt.getTime()).toBe(created.UpdatedAt.getTime());
+  });
+
+  it('re-validates each line SKU/UOM freshness inside the lock on Update, rejecting a line reference deactivated after the outer pre-check (adversarial-verify finding)', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+
+    // First call to skus.FindById is the cheap pre-lock fail-fast ResolveLines call --
+    // active, so the code legitimately proceeds. Second call is the fresh in-lock
+    // re-resolution added by this fix -- simulates the line's SKU being deactivated in
+    // the race window between that pre-lock read and the lock.
+    bundle.skus.FindById.mockResolvedValueOnce(sku()).mockResolvedValueOnce(
+      sku({ ItemStatus: SkuStatus.Discontinued }),
+    );
+
+    await expect(
+      updateInboundPlanUseCase(bundle).Execute(
+        { Id: created.Id, ...createRequest(), ExpectedUpdatedAt: created.UpdatedAt },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+
+    // Must not have replaced the lines with a reference to the now-inactive SKU.
+    const stored = await bundle.inbound.FindById(created.Id);
+    expect(stored?.Plan.UpdatedAt.getTime()).toBe(created.UpdatedAt.getTime());
+    expect(stored?.Lines[0]?.SkuId).toBe('sku-1');
+  });
+
+  it('returns the readiness override result/audit built from the locked plan, not a stale pre-lock BusinessReference', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundGateInRequired: true, gateInOverrideAllowed: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const lockedPlan = bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!;
+    // Simulate a concurrent Update changing the business reference in the race window
+    // between Execute()'s unlocked read (which built the old pre-lock `result`) and
+    // HandleOverride acquiring its own row lock.
+    jest.spyOn(bundle.inbound, 'FindByIdForUpdate').mockResolvedValueOnce({
+      Plan: new InboundPlanEntity({
+        ...lockedPlan,
+        SourceDocumentNumber: 'ASN-10001-RACED',
+        BusinessReference: 'ERP:ASN:ASN-10001-RACED',
+      }),
+      Lines: [],
+    });
+
+    const result = await readinessUseCase(bundle).Execute(
+      { Id: created.Id, AttemptOverride: true, ReasonCode: 'RC-V1-HANDOFF' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    expect(result.Decision).toBe('OverrideAccepted');
+    expect(result.BusinessReference).toBe('ERP:ASN:ASN-10001-RACED');
+  });
+});
+
+describe('IFB-24 final re-review fix: Cancelled-status guard on operational endpoints + BusinessReference length cap', () => {
+  it('rejects RecordGateIn on a Cancelled plan', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    await cancelInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    await expect(
+      recordGateInUseCase(bundle).Execute(
+        { Id: created.Id, GateInAt: now, GateReference: 'GATE-CANCELLED-1' },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects RecordGateIn when the plan is cancelled in the race window between the unlocked pre-check and the lock', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const lockedPlan = bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!;
+    // Outer pre-check still sees Draft (legitimately proceeds); the locked re-fetch
+    // simulates a concurrent Cancel that committed in between.
+    jest.spyOn(bundle.inbound, 'FindByIdForUpdate').mockResolvedValueOnce({
+      Plan: new InboundPlanEntity({ ...lockedPlan, Status: InboundPlanDocumentStatus.Cancelled }),
+      Lines: [],
+    });
+
+    await expect(
+      recordGateInUseCase(bundle).Execute(
+        { Id: created.Id, GateInAt: now, GateReference: 'GATE-RACE-CANCELLED' },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects ValidateReceivingReadiness on a Cancelled plan', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    await cancelInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    await expect(readinessUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext)).rejects.toThrow(
+      BusinessRuleException,
+    );
+  });
+
+  it('rejects a readiness override when the plan is cancelled in the race window between the unlocked pre-check and the lock', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundGateInRequired: true, gateInOverrideAllowed: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const lockedPlan = bundle.inbound.Plans.find((plan) => plan.Id === created.Id)!;
+    jest.spyOn(bundle.inbound, 'FindByIdForUpdate').mockResolvedValueOnce({
+      Plan: new InboundPlanEntity({ ...lockedPlan, Status: InboundPlanDocumentStatus.Cancelled }),
+      Lines: [],
+    });
+
+    await expect(
+      readinessUseCase(bundle).Execute(
+        { Id: created.Id, AttemptOverride: true, ReasonCode: 'RC-V1-HANDOFF' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects StartReceivingSession on a Cancelled plan (transitively, via the readiness check)', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    await cancelInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    await expect(
+      startReceivingUseCase(bundle).Execute(
+        { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects ConfirmReceiptLine on a Cancelled plan (transitively, via the readiness check) even though the receiving session was legitimately started while still Draft', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    // Cancel only requires Draft -- a plan can be cancelled AFTER a receiving session was
+    // legitimately opened against it while still Draft (this story's own scope decision
+    // deliberately allows receiving to start on Draft).
+    await cancelInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    await expect(
+      confirmReceiptLineUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          InboundPlanLineId: created.Lines[0].Id,
+          ActualQuantity: 12,
+          IdempotencyKey: 'receipt-line-cancelled-plan',
+          ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects ConfirmInboundLpn on a Cancelled plan', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-lpn-cancelled',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await cancelInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    await expect(
+      confirmInboundLpnUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          LpnCode: 'LPN-CANCELLED-1',
+          IdempotencyKey: 'lpn-cancelled-1',
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects ReleaseInboundToPutaway on a Cancelled plan', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-release-cancelled',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    // Complete the normal QC/LPN prerequisites BEFORE cancelling, so a rejection below can
+    // only come from the Cancelled check, not from a missing-prerequisite guard.
+    await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'qc-release-cancelled' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    await confirmInboundLpnUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        LpnCode: 'LPN-RELEASE-CANCELLED-1',
+        IdempotencyKey: 'lpn-release-cancelled',
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await cancelInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          CurrentLocationCode: 'RCV-01',
+          ReasonCode: 'RC-V1-HANDOFF',
+          IdempotencyKey: 'release-cancelled-1',
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects CaptureInboundDiscrepancy on a Cancelled plan', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-disc-cancelled',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await cancelInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    await expect(
+      captureInboundDiscrepancyUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          DiscrepancyType: InboundDiscrepancyType.DamagedGoods,
+          ReasonCode: 'RC-V1-DISCREPANCY',
+          EvidenceRefs: ['photo://dock/cancelled'],
+          IdempotencyKey: 'disc-cancelled-1',
+        },
+        { ...SystemAuditContext, ActorUserId: 'supervisor-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects EvaluateQcTask on a Cancelled plan', async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-qc-eval-cancelled',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    await cancelInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    await expect(
+      evaluateQcTaskUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'qc-eval-cancelled-1' },
+        { ...SystemAuditContext, ActorUserId: 'qc-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it('rejects RecordQcResult on a Cancelled plan', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(profile({ inboundQcRequired: true }));
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'receipt-line-qc-result-cancelled',
+        ScanEvidence: { RawValue: 'barcode-1', ScanResult: 'Accepted' },
+      },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      { ReceiptId: session.ReceiptId, ReceiptLineId: line.Id, IdempotencyKey: 'qc-task-result-cancelled' },
+      { ...SystemAuditContext, ActorUserId: 'qc-1' },
+    );
+    await cancelInboundPlanUseCase(bundle).Execute({ Id: created.Id }, SystemAuditContext);
+
+    await expect(
+      recordQcResultUseCase(bundle).Execute(
+        {
+          QcTaskId: task.Id,
+          ResultStatus: QcResultStatus.Passed,
+          DispositionCode: QcDispositionCode.Release,
+          InspectedQuantity: 12,
+          AcceptedQuantity: 12,
+          RejectedQuantity: 0,
+          IdempotencyKey: 'qc-result-cancelled-1',
+        },
+        { ...SystemAuditContext, ActorUserId: 'qc-1' },
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it("rejects Create when the concatenated BusinessReference exceeds CoreFlow's 100-char column limit", async () => {
+    const bundle = repoBundle();
+    const longNumber = 'X'.repeat(96); // "ERP:ASN:" (8) + 96 = 104 chars, over the 100 cap
+    await expect(
+      createUseCase(bundle).Execute({ ...createRequest(), SourceDocumentNumber: longNumber }, SystemAuditContext),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+
+  it("rejects Update when the concatenated BusinessReference exceeds CoreFlow's 100-char column limit", async () => {
+    const bundle = repoBundle();
+    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const longNumber = 'X'.repeat(96);
+
+    await expect(
+      updateInboundPlanUseCase(bundle).Execute(
+        { Id: created.Id, ...createRequest(), SourceDocumentNumber: longNumber, ExpectedUpdatedAt: created.UpdatedAt },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow(BusinessRuleException);
+  });
+});
+
+describe('Inbound plan operational flow (gate-in, receiving, QC, discrepancy, release)', () => {
+  it('records gate-in milestone on plan and CoreFlow', async () => {
+    const bundle = repoBundle();
+    const created = await createConfirmedPlan(bundle);
 
     const gateIn = await recordGateInUseCase(bundle).Execute(
       {
@@ -1044,7 +2098,7 @@ describe('Inbound plan use cases', () => {
 
   it('keeps repeated gate-in idempotent for same reference and rejects a different repeated reference', async () => {
     const bundle = repoBundle();
-    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const created = await createConfirmedPlan(bundle);
     const gateInUseCase = recordGateInUseCase(bundle);
 
     await gateInUseCase.Execute({ Id: created.Id, GateInAt: now, GateReference: 'GATE-A-001' }, SystemAuditContext);
@@ -1172,7 +2226,7 @@ describe('Inbound plan use cases', () => {
 
   it('records scan-confirmed receipt line with scan evidence, outbox, CoreFlow milestone and idempotency', async () => {
     const bundle = repoBundle();
-    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const created = await createConfirmedPlan(bundle);
     const session = await startReceivingUseCase(bundle).Execute(
       { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
       { ...SystemAuditContext, ActorUserId: 'user-1' },
@@ -2011,7 +3065,7 @@ describe('Inbound plan use cases', () => {
 
   it('captures receipt-line discrepancy, links ExceptionCase, emits event and dedupes retry', async () => {
     const bundle = repoBundle();
-    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const created = await createConfirmedPlan(bundle);
     const session = await startReceivingUseCase(bundle).Execute(
       { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
       { ...SystemAuditContext, ActorUserId: 'user-1' },
@@ -2455,7 +3509,7 @@ describe('Inbound plan use cases', () => {
 
   it('records skipped QC trace and QcCompleted skipped milestone when profile does not require QC', async () => {
     const bundle = repoBundle();
-    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const created = await createConfirmedPlan(bundle);
     const session = await startReceivingUseCase(bundle).Execute(
       { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
       { ...SystemAuditContext, ActorUserId: 'user-1' },
@@ -2500,7 +3554,7 @@ describe('Inbound plan use cases', () => {
   it('records QC pass result, closes task and emits QCResultRecorded idempotently', async () => {
     const bundle = repoBundle();
     bundle.profiles.FindById.mockResolvedValue(profile({ inboundQcRequired: true }));
-    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const created = await createConfirmedPlan(bundle);
     const session = await startReceivingUseCase(bundle).Execute(
       { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
       { ...SystemAuditContext, ActorUserId: 'user-1' },
@@ -2873,7 +3927,7 @@ describe('Inbound plan use cases', () => {
 
   it('releases READY_FOR_PUTAWAY receipt line to putaway with label validation, outbox and CoreFlow milestone', async () => {
     const bundle = repoBundle();
-    const created = await createUseCase(bundle).Execute(createRequest(), SystemAuditContext);
+    const created = await createConfirmedPlan(bundle);
     const session = await startReceivingUseCase(bundle).Execute(
       { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
       { ...SystemAuditContext, ActorUserId: 'user-1' },

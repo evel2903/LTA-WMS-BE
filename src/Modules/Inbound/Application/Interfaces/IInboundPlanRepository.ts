@@ -18,6 +18,19 @@ export interface IInboundPlanRepository {
   ): Promise<InboundPlanAggregate>;
   UpdatePlan(plan: InboundPlanEntity, manager?: EntityManager): Promise<InboundPlanEntity>;
   FindById(id: string): Promise<InboundPlanAggregate | null>;
+  // IFB-24 review fix: locked read (pessimistic_write) for Confirm/Cancel/Update's
+  // guard-then-mutate transaction -- closes the race where two concurrent requests
+  // both read Status=Draft before either commits (mirrors IRoleRepository.FindByIdForUpdate,
+  // the same pattern already established for this exact class of bug in RA-02).
+  FindByIdForUpdate(id: string, manager: EntityManager): Promise<InboundPlanAggregate | null>;
+  // IFB-24: full replace (delete-then-insert) -- InboundPlanLineEntity has no
+  // mutators and a Draft plan has no receipt-line/QC/etc FK referencing its
+  // lines yet, so incremental per-line diffing has no payoff over a clean swap.
+  ReplaceLines(
+    planId: string,
+    lines: InboundPlanLineEntity[],
+    manager?: EntityManager,
+  ): Promise<InboundPlanLineEntity[]>;
   FindByBusinessKey(
     sourceSystem: string,
     sourceDocumentType: string,

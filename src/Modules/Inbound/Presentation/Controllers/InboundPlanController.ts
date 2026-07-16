@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   Res,
@@ -20,6 +21,8 @@ import { CurrentAuditContext } from '@modules/AccessControl/Presentation/Decorat
 import { RequirePermission } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
+import { CancelInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CancelInboundPlanUseCase';
+import { ConfirmInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundPlanUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
 import { ImportInboundPlanLinesUseCase } from '@modules/Inbound/Application/UseCases/ImportInboundPlanLinesUseCase';
 import { GetInboundOperationalStateUseCase } from '@modules/Inbound/Application/UseCases/GetInboundOperationalStateUseCase';
@@ -27,12 +30,16 @@ import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/Get
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
 import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCases/StartReceivingSessionUseCase';
+import { UpdateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/UpdateInboundPlanUseCase';
 import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
+import { CancelInboundPlanRequest } from '@modules/Inbound/Presentation/Requests/CancelInboundPlanRequest';
+import { ConfirmInboundPlanRequest } from '@modules/Inbound/Presentation/Requests/ConfirmInboundPlanRequest';
 import { CreateInboundPlanRequest } from '@modules/Inbound/Presentation/Requests/CreateInboundPlanRequest';
 import { ImportInboundPlanLinesQuery } from '@modules/Inbound/Presentation/Requests/ImportInboundPlanLinesQuery';
 import { ListInboundPlansQuery } from '@modules/Inbound/Presentation/Requests/ListInboundPlansQuery';
 import { RecordGateInRequest } from '@modules/Inbound/Presentation/Requests/RecordGateInRequest';
 import { StartReceivingSessionRequest } from '@modules/Inbound/Presentation/Requests/StartReceivingSessionRequest';
+import { UpdateInboundPlanRequest } from '@modules/Inbound/Presentation/Requests/UpdateInboundPlanRequest';
 import { ValidateReceivingReadinessRequest } from '@modules/Inbound/Presentation/Requests/ValidateReceivingReadinessRequest';
 
 @UseGuards(JwtAuthGuard, PermissionGuard)
@@ -47,6 +54,9 @@ export class InboundPlanController {
     private readonly validateReceivingReadinessUseCase: ValidateReceivingReadinessUseCase,
     private readonly startReceivingSessionUseCase: StartReceivingSessionUseCase,
     private readonly importInboundPlanLinesUseCase: ImportInboundPlanLinesUseCase,
+    private readonly updateInboundPlanUseCase: UpdateInboundPlanUseCase,
+    private readonly confirmInboundPlanUseCase: ConfirmInboundPlanUseCase,
+    private readonly cancelInboundPlanUseCase: CancelInboundPlanUseCase,
   ) {}
 
   @Post()
@@ -126,6 +136,39 @@ export class InboundPlanController {
   @RequirePermission(ActionCode.Read, ObjectType.InboundPlan)
   public async GetById(@Param('id') id: string, @CurrentAuditContext() context: AuditContext) {
     return await this.getInboundPlanUseCase.Execute(id, context.ActorUserId);
+  }
+
+  // IFB-24: row-level scope (WarehouseId/OwnerId) is checked INSIDE the use case
+  // via AssertInboundPlanPermission, against the plan actually fetched by :id --
+  // mirrors RecordGateIn's own pattern below, not Create's request-body scope.
+  @Patch(':id')
+  @RequirePermission(ActionCode.Update, ObjectType.InboundPlan)
+  public async Update(
+    @Param('id') id: string,
+    @Body() request: UpdateInboundPlanRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.updateInboundPlanUseCase.Execute({ Id: id, ...request }, context);
+  }
+
+  @Post(':id/confirm')
+  @RequirePermission(ActionCode.Update, ObjectType.InboundPlan)
+  public async Confirm(
+    @Param('id') id: string,
+    @Body() _request: ConfirmInboundPlanRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.confirmInboundPlanUseCase.Execute({ Id: id }, context);
+  }
+
+  @Post(':id/cancel')
+  @RequirePermission(ActionCode.DeleteCancel, ObjectType.InboundPlan)
+  public async Cancel(
+    @Param('id') id: string,
+    @Body() _request: CancelInboundPlanRequest,
+    @CurrentAuditContext() context: AuditContext,
+  ) {
+    return await this.cancelInboundPlanUseCase.Execute({ Id: id }, context);
   }
 
   @Get(':id/operational-state')

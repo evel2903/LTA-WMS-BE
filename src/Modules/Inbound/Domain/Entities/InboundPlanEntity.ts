@@ -68,7 +68,7 @@ export class InboundPlanEntity {
     this.WarehouseCode = params.WarehouseCode ?? null;
     this.WarehouseProfileId = params.WarehouseProfileId ?? null;
     this.ExpectedArrivalAt = params.ExpectedArrivalAt ?? null;
-    this.Status = params.Status ?? InboundPlanDocumentStatus.Planned;
+    this.Status = params.Status ?? InboundPlanDocumentStatus.Draft;
     this.GateInStatus = params.GateInStatus ?? InboundGateInStatus.NotRecorded;
     this.GateInAt = params.GateInAt ?? null;
     this.GateReference = params.GateReference ?? null;
@@ -103,6 +103,56 @@ export class InboundPlanEntity {
   public RecordGateInOverride(params: { EvidenceRefs?: string[]; UpdatedBy?: string | null }): void {
     this.GateInStatus = InboundGateInStatus.OverrideAccepted;
     this.EvidenceRefs = params.EvidenceRefs ?? [];
+    this.UpdatedAt = new Date();
+    this.UpdatedBy = params.UpdatedBy ?? null;
+  }
+
+  // IFB-24: Draft -> Planned. CoreFlowInstance + the 'InboundPlanReceived' outbox
+  // event are created by the caller (ConfirmInboundPlanUseCase) once this
+  // transition succeeds, not at plan-creation time anymore.
+  public Confirm(params: { UpdatedBy?: string | null }): void {
+    this.Status = InboundPlanDocumentStatus.Planned;
+    this.UpdatedAt = new Date();
+    this.UpdatedBy = params.UpdatedBy ?? null;
+  }
+
+  // IFB-24: Draft -> Cancelled (soft-cancel, matches OutboundOrderLifecycleService's
+  // convention -- this codebase never hard-deletes a document row).
+  public Cancel(params: { UpdatedBy?: string | null }): void {
+    this.Status = InboundPlanDocumentStatus.Cancelled;
+    this.UpdatedAt = new Date();
+    this.UpdatedBy = params.UpdatedBy ?? null;
+  }
+
+  // IFB-24: full header replace while still Draft -- mirrors PersistPlan's
+  // field set exactly so Create and Edit stay in lockstep.
+  public ApplyEdits(params: {
+    SourceSystem: string;
+    SourceDocumentType: string;
+    SourceDocumentNumber: string;
+    BusinessReference: string;
+    SupplierId: string;
+    SupplierCode: string | null;
+    OwnerId: string;
+    OwnerCode: string | null;
+    WarehouseId: string;
+    WarehouseCode: string | null;
+    WarehouseProfileId: string | null;
+    ExpectedArrivalAt: Date | null;
+    UpdatedBy?: string | null;
+  }): void {
+    this.SourceSystem = params.SourceSystem;
+    this.SourceDocumentType = params.SourceDocumentType;
+    this.SourceDocumentNumber = params.SourceDocumentNumber;
+    this.BusinessReference = params.BusinessReference;
+    this.SupplierId = params.SupplierId;
+    this.SupplierCode = params.SupplierCode;
+    this.OwnerId = params.OwnerId;
+    this.OwnerCode = params.OwnerCode;
+    this.WarehouseId = params.WarehouseId;
+    this.WarehouseCode = params.WarehouseCode;
+    this.WarehouseProfileId = params.WarehouseProfileId;
+    this.ExpectedArrivalAt = params.ExpectedArrivalAt;
     this.UpdatedAt = new Date();
     this.UpdatedBy = params.UpdatedBy ?? null;
   }

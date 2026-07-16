@@ -23,6 +23,7 @@ import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/
 import { IReceivingRepository } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
 import { ReceivingDtoMapper } from '@modules/Inbound/Application/Mappers/ReceivingDtoMapper';
 import { AssertQcTaskPermission } from '@modules/Inbound/Application/Services/QcTaskPermission';
+import { AssertInboundPlanNotCancelled } from '@modules/Inbound/Application/Services/InboundPlanStatusGuards';
 import { InboundRuleAttributeKeys, InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRuleGate';
 import { QcTaskEntity } from '@modules/Inbound/Domain/Entities/QcTaskEntity';
 import { QcTaskStatus } from '@modules/Inbound/Domain/Enums/QcTaskStatus';
@@ -67,6 +68,10 @@ export class EvaluateQcTaskUseCase {
 
     const aggregate = await this.inboundPlans.FindById(receipt.InboundPlanId);
     if (!aggregate) throw new NotFoundException('Inbound plan not found for QC');
+    // Re-review fix (P1): the plan can be cancelled AFTER its receiving session/receipt
+    // was legitimately started (Draft is allowed to receive; Cancel only requires Draft),
+    // so this receipt-scoped use case must re-check the plan's CURRENT status itself.
+    AssertInboundPlanNotCancelled(aggregate.Plan.Status);
     const planLine = aggregate.Lines.find((item) => item.Id === line.InboundPlanLineId);
     if (!planLine) throw new BusinessRuleException('Inbound plan line not found for QC');
 

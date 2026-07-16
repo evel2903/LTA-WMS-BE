@@ -16,6 +16,7 @@ import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/
 import { IReceivingRepository } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
 import { ReceivingDtoMapper } from '@modules/Inbound/Application/Mappers/ReceivingDtoMapper';
 import { AssertReceiptPermission } from '@modules/Inbound/Application/Services/ReceiptPermission';
+import { AssertInboundPlanNotCancelled } from '@modules/Inbound/Application/Services/InboundPlanStatusGuards';
 import { InboundRuleAttributeKeys, InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRuleGate';
 import { InboundPutawayReleaseEntity } from '@modules/Inbound/Domain/Entities/InboundPutawayReleaseEntity';
 import { ReceiptEntity } from '@modules/Inbound/Domain/Entities/ReceiptEntity';
@@ -100,6 +101,10 @@ export class ReleaseInboundToPutawayUseCase {
 
     const aggregate = await this.inboundPlans.FindById(receipt.InboundPlanId);
     if (!aggregate) throw new NotFoundException('Inbound plan not found for release');
+    // Re-review fix (P1): the plan can be cancelled AFTER its receiving session/receipt
+    // was legitimately started (Draft is allowed to receive; Cancel only requires Draft),
+    // so this receipt-scoped use case must re-check the plan's CURRENT status itself.
+    AssertInboundPlanNotCancelled(aggregate.Plan.Status);
     const profile = aggregate.Plan.WarehouseProfileId
       ? await this.profiles.FindById(aggregate.Plan.WarehouseProfileId)
       : null;

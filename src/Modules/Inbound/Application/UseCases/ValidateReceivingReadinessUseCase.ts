@@ -14,6 +14,7 @@ import { ReceivingReadinessDto, ValidateReceivingReadinessDto } from '@modules/I
 import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/IInboundPlanRepository';
 import { InboundPlanEntity } from '@modules/Inbound/Domain/Entities/InboundPlanEntity';
 import { AssertInboundPlanPermission } from '@modules/Inbound/Application/Services/InboundPlanPermission';
+import { AssertInboundPlanNotCancelled } from '@modules/Inbound/Application/Services/InboundPlanStatusGuards';
 import { InboundRuleAttributeKeys, InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRuleGate';
 import { InboundGateInStatus } from '@modules/Inbound/Domain/Enums/InboundGateInStatus';
 import { WarehouseProfileEntity } from '@modules/WarehouseProfile/Domain/Entities/WarehouseProfileEntity';
@@ -37,6 +38,11 @@ export class ValidateReceivingReadinessUseCase {
     const aggregate = await this.inboundPlans.FindById(request.Id);
     if (!aggregate) throw new NotFoundException('Inbound plan not found');
     await AssertInboundPlanPermission(this.permissionChecker, context.ActorUserId, ActionCode.Read, aggregate.Plan);
+    // Re-review fix (P1): readiness (and its override path) is an operational check --
+    // reporting/accepting an override on a Cancelled (voided) plan is misleading at best
+    // and a real mutation risk at worst. Draft is still deliberately allowed (documented
+    // open scope decision), this is a Cancelled-only exclusion.
+    AssertInboundPlanNotCancelled(aggregate.Plan.Status);
 
     const profile = await this.ResolveProfile(aggregate.Plan);
     const gateIn = await this.GateInRequired(aggregate.Plan, profile);
@@ -92,13 +98,17 @@ export class ValidateReceivingReadinessUseCase {
         ObjectType: ObjectType.CoreFlow,
       });
     }
+    // Captured into locals so the re-check inside the locked transaction below (a nested
+    // closure) can reuse them without TypeScript losing the non-null narrowing on `this.x`.
+    const permissionChecker = this.permissionChecker;
+    const actorUserId = context.ActorUserId;
 
     if (!this.GateInOverrideAllowed(profile?.StrategyPolicy as Record<string, unknown> | undefined)) {
       throw new BusinessRuleException('Gate-in readiness override is not allowed by WarehouseProfile');
     }
 
-    const decision = await this.permissionChecker.Check({
-      UserId: context.ActorUserId,
+    const decision = await permissionChecker.Check({
+      UserId: actorUserId,
       Action: ActionCode.Override,
       ObjectType: ObjectType.CoreFlow,
       Scope: { WarehouseId: plan.WarehouseId, OwnerId: plan.OwnerId },
@@ -116,36 +126,139 @@ export class ValidateReceivingReadinessUseCase {
       Action: ActionCode.Override,
       ObjectType: ObjectType.CoreFlow,
     });
-    const result = this.BuildResult(plan.Id, plan.BusinessReference, {
-      Allowed: true,
-      Decision: 'OverrideAccepted',
-      GateInRequired: true,
-      GateInRecorded: false,
-      OverrideAccepted: true,
-      Reason: 'Gate-in readiness override accepted with reason/audit evidence.',
-      RuleCode: ruleCode,
-    });
+    // Re-review fix (P2): the "OverrideAccepted" result used to be built HERE, from the
+    // unlocked `plan` snapshot, and reused as-is for both the response and the audit
+    // AfterJson -- now built fresh from `lockedPlan` inside the transaction below, right
+    // before it's returned, so a concurrent BusinessReference change can't leak a stale
+    // identity into the response/audit trail. See the fresh-result construction below.
 
-    const before = { GateInStatus: plan.GateInStatus, EvidenceRefs: plan.EvidenceRefs };
-    plan.RecordGateInOverride({ EvidenceRefs: request.EvidenceRefs ?? [], UpdatedBy: context.ActorUserId });
+    // IFB-24 review fix: mutate+save a row locked via FindByIdForUpdate INSIDE the
+    // transaction, not the unlocked `plan` read earlier in Execute() -- UpdatePlan writes
+    // the FULL row, so saving the stale unlocked entity here could silently revert a
+    // concurrent Confirm/Cancel/Update's Status/CoreFlowInstanceId change (same class of
+    // bug fixed for Confirm/Cancel/Update themselves; see RecordGateInUseCase for the
+    // identical fix and fuller explanation).
     return this.audited.Run(async (manager) => {
-      await this.inboundPlans.UpdatePlan(plan, manager);
+      const aggregate = await this.inboundPlans.FindByIdForUpdate(plan.Id, manager);
+      if (!aggregate) throw new NotFoundException('Inbound plan not found');
+      const lockedPlan = aggregate.Plan;
+
+      // Re-review fix (authorization TOCTOU): re-check Override permission against the
+      // LOCKED (current) Warehouse/Owner scope -- the check above ran against the
+      // unlocked `plan` snapshot; a concurrent Update could have moved the plan to a
+      // different Warehouse/Owner in the race window before this lock was acquired.
+      const lockedDecision = await permissionChecker.Check({
+        UserId: actorUserId,
+        Action: ActionCode.Override,
+        ObjectType: ObjectType.CoreFlow,
+        Scope: { WarehouseId: lockedPlan.WarehouseId, OwnerId: lockedPlan.OwnerId },
+      });
+      if (!lockedDecision.Allowed) {
+        throw new ForbiddenAppException(`Access denied (${lockedDecision.Reason})`, {
+          Reason: lockedDecision.Reason,
+          Action: ActionCode.Override,
+          ObjectType: ObjectType.CoreFlow,
+        });
+      }
+      // Re-review fix (P1): re-check Cancelled under the lock too -- the plan could have
+      // been cancelled in the race window between the unlocked pre-check above and this
+      // lock (Cancel only requires Draft, so a still-Draft plan racing here is exposed).
+      AssertInboundPlanNotCancelled(lockedPlan.Status);
+
+      // Second re-review fix: WarehouseProfile/policy were resolved and checked from the
+      // UNLOCKED `plan` read at the top of Execute() -- a concurrent change (profile
+      // deactivated, gateInOverrideAllowed flipped off, or the plan moved to a
+      // Warehouse/Owner the profile no longer matches) in the race window before this
+      // lock would otherwise let a now-invalid override through unnoticed. ResolveProfile
+      // itself throws BusinessRuleException for "not found" / "not active" / "scope
+      // mismatch" (see below), so re-running it against lockedPlan re-validates all of
+      // that against the current, committed state, not the stale unlocked snapshot.
+      const lockedProfile = await this.ResolveProfile(lockedPlan);
+      if (!this.GateInOverrideAllowed(lockedProfile?.StrategyPolicy as Record<string, unknown> | undefined)) {
+        throw new BusinessRuleException('Gate-in readiness override is not allowed by WarehouseProfile');
+      }
+
+      // Re-review fix: the earlier unlocked read (top of Execute) already proved gate-in
+      // wasn't yet Recorded/OverrideAccepted, but that was before this lock was acquired --
+      // a concurrent RecordGateInUseCase could have committed Recorded in between. Blindly
+      // overwriting it with OverrideAccepted here would silently clobber a legitimate,
+      // already-successful gate-in. Re-check under the lock and, if it already resolved,
+      // return the now-current state instead of mutating (same non-error semantics as
+      // Execute()'s own already-resolved fast path above, and the same idempotent-race
+      // safety net used by RecordGateInUseCase).
+      if (
+        lockedPlan.GateInStatus === InboundGateInStatus.Recorded ||
+        lockedPlan.GateInStatus === InboundGateInStatus.OverrideAccepted
+      ) {
+        const alreadyResolved = this.BuildResult(lockedPlan.Id, lockedPlan.BusinessReference, {
+          Allowed: true,
+          Decision: lockedPlan.GateInStatus === InboundGateInStatus.OverrideAccepted ? 'OverrideAccepted' : 'Allowed',
+          GateInRequired: true,
+          GateInRecorded: lockedPlan.GateInStatus === InboundGateInStatus.Recorded,
+          OverrideAccepted: lockedPlan.GateInStatus === InboundGateInStatus.OverrideAccepted,
+          Reason:
+            lockedPlan.GateInStatus === InboundGateInStatus.OverrideAccepted
+              ? 'Gate-in readiness override accepted with reason/audit evidence.'
+              : 'Gate-in evidence is recorded.',
+          RuleCode: ruleCode,
+        });
+        return {
+          result: alreadyResolved,
+          entry: MergeAuditContext(context, {
+            Action: ActionCode.Override,
+            ObjectType: ObjectType.CoreFlow,
+            ObjectId: lockedPlan.CoreFlowInstanceId ?? lockedPlan.Id,
+            ObjectCode: lockedPlan.BusinessReference,
+            BeforeJson: { GateInStatus: lockedPlan.GateInStatus },
+            AfterJson: alreadyResolved as unknown as Record<string, unknown>,
+            ReasonCodeId: reason.ReasonCodeId,
+            ReasonNote: request.ReasonNote ?? null,
+            EvidenceRefs: request.EvidenceRefs ?? null,
+            ReferenceType: 'InboundReceivingReadiness',
+            ReferenceId: lockedPlan.Id,
+            WarehouseId: lockedPlan.WarehouseId,
+            OwnerId: lockedPlan.OwnerId,
+            Result: AuditResult.Success,
+          }),
+        };
+      }
+
+      const before = { GateInStatus: lockedPlan.GateInStatus, EvidenceRefs: lockedPlan.EvidenceRefs };
+      lockedPlan.RecordGateInOverride({ EvidenceRefs: request.EvidenceRefs ?? [], UpdatedBy: context.ActorUserId });
+      await this.inboundPlans.UpdatePlan(lockedPlan, manager);
+      // Re-review fix (P2): `result` above was built from the UNLOCKED `plan` snapshot
+      // read at the top of Execute() -- Id doesn't change, but BusinessReference can (a
+      // concurrent Update may have changed SourceSystem/SourceDocumentType/SourceDocument
+      // Number in the race window before this lock). Rebuild the returned result AND the
+      // audit's AfterJson from lockedPlan so both report the identity that's actually
+      // committed, not a possibly-stale one. RuleCode intentionally still comes from the
+      // pre-lock rule-engine decision (display/audit-trail info, not a safety decision --
+      // see the no-op branch above and this use case's Dev Notes for why that's fine).
+      const freshResult = this.BuildResult(lockedPlan.Id, lockedPlan.BusinessReference, {
+        Allowed: true,
+        Decision: 'OverrideAccepted',
+        GateInRequired: true,
+        GateInRecorded: false,
+        OverrideAccepted: true,
+        Reason: 'Gate-in readiness override accepted with reason/audit evidence.',
+        RuleCode: ruleCode,
+      });
       return {
-        result,
+        result: freshResult,
         entry: MergeAuditContext(context, {
           Action: ActionCode.Override,
           ObjectType: ObjectType.CoreFlow,
-          ObjectId: plan.CoreFlowInstanceId ?? plan.Id,
-          ObjectCode: plan.BusinessReference,
+          ObjectId: lockedPlan.CoreFlowInstanceId ?? lockedPlan.Id,
+          ObjectCode: lockedPlan.BusinessReference,
           BeforeJson: before,
-          AfterJson: result as unknown as Record<string, unknown>,
+          AfterJson: freshResult as unknown as Record<string, unknown>,
           ReasonCodeId: reason.ReasonCodeId,
           ReasonNote: request.ReasonNote ?? null,
           EvidenceRefs: request.EvidenceRefs ?? null,
           ReferenceType: 'InboundReceivingReadiness',
-          ReferenceId: plan.Id,
-          WarehouseId: plan.WarehouseId,
-          OwnerId: plan.OwnerId,
+          ReferenceId: lockedPlan.Id,
+          WarehouseId: lockedPlan.WarehouseId,
+          OwnerId: lockedPlan.OwnerId,
           Result: AuditResult.Success,
         }),
       };
