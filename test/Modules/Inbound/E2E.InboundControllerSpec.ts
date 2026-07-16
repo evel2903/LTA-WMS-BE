@@ -8,8 +8,10 @@ import { LoggingService } from '@common/Logging/LoggingService';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { REQUIRE_PERMISSION_KEY } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
+import { CancelInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CancelInboundPlanUseCase';
 import { CaptureInboundDiscrepancyUseCase } from '@modules/Inbound/Application/UseCases/CaptureInboundDiscrepancyUseCase';
 import { ConfirmInboundLpnUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundLpnUseCase';
+import { ConfirmInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundPlanUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
 import { ImportInboundPlanLinesUseCase } from '@modules/Inbound/Application/UseCases/ImportInboundPlanLinesUseCase';
@@ -20,6 +22,7 @@ import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/L
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
 import { RecordQcResultUseCase } from '@modules/Inbound/Application/UseCases/RecordQcResultUseCase';
 import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCases/StartReceivingSessionUseCase';
+import { UpdateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/UpdateInboundPlanUseCase';
 import { ValidateReceivingReadinessUseCase } from '@modules/Inbound/Application/UseCases/ValidateReceivingReadinessUseCase';
 import { ReleaseInboundToPutawayUseCase } from '@modules/Inbound/Application/UseCases/ReleaseInboundToPutawayUseCase';
 import { InboundPlanController } from '@modules/Inbound/Presentation/Controllers/InboundPlanController';
@@ -31,6 +34,9 @@ describe('E2E InboundPlanController (no DB)', () => {
   let app: INestApplication;
 
   const createExecute = jest.fn();
+  const updateExecute = jest.fn();
+  const confirmExecute = jest.fn();
+  const cancelExecute = jest.fn();
   const importTemplateExecute = jest.fn();
   const importPreviewExecute = jest.fn();
   const importCommitExecute = jest.fn();
@@ -53,6 +59,9 @@ describe('E2E InboundPlanController (no DB)', () => {
       providers: [
         Reflector,
         { provide: CreateInboundPlanUseCase, useValue: { Execute: createExecute } },
+        { provide: UpdateInboundPlanUseCase, useValue: { Execute: updateExecute } },
+        { provide: ConfirmInboundPlanUseCase, useValue: { Execute: confirmExecute } },
+        { provide: CancelInboundPlanUseCase, useValue: { Execute: cancelExecute } },
         {
           provide: ImportInboundPlanLinesUseCase,
           useValue: {
@@ -92,6 +101,9 @@ describe('E2E InboundPlanController (no DB)', () => {
 
   beforeEach(() => {
     createExecute.mockReset();
+    updateExecute.mockReset();
+    confirmExecute.mockReset();
+    cancelExecute.mockReset();
     importTemplateExecute.mockReset();
     importPreviewExecute.mockReset();
     importCommitExecute.mockReset();
@@ -120,6 +132,18 @@ describe('E2E InboundPlanController (no DB)', () => {
     });
     expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, InboundPlanController.prototype.GetById)).toMatchObject({
       Action: ActionCode.Read,
+      ObjectType: ObjectType.InboundPlan,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, InboundPlanController.prototype.Update)).toMatchObject({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.InboundPlan,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, InboundPlanController.prototype.Confirm)).toMatchObject({
+      Action: ActionCode.Update,
+      ObjectType: ObjectType.InboundPlan,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, InboundPlanController.prototype.Cancel)).toMatchObject({
+      Action: ActionCode.DeleteCancel,
       ObjectType: ObjectType.InboundPlan,
     });
     expect(
@@ -250,6 +274,62 @@ describe('E2E InboundPlanController (no DB)', () => {
         SourceDocumentNumber: 'ASN-10001',
         Lines: [expect.objectContaining({ LineNumber: 1, ExpectedQuantity: 12 })],
       }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(response.body.Success).toBe(true);
+  });
+
+  it('PATCH /inbound-plans/:id calls update use case with audit context', async () => {
+    updateExecute.mockResolvedValue({ Id: 'inbound-plan-1', SourceDocumentNumber: 'ASN-10001' });
+
+    const response = await request(app.getHttpServer())
+      .patch('/inbound-plans/inbound-plan-1')
+      .send({
+        SourceSystem: 'ERP',
+        SourceDocumentType: 'ASN',
+        SourceDocumentNumber: 'ASN-10001',
+        SupplierId: 'supplier-1',
+        OwnerId: 'owner-1',
+        WarehouseId: 'warehouse-1',
+        WarehouseProfileId: 'profile-1',
+        ExpectedArrivalAt: '2026-06-22T08:00:00.000Z',
+        ExpectedUpdatedAt: '2026-06-22T08:00:00.000Z',
+        Lines: [{ LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 12 }],
+      })
+      .expect(200);
+
+    expect(updateExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ Id: 'inbound-plan-1', SourceDocumentNumber: 'ASN-10001' }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(response.body.Success).toBe(true);
+  });
+
+  it('POST /inbound-plans/:id/confirm calls confirm use case with audit context', async () => {
+    confirmExecute.mockResolvedValue({ Id: 'inbound-plan-1', Status: 'Planned' });
+
+    const response = await request(app.getHttpServer())
+      .post('/inbound-plans/inbound-plan-1/confirm')
+      .send({})
+      .expect(201);
+
+    expect(confirmExecute).toHaveBeenCalledWith(
+      { Id: 'inbound-plan-1' },
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(response.body.Success).toBe(true);
+  });
+
+  it('POST /inbound-plans/:id/cancel calls cancel use case with audit context', async () => {
+    cancelExecute.mockResolvedValue({ Id: 'inbound-plan-1', Status: 'Cancelled' });
+
+    const response = await request(app.getHttpServer())
+      .post('/inbound-plans/inbound-plan-1/cancel')
+      .send({})
+      .expect(201);
+
+    expect(cancelExecute).toHaveBeenCalledWith(
+      { Id: 'inbound-plan-1' },
       expect.objectContaining({ ActorUserId: 'test-admin' }),
     );
     expect(response.body.Success).toBe(true);

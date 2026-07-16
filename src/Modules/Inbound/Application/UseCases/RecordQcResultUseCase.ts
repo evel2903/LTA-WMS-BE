@@ -23,6 +23,7 @@ import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/
 import { IReceivingRepository } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
 import { ReceivingDtoMapper } from '@modules/Inbound/Application/Mappers/ReceivingDtoMapper';
 import { AssertQcTaskPermission } from '@modules/Inbound/Application/Services/QcTaskPermission';
+import { AssertInboundPlanNotCancelled } from '@modules/Inbound/Application/Services/InboundPlanStatusGuards';
 import { QcResultEntity } from '@modules/Inbound/Domain/Entities/QcResultEntity';
 import { QcTaskEntity } from '@modules/Inbound/Domain/Entities/QcTaskEntity';
 import { QcDispositionCode } from '@modules/Inbound/Domain/Enums/QcDispositionCode';
@@ -72,6 +73,10 @@ export class RecordQcResultUseCase {
     if (!receipt) throw new NotFoundException('Receipt not found for QC result');
     const aggregate = await this.inboundPlans.FindById(task.InboundPlanId);
     if (!aggregate) throw new NotFoundException('Inbound plan not found for QC result');
+    // Re-review fix (P1): the plan can be cancelled AFTER its receiving session/receipt
+    // was legitimately started (Draft is allowed to receive; Cancel only requires Draft),
+    // so this QC-task-scoped use case must re-check the plan's CURRENT status itself.
+    AssertInboundPlanNotCancelled(aggregate.Plan.Status);
     const reasonCodeId = await this.ValidateReasonIfNeeded(request);
     const status = this.ResolveInventoryStatuses(request);
     const now = new Date();

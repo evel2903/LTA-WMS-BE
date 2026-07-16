@@ -53,10 +53,32 @@ export class InboundPlanRepository implements IInboundPlanRepository {
     }
   }
 
+  public async ReplaceLines(
+    planId: string,
+    lines: InboundPlanLineEntity[],
+    manager?: EntityManager,
+  ): Promise<InboundPlanLineEntity[]> {
+    const lineRepo = manager ? manager.getRepository(InboundPlanLineOrmEntity) : this.lines;
+    await lineRepo.delete({ InboundPlanId: planId });
+    const saved = await lineRepo.save(lines.map(InboundOrmMapper.ToLineOrm));
+    return saved.map(InboundOrmMapper.ToLineDomain);
+  }
+
   public async FindById(id: string): Promise<InboundPlanAggregate | null> {
     const plan = await this.plans.findOne({ where: { Id: id } });
     if (!plan) return null;
     const lines = await this.lines.find({ where: { InboundPlanId: id }, order: { LineNumber: 'ASC' } });
+    return { Plan: InboundOrmMapper.ToPlanDomain(plan), Lines: lines.map(InboundOrmMapper.ToLineDomain) };
+  }
+
+  public async FindByIdForUpdate(id: string, manager: EntityManager): Promise<InboundPlanAggregate | null> {
+    const plan = await manager
+      .getRepository(InboundPlanOrmEntity)
+      .findOne({ where: { Id: id }, lock: { mode: 'pessimistic_write' } });
+    if (!plan) return null;
+    const lines = await manager
+      .getRepository(InboundPlanLineOrmEntity)
+      .find({ where: { InboundPlanId: id }, order: { LineNumber: 'ASC' } });
     return { Plan: InboundOrmMapper.ToPlanDomain(plan), Lines: lines.map(InboundOrmMapper.ToLineDomain) };
   }
 

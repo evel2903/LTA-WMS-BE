@@ -8,13 +8,6 @@ import {
   SystemAuditContext,
 } from '@modules/AccessControl/Application/DTOs/AuditContext';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
-import { CoreFlowInstanceEntity } from '@modules/CoreFlow/Domain/Entities/CoreFlowInstanceEntity';
-import { CoreFlowInstanceStatus } from '@modules/CoreFlow/Domain/Enums/CoreFlowInstanceStatus';
-import { CoreFlowStageCode } from '@modules/CoreFlow/Domain/Enums/CoreFlowStageCode';
-import { ICoreFlowRepository } from '@modules/CoreFlow/Application/Interfaces/ICoreFlowRepository';
-import { OutboxMessageEntity } from '@modules/Integration/Domain/Entities/OutboxMessageEntity';
-import { OutboxMessageStatus } from '@modules/Integration/Domain/Enums/OutboxMessageStatus';
-import { IIntegrationRepository } from '@modules/Integration/Application/Interfaces/IIntegrationRepository';
 import {
   CreateInboundPlanDto,
   CreateInboundPlanLineDto,
@@ -22,6 +15,12 @@ import {
 } from '@modules/Inbound/Application/DTOs/InboundPlanDto';
 import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/IInboundPlanRepository';
 import { InboundPlanDtoMapper } from '@modules/Inbound/Application/Mappers/InboundPlanDtoMapper';
+import {
+  AssertNonEmptyInboundPlanHeader,
+  AssertValidBusinessReferenceLength,
+  AssertValidExpectedArrivalAt,
+  AssertValidInboundPlanLines,
+} from '@modules/Inbound/Application/Services/InboundPlanRequestValidation';
 import { InboundPlanEntity } from '@modules/Inbound/Domain/Entities/InboundPlanEntity';
 import { InboundPlanLineEntity } from '@modules/Inbound/Domain/Entities/InboundPlanLineEntity';
 import { InboundPlanDocumentStatus } from '@modules/Inbound/Domain/Enums/InboundPlanDocumentStatus';
@@ -56,8 +55,6 @@ export class CreateInboundPlanUseCase {
     private readonly warehouses: IWarehouseRepository,
     private readonly skus: ISkuRepository,
     private readonly uoms: IUomRepository,
-    private readonly coreFlows: ICoreFlowRepository,
-    private readonly integrations: IIntegrationRepository,
     private readonly profiles: IWarehouseProfileRepository,
     private readonly audited: AuditedTransaction,
   ) {}
@@ -148,7 +145,9 @@ export class CreateInboundPlanUseCase {
 
     const planId = randomUUID();
     const businessReference = this.BusinessReference(request);
-    const coreFlowId = randomUUID();
+    // IFB-24: plans are born Draft -- freely editable/deletable, not yet "real"
+    // to the outside world. No CoreFlowInstance/outbox event yet; those are
+    // ConfirmInboundPlanUseCase's job once the plan leaves Draft.
     const plan = new InboundPlanEntity({
       Id: planId,
       SourceSystem: request.SourceSystem,
@@ -163,8 +162,8 @@ export class CreateInboundPlanUseCase {
       WarehouseCode: warehouse.WarehouseCode,
       WarehouseProfileId: request.WarehouseProfileId ?? null,
       ExpectedArrivalAt: request.ExpectedArrivalAt ? new Date(request.ExpectedArrivalAt) : null,
-      Status: InboundPlanDocumentStatus.Planned,
-      CoreFlowInstanceId: coreFlowId,
+      Status: InboundPlanDocumentStatus.Draft,
+      CoreFlowInstanceId: null,
       CreatedAt: now,
       UpdatedAt: now,
       CreatedBy: context.ActorUserId,
@@ -184,44 +183,9 @@ export class CreateInboundPlanUseCase {
           CreatedAt: now,
         }),
     );
-    const coreFlow = new CoreFlowInstanceEntity({
-      Id: coreFlowId,
-      BusinessReference: businessReference,
-      SourceSystem: request.SourceSystem,
-      WarehouseCode: warehouse.WarehouseCode,
-      OwnerCode: owner.OwnerCode,
-      CorrelationId: randomUUID(),
-      CurrentStage: CoreFlowStageCode.Inbound,
-      Status: CoreFlowInstanceStatus.Active,
-      Metadata: { InboundPlanId: planId, SourceDocumentType: request.SourceDocumentType },
-      CreatedAt: now,
-      UpdatedAt: now,
-      CreatedBy: context.ActorUserId,
-    });
-    const outbox = new OutboxMessageEntity({
-      Id: randomUUID(),
-      MessageId: `InboundPlanReceived:${planId}`,
-      EventType: 'InboundPlanReceived',
-      Version: '1.0',
-      BusinessReference: businessReference,
-      SourceSystem: 'LTA-WMS',
-      TargetSystem: request.SourceSystem,
-      WarehouseContext: warehouse.WarehouseCode,
-      OwnerContext: owner.OwnerCode,
-      EventTime: now,
-      CorrelationId: coreFlow.CorrelationId,
-      CausationId: planId,
-      Payload: { InboundPlanId: planId, SourceDocumentNumber: request.SourceDocumentNumber },
-      Status: OutboxMessageStatus.Pending,
-      CreatedAt: now,
-      CreatedBy: context.ActorUserId,
-    });
 
     const write = async (manager?: Parameters<IInboundPlanRepository['Create']>[2]) => {
       const created = await this.inboundPlans.Create(plan, lines, manager);
-      if (manager) await this.coreFlows.CreateInstance(coreFlow, manager);
-      else await this.coreFlows.CreateInstance(coreFlow);
-      await this.integrations.CreateOutboxMessage(outbox, manager);
       return InboundPlanDtoMapper.ToDto(created, false);
     };
 
@@ -259,11 +223,17 @@ export class CreateInboundPlanUseCase {
   }
 
   private AssertRequest(request: CreateInboundPlanDto): void {
-    if (!request.Lines?.length) throw new BusinessRuleException('Inbound plan requires at least one line');
-    for (const line of request.Lines) {
-      if (line.ExpectedQuantity <= 0)
-        throw new BusinessRuleException(`Expected quantity must be positive at line ${line.LineNumber}`);
-    }
+    AssertNonEmptyInboundPlanHeader({
+      SourceSystem: request.SourceSystem,
+      SourceDocumentType: request.SourceDocumentType,
+      SourceDocumentNumber: request.SourceDocumentNumber,
+      SupplierId: request.SupplierId,
+      OwnerId: request.OwnerId,
+      WarehouseId: request.WarehouseId,
+    });
+    AssertValidBusinessReferenceLength(this.BusinessReference(request));
+    AssertValidExpectedArrivalAt(request.ExpectedArrivalAt);
+    AssertValidInboundPlanLines(request.Lines);
   }
 
   private BusinessReference(request: CreateInboundPlanDto): string {

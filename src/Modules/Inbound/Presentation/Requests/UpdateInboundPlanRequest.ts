@@ -12,7 +12,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-export class CreateInboundPlanLineRequest {
+export class UpdateInboundPlanLineRequest {
   @IsInt()
   @Min(1)
   public LineNumber!: number;
@@ -32,7 +32,9 @@ export class CreateInboundPlanLineRequest {
   public ExternalLineReference?: string;
 }
 
-export class CreateInboundPlanRequest {
+// IFB-24: full header + line replace while the plan is still Draft -- same
+// field set as CreateInboundPlanRequest, on purpose (see UpdateInboundPlanUseCase).
+export class UpdateInboundPlanRequest {
   @IsString()
   @IsNotEmpty()
   public SourceSystem!: string;
@@ -65,9 +67,17 @@ export class CreateInboundPlanRequest {
   @IsDateString()
   public ExpectedArrivalAt?: string;
 
+  // Re-review fix (P1 decision): optimistic concurrency for the full header+line
+  // replace this use case does -- the client must echo back the UpdatedAt it last
+  // saw; the use case 409s if the row has moved on since then. Reuses the existing
+  // UpdatedAt audit column as the concurrency token (If-Unmodified-Since style)
+  // instead of adding a dedicated version column -- see UpdateInboundPlanUseCase.
+  @IsDateString()
+  public ExpectedUpdatedAt!: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
-  @Type(() => CreateInboundPlanLineRequest)
-  public Lines!: CreateInboundPlanLineRequest[];
+  @Type(() => UpdateInboundPlanLineRequest)
+  public Lines!: UpdateInboundPlanLineRequest[];
 }

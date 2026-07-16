@@ -33,6 +33,7 @@ import { IInboundPlanRepository } from '@modules/Inbound/Application/Interfaces/
 import { IReceivingRepository } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
 import { ReceivingDtoMapper } from '@modules/Inbound/Application/Mappers/ReceivingDtoMapper';
 import { AssertReceiptPermission } from '@modules/Inbound/Application/Services/ReceiptPermission';
+import { AssertInboundPlanNotCancelled } from '@modules/Inbound/Application/Services/InboundPlanStatusGuards';
 import { InboundRuleAttributeKeys, InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRuleGate';
 import { InboundDiscrepancyEntity } from '@modules/Inbound/Domain/Entities/InboundDiscrepancyEntity';
 import { ReceiptLineDiscrepancySignal } from '@modules/Inbound/Domain/Enums/ReceiptLineDiscrepancySignal';
@@ -81,6 +82,10 @@ export class CaptureInboundDiscrepancyUseCase {
 
     const aggregate = await this.inboundPlans.FindById(receipt.InboundPlanId);
     if (!aggregate) throw new NotFoundException('Inbound plan not found for receipt');
+    // Re-review fix (P1): the plan can be cancelled AFTER its receiving session/receipt
+    // was legitimately started (Draft is allowed to receive; Cancel only requires Draft),
+    // so this receipt-scoped use case must re-check the plan's CURRENT status itself.
+    AssertInboundPlanNotCancelled(aggregate.Plan.Status);
     const planLine = aggregate.Lines.find((item) => item.Id === line.InboundPlanLineId);
     if (!planLine) throw new BusinessRuleException('Inbound plan line not found for discrepancy');
 
