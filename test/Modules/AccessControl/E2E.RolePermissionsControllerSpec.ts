@@ -81,6 +81,7 @@ describe('E2E RoleController permissions endpoints (no DB)', () => {
 
   const validPutBody = () => ({
     permissions: [{ action: ActionCode.Read, objectType: ObjectType.Role }],
+    version: 0,
     reasonCode: 'RC-X',
   });
 
@@ -96,6 +97,7 @@ describe('E2E RoleController permissions endpoints (no DB)', () => {
       expect.objectContaining({
         Id: 'role-1',
         Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Role }],
+        Version: 0,
         ReasonCode: 'RC-X',
       }),
       expect.anything(),
@@ -275,7 +277,7 @@ describe('Permission enforcement E2E (RoleController.SetPermissions/ResetPermiss
     await request(app.getHttpServer())
       .put('/access-control/roles/role-1/permissions')
       .set('x-test-user', 'admin')
-      .send({ permissions: [], reasonCode: 'RC-X' })
+      .send({ permissions: [], version: 0, reasonCode: 'RC-X' })
       .expect(200);
     await request(app.getHttpServer())
       .post('/access-control/roles/role-1/permissions/reset')

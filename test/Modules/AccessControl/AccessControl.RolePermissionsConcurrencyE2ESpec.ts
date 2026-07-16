@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import 'dotenv/config';
 import { randomUUID } from 'crypto';
 import AppDataSource from '@shared/Database/TypeOrmDataSource';
+import { ConflictException } from '@common/Exceptions/AppException';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ActorType } from '@modules/AccessControl/Domain/Enums/ActorType';
@@ -60,6 +61,13 @@ const ctx: AuditContext = {
  * serialize instead of interleaving. Proof: after two concurrent writes settle, the actual
  * persisted role_permissions must equal exactly the AfterJson of whichever audit entry
  * committed LAST -- no lost update, regardless of which request happened to win the race.
+ *
+ * RA-04 review, Decision #1: PUT also now carries an optimistic-lock `Version` captured
+ * before the race starts. The pessimistic lock above still serializes the two requests, but
+ * with the SAME captured Version, only the request that acquires the lock FIRST still matches
+ * `PermissionsVersion` -- the second one now gets a clean 409 (ConflictException) instead of
+ * silently overwriting on top of the winner. Uses Promise.allSettled (not Promise.all) since
+ * a settled rejection is now an expected outcome, not a test failure.
  */
 describeConcurrency('RA-02 role-permissions concurrency (real Postgres, gated)', () => {
   let roleRepository: RoleRepository;
@@ -126,20 +134,22 @@ describeConcurrency('RA-02 role-permissions concurrency (real Postgres, gated)',
 
     try {
       // Sequential baseline: role starts with exactly {Read:Role}.
-      await setUseCase.Execute(
+      const baseline = await setUseCase.Execute(
         {
           Id: role.Id,
           Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Role }],
+          Version: 0,
           ReasonCode: 'RC-BASELINE',
         },
         ctx,
       );
 
       // Concurrent A wants to revoke everything; concurrent B wants {Read:Role, Read:Permission}.
-      // Pre-fix, both read the same stale `current` and could each apply a diff that ignores
-      // the other's write, leaving neither request's response describing the real DB state.
-      await Promise.all([
-        setUseCase.Execute({ Id: role.Id, Permissions: [], ReasonCode: 'RC-A' }, ctx),
+      // Both capture the SAME pre-race Version -- with the pessimistic lock alone (pre-Decision
+      // #1), both could each apply a diff that ignores the other's write. Now, only whichever
+      // acquires the row lock FIRST still matches PermissionsVersion; the other gets a clean 409.
+      const settled = await Promise.allSettled([
+        setUseCase.Execute({ Id: role.Id, Permissions: [], Version: baseline.Version, ReasonCode: 'RC-A' }, ctx),
         setUseCase.Execute(
           {
             Id: role.Id,
@@ -147,11 +157,18 @@ describeConcurrency('RA-02 role-permissions concurrency (real Postgres, gated)',
               { Action: ActionCode.Read, ObjectType: ObjectType.Role },
               { Action: ActionCode.Read, ObjectType: ObjectType.Permission },
             ],
+            Version: baseline.Version,
             ReasonCode: 'RC-B',
           },
           ctx,
         ),
       ]);
+
+      const fulfilled = settled.filter((r) => r.status === 'fulfilled');
+      const rejected = settled.filter((r) => r.status === 'rejected');
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(ConflictException);
 
       const [persisted, lastAudit] = await Promise.all([readPersistedCodes(role.Id), readLastAuditAfterCodes(role.Id)]);
       expect(persisted).toEqual(lastAudit);
@@ -187,8 +204,14 @@ describeConcurrency('RA-02 role-permissions concurrency (real Postgres, gated)',
 
     try {
       // Concurrent PUT adds one extra grant (add-only-safe: current stays a subset of desired,
-      // so `removed` is empty) while reset independently restores QC to raw seed.
-      await Promise.all([
+      // so `removed` is empty) while reset independently restores QC to raw seed. Reset never
+      // checks Version (it's an unconditional override, not a diff against the caller's view --
+      // see ResetRolePermissionsUseCase doc), but it DOES bump PermissionsVersion, so whichever
+      // one loses the race to acquire the row lock second sees a mismatch IF that loser is PUT.
+      // Either order converges on the same final state: reset always wins substantively --
+      // either it runs after PUT and strips the extra grant back to seed, or it runs first and
+      // PUT's now-stale Version gets a clean 409 before ever touching the diff.
+      const settled = await Promise.allSettled([
         setUseCase.Execute(
           {
             Id: qc.Id,
@@ -196,6 +219,7 @@ describeConcurrency('RA-02 role-permissions concurrency (real Postgres, gated)',
               ...currentPermissions.map((p) => ({ Action: p.Action, ObjectType: p.ObjectType })),
               { Action: extraPair[0], ObjectType: extraPair[1] },
             ],
+            Version: qc.PermissionsVersion,
             ReasonCode: 'RC-ADD',
           },
           ctx,
@@ -203,8 +227,14 @@ describeConcurrency('RA-02 role-permissions concurrency (real Postgres, gated)',
         resetUseCase.Execute({ Id: qc.Id, ReasonCode: 'RC-RESET' }, ctx),
       ]);
 
-      const [persisted, lastAudit] = await Promise.all([readPersistedCodes(qc.Id), readLastAuditAfterCodes(qc.Id)]);
-      expect(persisted).toEqual(lastAudit);
+      const [putResult, resetResult] = settled;
+      expect(resetResult.status).toBe('fulfilled');
+      if (putResult.status === 'rejected') {
+        expect(putResult.reason).toBeInstanceOf(ConflictException);
+      }
+
+      const persisted = await readPersistedCodes(qc.Id);
+      expect(persisted).toEqual([...currentCodes].sort());
     } finally {
       // Always restore QC to its true seed baseline regardless of race outcome/order.
       await resetUseCase.Execute({ Id: qc.Id, ReasonCode: 'RC-CLEANUP' }, ctx);

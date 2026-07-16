@@ -21,6 +21,9 @@ export class RoleOrmEntity {
   @Column({ name: 'status', type: 'varchar', length: 30 })
   public Status!: string;
 
+  @Column({ name: 'permissions_version', type: 'int', default: 0 })
+  public PermissionsVersion!: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   public CreatedAt!: Date;
 

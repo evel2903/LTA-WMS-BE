@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { BusinessRuleException, NotFoundException } from '@common/Exceptions/AppException';
+import { BusinessRuleException, ConflictException, NotFoundException } from '@common/Exceptions/AppException';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ActorType } from '@modules/AccessControl/Domain/Enums/ActorType';
@@ -163,7 +163,7 @@ describe('SetRolePermissionsUseCase', () => {
   it('throws NotFound when the role does not exist', async () => {
     const { setUseCase } = buildWorld();
     await expect(
-      setUseCase.Execute({ Id: 'missing', Permissions: [], ReasonCode: 'RC-X' }, ctx),
+      setUseCase.Execute({ Id: 'missing', Permissions: [], Version: 0, ReasonCode: 'RC-X' }, ctx),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -178,7 +178,12 @@ describe('SetRolePermissionsUseCase', () => {
     ]);
 
     const result = await setUseCase.Execute(
-      { Id: role.Id, Permissions: [{ Action: ActionCode.Update, ObjectType: ObjectType.Sku }], ReasonCode: 'RC-X' },
+      {
+        Id: role.Id,
+        Permissions: [{ Action: ActionCode.Update, ObjectType: ObjectType.Sku }],
+        Version: 0,
+        ReasonCode: 'RC-X',
+      },
       ctx,
     );
 
@@ -191,6 +196,7 @@ describe('SetRolePermissionsUseCase', () => {
         PermissionEntity.BuildCode(ActionCode.Read, ObjectType.Sku),
       ].sort(),
     );
+    expect(result.Version).toBe(1);
   });
 
   it('rejects an N/A pair (not in the catalog) with BusinessRuleException', async () => {
@@ -203,6 +209,7 @@ describe('SetRolePermissionsUseCase', () => {
         {
           Id: role.Id,
           Permissions: [{ Action: ActionCode.Adjust, ObjectType: ObjectType.AuditLog }],
+          Version: 0,
           ReasonCode: 'RC-X',
         },
         ctx,
@@ -222,7 +229,12 @@ describe('SetRolePermissionsUseCase', () => {
 
     await expect(
       setUseCase.Execute(
-        { Id: role.Id, Permissions: [{ Action: ActionCode.Update, ObjectType: ObjectType.Role }], ReasonCode: 'RC-X' },
+        {
+          Id: role.Id,
+          Permissions: [{ Action: ActionCode.Update, ObjectType: ObjectType.Role }],
+          Version: 0,
+          ReasonCode: 'RC-X',
+        },
         ctx,
       ),
     ).rejects.toBeInstanceOf(BusinessRuleException);
@@ -257,6 +269,7 @@ describe('SetRolePermissionsUseCase', () => {
             { Action: ActionCode.Update, ObjectType: ObjectType.Role },
             { Action: ActionCode.Read, ObjectType: ObjectType.Role },
           ],
+          Version: 0,
           ReasonCode: 'RC-X',
         },
         ctx,
@@ -276,6 +289,7 @@ describe('SetRolePermissionsUseCase', () => {
         {
           Id: role.Id,
           Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Permission }],
+          Version: 0,
           ReasonCode: 'RC-X',
         },
         ctx,
@@ -303,9 +317,9 @@ describe('SetRolePermissionsUseCase', () => {
     await grant(rolePermissions, role.Id, seeded.get(PermissionEntity.BuildCode(ActionCode.Read, ObjectType.Sku))!);
 
     // Submitting an empty set on a system role tries to remove everything -> add-only blocks it.
-    await expect(setUseCase.Execute({ Id: role.Id, Permissions: [], ReasonCode: 'RC-X' }, ctx)).rejects.toBeInstanceOf(
-      BusinessRuleException,
-    );
+    await expect(
+      setUseCase.Execute({ Id: role.Id, Permissions: [], Version: 0, ReasonCode: 'RC-X' }, ctx),
+    ).rejects.toBeInstanceOf(BusinessRuleException);
   });
 
   it('add-only does not block a pure addition on a system role (removed stays empty)', async () => {
@@ -327,7 +341,12 @@ describe('SetRolePermissionsUseCase', () => {
 
     await expect(
       setUseCase.Execute(
-        { Id: role.Id, Permissions: [{ Action: ActionCode.Update, ObjectType: ObjectType.Sku }], ReasonCode: 'RC-X' },
+        {
+          Id: role.Id,
+          Permissions: [{ Action: ActionCode.Update, ObjectType: ObjectType.Sku }],
+          Version: 0,
+          ReasonCode: 'RC-X',
+        },
         ctx,
       ),
     ).resolves.toBeDefined();
@@ -341,7 +360,7 @@ describe('SetRolePermissionsUseCase', () => {
     const seeded = await seedPermissions(permissions, [[ActionCode.Read, ObjectType.Sku]]);
     await grant(rolePermissions, role.Id, seeded.get(PermissionEntity.BuildCode(ActionCode.Read, ObjectType.Sku))!);
 
-    const result = await setUseCase.Execute({ Id: role.Id, Permissions: [], ReasonCode: 'RC-X' }, ctx);
+    const result = await setUseCase.Execute({ Id: role.Id, Permissions: [], Version: 0, ReasonCode: 'RC-X' }, ctx);
 
     expect(result.Permissions).toEqual([]);
     expect(await rolePermissions.FindByRoleId(role.Id)).toEqual([]);
@@ -365,6 +384,7 @@ describe('SetRolePermissionsUseCase', () => {
             { Action: ActionCode.Update, ObjectType: ObjectType.Sku },
             { Action: ActionCode.Update, ObjectType: ObjectType.Sku },
           ],
+          Version: 0,
           ReasonCode: 'RC-X',
         },
         ctx,
@@ -382,7 +402,7 @@ describe('SetRolePermissionsUseCase', () => {
     );
 
     await expect(
-      setUseCase.Execute({ Id: role.Id, Permissions: [], ReasonCode: 'RC-BAD' }, ctx),
+      setUseCase.Execute({ Id: role.Id, Permissions: [], Version: 0, ReasonCode: 'RC-BAD' }, ctx),
     ).rejects.toBeInstanceOf(BusinessRuleException);
   });
 
@@ -393,7 +413,7 @@ describe('SetRolePermissionsUseCase', () => {
       new RoleEntity({ Id: 'role-1', RoleCode: 'CUSTOM_ROLE', RoleName: 'Custom', CreatedAt: now, UpdatedAt: now }),
     );
 
-    await setUseCase.Execute({ Id: role.Id, Permissions: [], ReasonCode: 'RC-X' }, ctx);
+    await setUseCase.Execute({ Id: role.Id, Permissions: [], Version: 0, ReasonCode: 'RC-X' }, ctx);
 
     expect(reasonCatalog.LastInput).toEqual({
       ReasonCode: 'RC-X',
@@ -413,9 +433,9 @@ describe('SetRolePermissionsUseCase', () => {
       new RoleEntity({ Id: 'role-1', RoleCode: 'CUSTOM_ROLE', RoleName: 'Custom', CreatedAt: now, UpdatedAt: now }),
     );
 
-    await expect(setUseCase.Execute({ Id: role.Id, Permissions: [], ReasonCode: 'RC-EV' }, ctx)).rejects.toBeInstanceOf(
-      BusinessRuleException,
-    );
+    await expect(
+      setUseCase.Execute({ Id: role.Id, Permissions: [], Version: 0, ReasonCode: 'RC-EV' }, ctx),
+    ).rejects.toBeInstanceOf(BusinessRuleException);
   });
 
   it('accepts when evidence is required and provided', async () => {
@@ -430,7 +450,10 @@ describe('SetRolePermissionsUseCase', () => {
     );
 
     await expect(
-      setUseCase.Execute({ Id: role.Id, Permissions: [], ReasonCode: 'RC-EV', EvidenceRefs: ['photo://1'] }, ctx),
+      setUseCase.Execute(
+        { Id: role.Id, Permissions: [], Version: 0, ReasonCode: 'RC-EV', EvidenceRefs: ['photo://1'] },
+        ctx,
+      ),
     ).resolves.toBeDefined();
   });
 
@@ -453,6 +476,7 @@ describe('SetRolePermissionsUseCase', () => {
       {
         Id: role.Id,
         Permissions: [{ Action: ActionCode.Update, ObjectType: ObjectType.Sku }],
+        Version: 0,
         ReasonCode: 'RC-RAW-CODE-NOT-AN-ID',
         ReasonNote: 'granting SKU update',
       },
@@ -489,11 +513,58 @@ describe('SetRolePermissionsUseCase', () => {
     await grant(rolePermissions, role.Id, seeded.get(PermissionEntity.BuildCode(ActionCode.Read, ObjectType.Sku))!);
 
     await setUseCase.Execute(
-      { Id: role.Id, Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Sku }], ReasonCode: 'RC-X' },
+      {
+        Id: role.Id,
+        Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Sku }],
+        Version: 0,
+        ReasonCode: 'RC-X',
+      },
       ctx,
     );
 
     expect(stub.Entries).toHaveLength(1);
+  });
+
+  it('bumps PermissionsVersion by 1 on every successful write', async () => {
+    const { roles, permissions, setUseCase } = buildWorld();
+    const role = await roles.Create(
+      new RoleEntity({ Id: 'role-1', RoleCode: 'CUSTOM_ROLE', RoleName: 'Custom', CreatedAt: now, UpdatedAt: now }),
+    );
+    await seedPermissions(permissions, [[ActionCode.Read, ObjectType.Sku]]);
+
+    const first = await setUseCase.Execute(
+      {
+        Id: role.Id,
+        Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Sku }],
+        Version: 0,
+        ReasonCode: 'RC-X',
+      },
+      ctx,
+    );
+    expect(first.Version).toBe(1);
+
+    const second = await setUseCase.Execute({ Id: role.Id, Permissions: [], Version: 1, ReasonCode: 'RC-X' }, ctx);
+    expect(second.Version).toBe(2);
+  });
+
+  it('rejects with ConflictException when the submitted Version does not match the role current PermissionsVersion', async () => {
+    const { roles, permissions, setUseCase } = buildWorld();
+    const role = await roles.Create(
+      new RoleEntity({ Id: 'role-1', RoleCode: 'CUSTOM_ROLE', RoleName: 'Custom', CreatedAt: now, UpdatedAt: now }),
+    );
+    await seedPermissions(permissions, [[ActionCode.Read, ObjectType.Sku]]);
+
+    await expect(
+      setUseCase.Execute(
+        {
+          Id: role.Id,
+          Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Sku }],
+          Version: 5,
+          ReasonCode: 'RC-X',
+        },
+        ctx,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });
 
@@ -721,6 +792,31 @@ describe('ResetRolePermissionsUseCase', () => {
     expect(stub.Entries[0]).toEqual(
       expect.objectContaining({ Action: ActionCode.Update, ObjectType: ObjectType.Role }),
     );
+  });
+
+  it('bumps PermissionsVersion by 1, unconditionally (no version check on reset)', async () => {
+    const { roles, permissions, resetUseCase } = buildWorld();
+    const role = await roles.Create(
+      new RoleEntity({
+        Id: 'role-qc',
+        RoleCode: RoleCode.Qc,
+        RoleName: 'QC',
+        IsSystem: true,
+        CreatedAt: now,
+        UpdatedAt: now,
+      }),
+    );
+    await seedPermissions(
+      permissions,
+      ROLE_PERMISSION_GRANTS.filter((g) => g.Role === RoleCode.Qc).map((g): [ActionCode, ObjectType] => [
+        g.Action,
+        g.ObjectType,
+      ]),
+    );
+
+    const result = await resetUseCase.Execute({ Id: role.Id, ReasonCode: 'RC-X' }, ctx);
+
+    expect(result.Version).toBe(1);
   });
 });
 

@@ -22,12 +22,15 @@ import { EffectivePermissionsDto } from '@modules/AccessControl/Application/DTOs
 
 interface EffectivePermissionsResponse {
   permissions: Array<{ action: ActionCode; objectType: ObjectType }>;
+  version: number;
 }
 
-// Contract §4 AC3/AC4: PUT/reset respond with ONLY the effective set, lower-camel, no role
-// metadata -- distinct from this controller's usual PascalCase bodies (see request DTOs).
+// Contract §4 AC3/AC4: PUT/reset respond with the effective set plus the new
+// permissionsVersion (RA-04 review, Decision #1), lower-camel, no role metadata -- distinct
+// from this controller's usual PascalCase bodies (see request DTOs).
 const ToEffectivePermissionsResponse = (dto: EffectivePermissionsDto): EffectivePermissionsResponse => ({
   permissions: dto.Permissions.map((p) => ({ action: p.Action, objectType: p.ObjectType })),
+  version: dto.Version,
 });
 
 @UseGuards(JwtAuthGuard, PermissionGuard)
@@ -85,6 +88,7 @@ export class RoleController {
       {
         Id: id,
         Permissions: request.permissions.map((p) => ({ Action: p.action, ObjectType: p.objectType })),
+        Version: request.version,
         ReasonCode: request.reasonCode,
         ReasonNote: request.reasonNote,
         EvidenceRefs: request.evidenceRefs,
