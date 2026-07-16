@@ -239,6 +239,13 @@ export const ReasonCodeCatalogEntries: ReadonlyArray<ReasonCodeCatalogEntry> = [
     AppliesToObjects: [ObjectType.CoreFlow],
     EvidenceRequired: true,
   },
+  {
+    ReasonCode: 'RC-ROLE-PERMISSION-UPDATE',
+    ReasonGroup: ReasonGroup.MasterDataConfigChange,
+    Description: "Update a role's granted permissions (RBAC role authoring).",
+    AppliesToActions: [ActionCode.Update],
+    AppliesToObjects: [ObjectType.Role],
+  },
 ];
 
 /** Idempotent: existing codes (matched by ReasonCode) are reconciled to the curated catalog. */

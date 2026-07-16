@@ -132,4 +132,15 @@ describe('SeedReasonCodeCatalog', () => {
     expect(handoff!.AppliesToActions).toEqual(expect.arrayContaining([ActionCode.Update, ActionCode.Override]));
     expect(handoff!.EvidenceRequired).toBe(true);
   });
+
+  it('seeds a reason code covering Update:Role for the RA-04 permission editor', async () => {
+    const repo = new InMemoryReasonCodeRepository();
+    await SeedReasonCodeCatalog(repo);
+
+    const rolePermissionUpdate = await repo.FindByCode('RC-ROLE-PERMISSION-UPDATE');
+    expect(rolePermissionUpdate).not.toBeNull();
+    expect(rolePermissionUpdate!.Status).toBe(ReasonCodeStatus.Active);
+    expect(rolePermissionUpdate!.AppliesToActions).toEqual(expect.arrayContaining([ActionCode.Update]));
+    expect(rolePermissionUpdate!.AppliesToObjects).toEqual(expect.arrayContaining([ObjectType.Role]));
+  });
 });

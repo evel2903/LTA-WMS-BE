@@ -1,4 +1,4 @@
-import { BusinessRuleException, NotFoundException } from '@common/Exceptions/AppException';
+import { BusinessRuleException, ConflictException, NotFoundException } from '@common/Exceptions/AppException';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { AuditContext, SystemAuditContext } from '@modules/AccessControl/Application/DTOs/AuditContext';
@@ -28,6 +28,13 @@ import { EffectivePermissionsDto, SetRolePermissionsDto } from '@modules/AccessC
  * /apply/audit all run against that one locked snapshot, closing the concurrent-PUT race
  * (Review Findings #3): two overlapping requests can no longer compute added/removed from
  * the same stale `current` and silently clobber each other's grants.
+ *
+ * `request.Version` must equal the locked role's `PermissionsVersion` or this throws a 409
+ * (RA-04 review, Decision #1): the row lock alone stops two *simultaneous* requests from
+ * computing a diff on the same stale snapshot, but does NOT stop a client that loaded the
+ * editor long before someone else's change from submitting a full set that silently omits
+ * that other change (it never knew the grant existed, so its "desired" set reads as an
+ * intentional revoke). Version mismatch fails fast, before any diff/guard/apply work.
  */
 export class SetRolePermissionsUseCase {
   // auditedTransaction is optional only so fixture-setup tests can construct the use case
@@ -58,9 +65,7 @@ export class SetRolePermissionsUseCase {
 
     const desiredPrime = ApplyReadPrerequisite(request.Permissions);
     const resolvedDesired = await ResolveCatalogPairs(desiredPrime, this.permissionRepository);
-    const response: EffectivePermissionsDto = {
-      Permissions: resolvedDesired.map((p) => ({ Action: p.Action, ObjectType: p.ObjectType })),
-    };
+    const desiredPermissions = resolvedDesired.map((p) => ({ Action: p.Action, ObjectType: p.ObjectType }));
 
     if (!this.auditedTransaction) {
       const current = await this.rolePermissionRepository.FindByRoleId(role.Id);
@@ -74,12 +79,17 @@ export class SetRolePermissionsUseCase {
         ActorUserId: request.ActorUserId,
         RolePermissionRepository: this.rolePermissionRepository,
       });
-      return response;
+      return { Permissions: desiredPermissions, Version: request.Version };
     }
 
     return this.auditedTransaction.Run(async (manager) => {
       const locked = await this.roleRepository.FindByIdForUpdate(request.Id, manager);
       if (!locked) throw new NotFoundException('Role not found');
+      if (locked.PermissionsVersion !== request.Version) {
+        throw new ConflictException(
+          'Role permissions changed since this page was loaded. Reload and reapply your changes.',
+        );
+      }
 
       const current = await this.rolePermissionRepository.FindByRoleId(locked.Id, manager);
       const currentPermissions = await this.permissionRepository.FindByIds(current.map((rp) => rp.PermissionId));
@@ -95,6 +105,9 @@ export class SetRolePermissionsUseCase {
         RolePermissionRepository: this.rolePermissionRepository,
         Manager: manager,
       });
+      locked.PermissionsVersion += 1;
+      await this.roleRepository.Update(locked, manager);
+
       const entry = BuildRolePermissionAuditEntry({
         Context: context,
         Role: locked,
@@ -104,6 +117,10 @@ export class SetRolePermissionsUseCase {
         ReasonNote: request.ReasonNote,
         EvidenceRefs: request.EvidenceRefs,
       });
+      const response: EffectivePermissionsDto = {
+        Permissions: desiredPermissions,
+        Version: locked.PermissionsVersion,
+      };
       return { result: response, entry };
     });
   }

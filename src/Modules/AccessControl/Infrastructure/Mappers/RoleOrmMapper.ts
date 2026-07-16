@@ -11,6 +11,7 @@ export class RoleOrmMapper {
       Description: entity.Description,
       IsSystem: entity.IsSystem,
       Status: entity.Status as RoleStatus,
+      PermissionsVersion: entity.PermissionsVersion,
       CreatedAt: entity.CreatedAt,
       UpdatedAt: entity.UpdatedAt,
       CreatedBy: entity.CreatedBy,
@@ -26,6 +27,7 @@ export class RoleOrmMapper {
     orm.Description = entity.Description;
     orm.IsSystem = entity.IsSystem;
     orm.Status = entity.Status;
+    orm.PermissionsVersion = entity.PermissionsVersion;
     orm.CreatedAt = entity.CreatedAt;
     orm.UpdatedAt = entity.UpdatedAt;
     orm.CreatedBy = entity.CreatedBy;

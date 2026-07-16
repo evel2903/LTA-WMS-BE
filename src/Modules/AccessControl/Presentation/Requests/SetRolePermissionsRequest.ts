@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
+import { IsArray, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 
@@ -21,6 +21,11 @@ export class SetRolePermissionsRequest {
   @ValidateNested({ each: true })
   @Type(() => PermissionPairRequest)
   public permissions!: PermissionPairRequest[];
+
+  // Must equal the role's current permissionsVersion (from the last GET) -- mismatch is a
+  // 409 (RA-04 review, Decision #1).
+  @IsInt()
+  public version!: number;
 
   @IsString()
   @IsNotEmpty()

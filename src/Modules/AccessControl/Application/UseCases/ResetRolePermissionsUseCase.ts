@@ -29,7 +29,11 @@ import { EffectivePermissionsDto, ResetRolePermissionsDto } from '@modules/Acces
  * defined is NOT an error (Decision #10): `defaultSeedPairs=[]` is a valid target and
  * reset wipes the role's permissions to match -- "empty seed resets to empty" is
  * consistent, not a special case to guard against. Like PUT, the role is re-locked and
- * re-diffed INSIDE the transaction (Review Findings #3).
+ * re-diffed INSIDE the transaction (Review Findings #3). Also bumps `PermissionsVersion`
+ * like PUT does (RA-04 review, Decision #1) so a PUT racing against this reset with a
+ * now-stale version gets a clean 409 instead of silently re-adding what reset just
+ * stripped -- but reset itself does NOT check the caller's version: it is an unconditional
+ * restore-to-seed, not a diff against the caller's view, so there is nothing to compare.
  */
 export class ResetRolePermissionsUseCase {
   constructor(
@@ -65,9 +69,7 @@ export class ResetRolePermissionsUseCase {
     }
 
     const resolvedDefault = await ResolveCatalogPairs(defaultSeedPairs, this.permissionRepository);
-    const response: EffectivePermissionsDto = {
-      Permissions: resolvedDefault.map((p) => ({ Action: p.Action, ObjectType: p.ObjectType })),
-    };
+    const defaultPermissions = resolvedDefault.map((p) => ({ Action: p.Action, ObjectType: p.ObjectType }));
 
     if (!this.auditedTransaction) {
       const current = await this.rolePermissionRepository.FindByRoleId(role.Id);
@@ -79,7 +81,7 @@ export class ResetRolePermissionsUseCase {
         ActorUserId: request.ActorUserId,
         RolePermissionRepository: this.rolePermissionRepository,
       });
-      return response;
+      return { Permissions: defaultPermissions, Version: role.PermissionsVersion };
     }
 
     return this.auditedTransaction.Run(async (manager) => {
@@ -89,7 +91,7 @@ export class ResetRolePermissionsUseCase {
       const current = await this.rolePermissionRepository.FindByRoleId(locked.Id, manager);
       const currentPermissions = await this.permissionRepository.FindByIds(current.map((rp) => rp.PermissionId));
       const { Added: added, Removed: removed } = DiffRolePermissions(resolvedDefault, current);
-      // No rider / add-only check here -- see class doc.
+      // No rider / add-only check, no Version check -- see class doc.
 
       await ApplyRolePermissionDiff({
         Role: locked,
@@ -99,6 +101,9 @@ export class ResetRolePermissionsUseCase {
         RolePermissionRepository: this.rolePermissionRepository,
         Manager: manager,
       });
+      locked.PermissionsVersion += 1;
+      await this.roleRepository.Update(locked, manager);
+
       const entry = BuildRolePermissionAuditEntry({
         Context: context,
         Role: locked,
@@ -108,6 +113,10 @@ export class ResetRolePermissionsUseCase {
         ReasonNote: request.ReasonNote,
         EvidenceRefs: request.EvidenceRefs,
       });
+      const response: EffectivePermissionsDto = {
+        Permissions: defaultPermissions,
+        Version: locked.PermissionsVersion,
+      };
       return { result: response, entry };
     });
   }
