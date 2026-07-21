@@ -2,8 +2,17 @@ import {
   PermissionCheckContext,
   PermissionDecision,
 } from '@modules/AccessControl/Application/DTOs/PermissionCheckContext';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 
 export const PERMISSION_CHECKER = Symbol('IPermissionChecker');
+
+export interface PermissionDataScopeDecision extends PermissionDecision {
+  /** `null` means include-all for the axis; `[]` means no values are granted. */
+  WarehouseIds: string[] | null;
+  /** `null` means include-all for the axis; `[]` means no values are granted. */
+  OwnerIds: string[] | null;
+}
 
 /**
  * Coarse-grained authorization decision: role permission `(action, object)` +
@@ -12,4 +21,13 @@ export const PERMISSION_CHECKER = Symbol('IPermissionChecker');
  */
 export interface IPermissionChecker {
   Check(context: PermissionCheckContext): Promise<PermissionDecision>;
+  /**
+   * Resolves list-query scope once so repositories can paginate and count inside the database.
+   * Optional for legacy/custom checkers; production PermissionChecker implements it.
+   */
+  ResolveDataScope?(context: {
+    UserId: string;
+    Action: ActionCode;
+    ObjectType: ObjectType;
+  }): Promise<PermissionDataScopeDecision>;
 }

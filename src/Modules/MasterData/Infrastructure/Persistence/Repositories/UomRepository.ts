@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, FindOptionsWhere, In, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, ILike, In, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
+import { EscapeLikePattern } from '@common/Helpers/SqlLikeEscape';
 import { IUomRepository, UomListFilter } from '@modules/MasterData/Application/Interfaces/IUomRepository';
 import { UomEntity } from '@modules/MasterData/Domain/Entities/UomEntity';
 import { UomOrmMapper } from '@modules/MasterData/Infrastructure/Mappers/UomOrmMapper';
@@ -62,9 +63,26 @@ export class UomRepository implements IUomRepository {
     if (filter.UomName) where.UomName = filter.UomName;
     if (filter.UomType) where.UomType = filter.UomType;
     if (filter.Status) where.Status = filter.Status;
+    const searchText = filter.Search?.trim() || null;
+    const searchPattern = searchText ? `%${EscapeLikePattern(searchText)}%` : null;
+    const scopedWhere: FindOptionsWhere<UomOrmEntity> | FindOptionsWhere<UomOrmEntity>[] = searchPattern
+      ? [
+          ...(filter.UomCode
+            ? filter.UomCode.toLowerCase().includes(searchText!.toLowerCase())
+              ? [{ ...where }]
+              : []
+            : [{ ...where, UomCode: ILike(searchPattern) }]),
+          ...(filter.UomName
+            ? filter.UomName.toLowerCase().includes(searchText!.toLowerCase())
+              ? [{ ...where }]
+              : []
+            : [{ ...where, UomName: ILike(searchPattern) }]),
+        ]
+      : where;
+    if (Array.isArray(scopedWhere) && scopedWhere.length === 0) return { Items: [], TotalItems: 0 };
 
     const [items, total] = await this.uoms.findAndCount({
-      where,
+      where: scopedWhere,
       order: { CreatedAt: 'DESC' },
       skip,
       take,

@@ -1,12 +1,20 @@
-import { IsBoolean, IsDateString, IsNumber, IsObject, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsNumber, IsObject, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
 
 export class ConfirmReceiptLineRequest {
+  @IsOptional()
   @IsString()
-  public InboundPlanLineId!: string;
+  public InboundPlanLineId?: string;
 
-  @IsNumber()
+  @IsNumber({ allowNaN: false, allowInfinity: false, maxDecimalPlaces: 4 })
+  @Max(99_999_999_999_999)
   @Min(0.0001)
   public ActualQuantity!: number;
+
+  @IsOptional()
+  @IsNumber({ allowNaN: false, allowInfinity: false, maxDecimalPlaces: 4 })
+  @Max(99_999_999_999_999)
+  @Min(0.0001)
+  public ExpectedQuantity?: number;
 
   @IsOptional()
   @IsString()
@@ -34,6 +42,7 @@ export class ConfirmReceiptLineRequest {
 
   @IsOptional()
   @IsDateString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
   public ExpiryDate?: string;
 
   @IsOptional()

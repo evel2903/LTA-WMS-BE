@@ -1,14 +1,15 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
 @Index('UQ_receiving_sessions_plan_key', ['InboundPlanId', 'SessionKey'], { unique: true })
+@Index('UQ_receiving_sessions_receipt_key', ['ReceiptId', 'SessionKey'], { unique: true })
 @Index('IDX_receiving_sessions_receipt', ['ReceiptId'])
 @Entity({ name: 'receiving_sessions' })
 export class ReceivingSessionOrmEntity {
   @PrimaryColumn({ name: 'id', type: 'char', length: 36 })
   public Id!: string;
 
-  @Column({ name: 'inbound_plan_id', type: 'char', length: 36 })
-  public InboundPlanId!: string;
+  @Column({ name: 'inbound_plan_id', type: 'char', length: 36, nullable: true })
+  public InboundPlanId!: string | null;
 
   @Column({ name: 'receipt_id', type: 'char', length: 36 })
   public ReceiptId!: string;

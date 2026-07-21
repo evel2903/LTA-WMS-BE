@@ -16,6 +16,22 @@ export interface ReceivingSessionAggregate {
   Receipt: ReceiptEntity;
 }
 
+export interface ReceiptListRecord {
+  Receipt: ReceiptEntity;
+  SupplierCode: string | null;
+  SupplierName: string | null;
+}
+
+export interface ReceiptListFilter {
+  WarehouseId?: string;
+  OwnerId?: string;
+  WarehouseIds?: string[] | null;
+  OwnerIds?: string[] | null;
+  Search?: string;
+  SortBy?: 'CreatedAt' | 'ReceiptNumber';
+  SortDirection?: 'ASC' | 'DESC';
+}
+
 export interface IReceivingRepository {
   CreateSessionWithReceipt(
     session: ReceivingSessionEntity,
@@ -23,9 +39,21 @@ export interface IReceivingRepository {
     manager?: EntityManager,
   ): Promise<ReceivingSessionAggregate>;
   FindOpenSessionByPlanAndKey(inboundPlanId: string, sessionKey: string): Promise<ReceivingSessionAggregate | null>;
+  FindSessionByReceiptAndKey(receiptId: string, sessionKey: string): Promise<ReceivingSessionAggregate | null>;
   FindReceiptById(id: string): Promise<ReceiptEntity | null>;
   FindReceiptByInboundPlanId(inboundPlanId: string): Promise<ReceiptEntity | null>;
+  FindReceiptByIdempotencyKey(
+    ownerId: string,
+    warehouseId: string,
+    idempotencyKey: string,
+  ): Promise<ReceiptEntity | null>;
+  ListReceipts(
+    skip: number,
+    take: number,
+    filter?: ReceiptListFilter,
+  ): Promise<{ Items: ReceiptListRecord[]; TotalItems: number }>;
   UpdateReceipt(receipt: ReceiptEntity, manager?: EntityManager): Promise<ReceiptEntity>;
+  GetNextReceiptLineNumber(receiptId: string, manager: EntityManager): Promise<number>;
   CreateReceiptLine(line: ReceiptLineEntity, manager?: EntityManager): Promise<ReceiptLineEntity>;
   FindReceiptLineById(id: string): Promise<ReceiptLineEntity | null>;
   FindReceiptLineByIdempotencyKey(receiptId: string, idempotencyKey: string): Promise<ReceiptLineEntity | null>;
@@ -60,6 +88,8 @@ export interface IReceivingRepository {
     manager?: EntityManager,
   ): Promise<InboundPutawayReleaseEntity>;
   FindInboundPutawayReleaseById(id: string): Promise<InboundPutawayReleaseEntity | null>;
+  FindInboundPutawayReleaseByReceiptLineId(receiptLineId: string): Promise<InboundPutawayReleaseEntity | null>;
+  LockReceiptLineForRelease(receiptLineId: string, manager: EntityManager): Promise<void>;
   FindInboundPutawayReleaseByIdempotencyKey(
     receiptLineId: string,
     idempotencyKey: string,
@@ -74,6 +104,7 @@ export interface IReceivingRepository {
   FindLatestQcResultByReceiptLineId(receiptLineId: string): Promise<QcResultEntity | null>;
   // Read-only finders for the operational-state aggregate (IRM-01).
   ListReceivingSessionsByInboundPlanId(inboundPlanId: string): Promise<ReceivingSessionEntity[]>;
+  ListReceivingSessionsByReceiptId(receiptId: string): Promise<ReceivingSessionEntity[]>;
   ListReceiptLinesByReceiptId(receiptId: string): Promise<ReceiptLineEntity[]>;
   ListQcTasksByReceiptId(receiptId: string): Promise<QcTaskEntity[]>;
   ListQcResultsByReceiptId(receiptId: string): Promise<QcResultEntity[]>;

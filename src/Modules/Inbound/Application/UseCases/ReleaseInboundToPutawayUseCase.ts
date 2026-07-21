@@ -91,25 +91,31 @@ export class ReleaseInboundToPutawayUseCase {
     const line = await this.receiving.FindReceiptLineById(request.ReceiptLineId);
     if (!line || line.ReceiptId !== receipt.Id) throw new BusinessRuleException('Receipt line not found for release');
 
+    await AssertReceiptPermission(this.permissionChecker, context.ActorUserId, ActionCode.Update, receipt);
+
     const duplicate = await this.receiving.FindInboundPutawayReleaseByIdempotencyKey(line.Id, request.IdempotencyKey);
     if (duplicate) {
       this.AssertDuplicateMatchesRequest(duplicate, request);
       return ReceivingDtoMapper.ToInboundPutawayReleaseDto(duplicate, true);
     }
+    const existingRelease = await this.receiving.FindInboundPutawayReleaseByReceiptLineId(line.Id);
+    if (existingRelease) {
+      throw new ConflictException('Receipt line has already been released to putaway', {
+        ReceiptLineId: line.Id,
+        ExistingReleaseId: existingRelease.Id,
+      });
+    }
 
-    await AssertReceiptPermission(this.permissionChecker, context.ActorUserId, ActionCode.Update, receipt);
-
-    const aggregate = await this.inboundPlans.FindById(receipt.InboundPlanId);
-    if (!aggregate) throw new NotFoundException('Inbound plan not found for release');
+    const aggregate = receipt.InboundPlanId ? await this.inboundPlans.FindById(receipt.InboundPlanId) : null;
+    if (receipt.InboundPlanId && !aggregate) throw new NotFoundException('Inbound plan not found for release');
     // Re-review fix (P1): the plan can be cancelled AFTER its receiving session/receipt
     // was legitimately started (Draft is allowed to receive; Cancel only requires Draft),
     // so this receipt-scoped use case must re-check the plan's CURRENT status itself.
-    AssertInboundPlanNotCancelled(aggregate.Plan.Status);
-    const profile = aggregate.Plan.WarehouseProfileId
-      ? await this.profiles.FindById(aggregate.Plan.WarehouseProfileId)
-      : null;
-    if (aggregate.Plan.WarehouseProfileId && !profile)
-      throw new BusinessRuleException('WarehouseProfile not found for release');
+    // Manual receipts have no aggregate/Plan to cancel, so this only applies when one exists.
+    if (aggregate) AssertInboundPlanNotCancelled(aggregate.Plan.Status);
+    const warehouseProfileId = aggregate ? aggregate.Plan.WarehouseProfileId : receipt.WarehouseProfileId;
+    const profile = warehouseProfileId ? await this.profiles.FindById(warehouseProfileId) : null;
+    if (warehouseProfileId && !profile) throw new BusinessRuleException('WarehouseProfile not found for release');
 
     // IDC-02: SKU.LpnControlled is a SEPARATE source from the profile-level lpnControlled key the
     // rule gate/ProfileRequiresLpn read below -- OR-combined into lpnRequired, never replacing
@@ -134,28 +140,60 @@ export class ReleaseInboundToPutawayUseCase {
     // affected: ConfirmReceiptLineUseCase.DiscrepancySignals already flags any exact-quantity mismatch
     // on a single call, which routes to a mandatory QC checkpoint (EvaluateQcTaskUseCase) that already
     // blocks release until resolved -- adding this guard there too would be redundant.
-    if (sku.SerialControlled) {
+    const receiptLines = sku.SerialControlled ? await this.receiving.ListReceiptLinesByReceiptId(receipt.Id) : [];
+    const serialGroupLines = receiptLines.filter(
+      (existingLine) =>
+        existingLine.SkuId === line.SkuId &&
+        existingLine.UomId === line.UomId &&
+        (aggregate ? existingLine.InboundPlanLineId === line.InboundPlanLineId : existingLine.InboundPlanId === null),
+    );
+    // Review-fix: this existence check used to sit inside the `serialExpectedQuantity !== null`
+    // branch below, so when a Draft plan's Lines were replaced (UpdateInboundPlanUseCase.ReplaceLines
+    // assigns brand new randomUUID() ids on every edit) after this receipt line was confirmed against
+    // the old line id, `.find(...)` returned undefined, `serialExpectedQuantity` fell back to null via
+    // `?? null`, and BOTH this existence check and the completeness check below were silently skipped.
+    // Hoisted here so it runs unconditionally for any SerialControlled release against a plan,
+    // independent of whatever ExpectedQuantity resolves to.
+    if (
+      sku.SerialControlled &&
+      aggregate &&
+      !aggregate.Lines.some((planLineEntry) => planLineEntry.Id === line.InboundPlanLineId)
+    ) {
+      throw new BusinessRuleException('Inbound plan line not found for release');
+    }
+    const manualExpectedQuantities = aggregate
+      ? []
+      : [
+          ...new Set(
+            serialGroupLines.flatMap((existingLine) =>
+              existingLine.ExpectedQuantity === null ? [] : [existingLine.ExpectedQuantity],
+            ),
+          ),
+        ];
+    if (!aggregate && manualExpectedQuantities.length > 1) {
+      throw new BusinessRuleException('Manual serial receipt has conflicting expected quantities for the same SKU/UOM');
+    }
+    const serialExpectedQuantity = aggregate
+      ? (aggregate.Lines.find((planLineEntry) => planLineEntry.Id === line.InboundPlanLineId)?.ExpectedQuantity ?? null)
+      : (manualExpectedQuantities[0] ?? null);
+    if (sku.SerialControlled && serialExpectedQuantity !== null) {
       // IFB-21 review: scope by SkuId too, matching IFB-20's precedent -- a substituted-SKU
       // receipt-line sharing this InboundPlanLineId must not contaminate this SKU's cumulative count.
-      const cumulativeActualQuantity = (await this.receiving.ListReceiptLinesByReceiptId(receipt.Id))
-        .filter(
-          (existingLine) =>
-            existingLine.InboundPlanLineId === line.InboundPlanLineId && existingLine.SkuId === line.SkuId,
-        )
-        .reduce((sum, existingLine) => sum + existingLine.ActualQuantity, 0);
-      const planLine = aggregate.Lines.find((planLineEntry) => planLineEntry.Id === line.InboundPlanLineId);
-      if (!planLine) throw new BusinessRuleException('Inbound plan line not found for release');
-      if (cumulativeActualQuantity < planLine.ExpectedQuantity) {
+      const cumulativeActualQuantity = serialGroupLines.reduce(
+        (sum, existingLine) => sum + existingLine.ActualQuantity,
+        0,
+      );
+      if (cumulativeActualQuantity < serialExpectedQuantity) {
         await this.AuditBlocked(
           context,
           receipt,
           line,
-          'Cannot release: SerialControlled plan line has not received its full expected quantity yet',
-          { ExpectedQuantity: planLine.ExpectedQuantity, CumulativeActualQuantity: cumulativeActualQuantity },
+          'Cannot release: SerialControlled receipt line has not received its full expected quantity yet',
+          { ExpectedQuantity: serialExpectedQuantity, CumulativeActualQuantity: cumulativeActualQuantity },
         );
         throw new BusinessRuleException(
-          'Cannot release: SerialControlled plan line has not received its full expected quantity yet',
-          { ExpectedQuantity: planLine.ExpectedQuantity, CumulativeActualQuantity: cumulativeActualQuantity },
+          'Cannot release: SerialControlled receipt line has not received its full expected quantity yet',
+          { ExpectedQuantity: serialExpectedQuantity, CumulativeActualQuantity: cumulativeActualQuantity },
         );
       }
     }
@@ -259,7 +297,7 @@ export class ReleaseInboundToPutawayUseCase {
       InventoryStatusCode: readiness.InventoryStatusCode,
       CurrentLocationId: currentLocation.Id,
       CurrentLocationCode: currentLocation.Code,
-      WarehouseProfileId: aggregate.Plan.WarehouseProfileId,
+      WarehouseProfileId: warehouseProfileId,
       LabelDecision: labelDecision?.Decision ?? null,
       LabelReason: labelDecision?.Reason ?? null,
       MatchedPrintJobId: labelDecision?.MatchedPrintJobId ?? null,
@@ -280,7 +318,7 @@ export class ReleaseInboundToPutawayUseCase {
       CreatedAt: now,
       UpdatedAt: now,
     });
-    const outbox = this.BuildOutbox(outboxId, aggregate.Plan.BusinessReference, release);
+    const outbox = this.BuildOutbox(outboxId, aggregate?.Plan.BusinessReference ?? receipt.BusinessReference, release);
     const milestone = milestoneId
       ? new WorkflowMilestoneEntity({
           Id: milestoneId,
@@ -303,6 +341,21 @@ export class ReleaseInboundToPutawayUseCase {
 
     try {
       return await this.audited.Run(async (manager) => {
+        // Decision (2026-07-21): the DB unique index that used to catch this race for every
+        // receipt line was narrowed to manual-only (UQ_inbound_putaway_releases_receipt_line
+        // is now WHERE inbound_plan_id IS NULL), so a plan-based release has no DB-level
+        // protection left on its own. Close the race with a real lock instead of relying on
+        // the index: hold a row lock on the receipt line for this transaction's lifetime, then
+        // re-check for an existing release -- a concurrent request may have committed one
+        // while this one waited on the lock.
+        await this.receiving.LockReceiptLineForRelease(line.Id, manager);
+        const concurrentExisting = await this.receiving.FindInboundPutawayReleaseByReceiptLineId(line.Id);
+        if (concurrentExisting) {
+          throw new ConflictException('Receipt line has already been released to putaway', {
+            ReceiptLineId: line.Id,
+            ExistingReleaseId: concurrentExisting.Id,
+          });
+        }
         const created = await this.receiving.CreateInboundPutawayRelease(release, manager);
         await this.EnsureReadyForPutawayDimension(created, manager);
         await this.integrations.CreateOutboxMessage(outbox, manager);
@@ -328,13 +381,16 @@ export class ReleaseInboundToPutawayUseCase {
       });
     } catch (error) {
       if (error instanceof ConflictException) {
-        const concurrentDuplicate = await this.receiving.FindInboundPutawayReleaseByIdempotencyKey(
-          line.Id,
-          request.IdempotencyKey,
-        );
-        if (concurrentDuplicate) {
-          this.AssertDuplicateMatchesRequest(concurrentDuplicate, request);
-          return ReceivingDtoMapper.ToInboundPutawayReleaseDto(concurrentDuplicate, true);
+        const concurrentRelease = await this.receiving.FindInboundPutawayReleaseByReceiptLineId(line.Id);
+        if (concurrentRelease) {
+          if (concurrentRelease.IdempotencyKey === request.IdempotencyKey) {
+            this.AssertDuplicateMatchesRequest(concurrentRelease, request);
+            return ReceivingDtoMapper.ToInboundPutawayReleaseDto(concurrentRelease, true);
+          }
+          throw new ConflictException('Receipt line has already been released to putaway', {
+            ReceiptLineId: line.Id,
+            ExistingReleaseId: concurrentRelease.Id,
+          });
         }
       }
       throw error;

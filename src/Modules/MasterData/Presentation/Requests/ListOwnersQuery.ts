@@ -29,4 +29,9 @@ export class ListOwnersQuery {
   @IsString()
   @MaxLength(255)
   public OwnerName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  public Search?: string;
 }

@@ -1,10 +1,13 @@
-import { QueryRunner } from 'typeorm';
+import { getMetadataArgsStorage, QueryRunner } from 'typeorm';
 import DataSource from '@shared/Database/TypeOrmDataSource';
 import { CreateInboundPlans1781643000000 } from '@shared/Database/Migrations/1781643000000-CreateInboundPlans';
 import { CreateReceivingReceipts1781643300000 } from '@shared/Database/Migrations/1781643300000-CreateReceivingReceipts';
 import { CreateInboundDiscrepancies1781643600000 } from '@shared/Database/Migrations/1781643600000-CreateInboundDiscrepancies';
 import { CreateQcTasksAndResults1781643900000 } from '@shared/Database/Migrations/1781643900000-CreateQcTasksAndResults';
 import { CreateInboundLpnsAndPutawayReleases1781644200000 } from '@shared/Database/Migrations/1781644200000-CreateInboundLpnsAndPutawayReleases';
+import { ScopeManualPutawayReleaseUniqueness1784399999000 } from '@shared/Database/Migrations/1784399999000-ScopeManualPutawayReleaseUniqueness';
+import { AllowManualInboundReceipts1784400000000 } from '@shared/Database/Migrations/1784400000000-AllowManualInboundReceipts';
+import { ScopeManualReceiptIdempotency1784538535670 } from '@shared/Database/Migrations/1784538535670-ScopeManualReceiptIdempotency';
 import { InboundDiscrepancyOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundDiscrepancyOrmEntity';
 import { InboundLpnOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundLpnOrmEntity';
 import { InboundPutawayReleaseOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/InboundPutawayReleaseOrmEntity';
@@ -23,6 +26,7 @@ import { QcTaskStatus } from '@modules/Inbound/Domain/Enums/QcTaskStatus';
 import { ReceiptDocumentStatus } from '@modules/Inbound/Domain/Enums/ReceiptDocumentStatus';
 import { ReceiptLineStatus } from '@modules/Inbound/Domain/Enums/ReceiptLineStatus';
 import { ReceivingSessionStatus } from '@modules/Inbound/Domain/Enums/ReceivingSessionStatus';
+import { EscapeReceiptLikePattern } from '@modules/Inbound/Infrastructure/Persistence/Repositories/ReceivingRepository';
 
 const fakeRunner = () => {
   const queries: string[] = [];
@@ -52,6 +56,65 @@ describe('Inbound schema registration', () => {
         ReceiptLineOrmEntity,
       ]),
     );
+  });
+
+  it('keeps the manual receipt-number partial unique index in TypeORM metadata', () => {
+    const index = getMetadataArgsStorage().indices.find(
+      (candidate) => candidate.target === ReceiptOrmEntity && candidate.name === 'UQ_receipts_manual_number',
+    );
+
+    expect(index).toMatchObject({
+      unique: true,
+      where: '"inbound_plan_id" IS NULL',
+    });
+    expect(index?.columns).toEqual(['OwnerId', 'WarehouseId', 'ReceiptNumber']);
+  });
+
+  it('keeps the receipt idempotency unique index scoped to manual receipts in TypeORM metadata', () => {
+    const index = getMetadataArgsStorage().indices.find(
+      (candidate) => candidate.target === ReceiptOrmEntity && candidate.name === 'UQ_receipts_manual_idempotency',
+    );
+
+    expect(index).toMatchObject({
+      unique: true,
+      where: '"inbound_plan_id" IS NULL AND "idempotency_key" IS NOT NULL',
+    });
+    expect(index?.columns).toEqual(['OwnerId', 'WarehouseId', 'IdempotencyKey']);
+  });
+
+  it('keeps the putaway-release unique index scoped to manual receipt lines in TypeORM metadata', () => {
+    const index = getMetadataArgsStorage().indices.find(
+      (candidate) =>
+        candidate.target === InboundPutawayReleaseOrmEntity &&
+        candidate.name === 'UQ_inbound_putaway_releases_receipt_line',
+    );
+
+    expect(index).toMatchObject({ unique: true, where: '"inbound_plan_id" IS NULL' });
+    expect(index?.columns).toEqual(['ReceiptLineId']);
+  });
+
+  it('rebuilds the receipt idempotency unique index for the manual path only', async () => {
+    const { runner, queries } = fakeRunner();
+    await new ScopeManualReceiptIdempotency1784538535670().up(runner);
+    const sql = normalizeMigrationSql(queries);
+
+    expect(sql).toContain('DROP INDEX "public"."UQ_receipts_manual_idempotency"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "UQ_receipts_manual_idempotency"');
+    expect(sql).toContain('WHERE "inbound_plan_id" IS NULL AND "idempotency_key" IS NOT NULL');
+  });
+
+  it('reserves the release-line unique index for manual receipt lines before IPR-02 migration runs', async () => {
+    const { runner, queries } = fakeRunner();
+    await new ScopeManualPutawayReleaseUniqueness1784399999000().up(runner);
+    const sql = normalizeMigrationSql(queries);
+
+    expect(sql).toContain('DROP INDEX "public"."UQ_inbound_putaway_releases_receipt_line"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "UQ_inbound_putaway_releases_receipt_line"');
+    expect(sql).toContain('WHERE "inbound_plan_id" IS NULL');
+  });
+
+  it('escapes receipt search LIKE metacharacters as literals', () => {
+    expect(EscapeReceiptLikePattern(String.raw`RCPT_100%\A`)).toBe(String.raw`RCPT\_100\%\\A`);
   });
 
   it('creates inbound plan tables and unique business-key index in migration', async () => {
@@ -132,6 +195,42 @@ describe('Inbound schema registration', () => {
     expect(sql).not.toContain('LABEL_PRINTED');
     expect(sql).not.toContain('PUTAWAY_RELEASED');
     expect(sql).not.toContain('PUTAWAY_IN_PROGRESS');
+  });
+
+  it('allows manual receipt lineage across all 9 plan, 7 plan-line and 2 expected-quantity columns', async () => {
+    const { runner, queries } = fakeRunner();
+    await new AllowManualInboundReceipts1784400000000().up(runner);
+    const sql = normalizeMigrationSql(queries);
+    for (const table of [
+      'receipts',
+      'receiving_sessions',
+      'receipt_lines',
+      'inbound_discrepancies',
+      'qc_tasks',
+      'qc_results',
+      'inbound_lpns',
+      'inbound_putaway_releases',
+      'putaway_tasks',
+    ]) {
+      expect(sql).toContain(`ALTER TABLE "${table}" ALTER COLUMN "inbound_plan_id" DROP NOT NULL`);
+    }
+    for (const table of [
+      'receipt_lines',
+      'inbound_discrepancies',
+      'qc_tasks',
+      'qc_results',
+      'inbound_lpns',
+      'inbound_putaway_releases',
+      'putaway_tasks',
+    ]) {
+      expect(sql).toContain(`ALTER TABLE "${table}" ALTER COLUMN "inbound_plan_line_id" DROP NOT NULL`);
+    }
+    expect(sql).toContain('ALTER TABLE "receipt_lines" ALTER COLUMN "expected_quantity" DROP NOT NULL');
+    expect(sql).toContain('ALTER TABLE "inbound_discrepancies" ALTER COLUMN "expected_quantity" DROP NOT NULL');
+    expect(sql).toContain('ADD COLUMN "supplier_id" char(36)');
+    expect(sql).toContain('ALTER COLUMN "supplier_id" SET NOT NULL');
+    expect(sql).toContain('CREATE UNIQUE INDEX "UQ_receipts_manual_idempotency"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "UQ_receiving_sessions_receipt_key"');
   });
 
   it('keeps inbound document and gate states separate from InventoryStatus terms', () => {

@@ -29,4 +29,9 @@ export class ListWarehouseProfilesQuery {
   @IsString()
   @MaxLength(36)
   public WarehouseId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  public Search?: string;
 }

@@ -9,6 +9,7 @@ export interface UomListFilter {
   UomName?: string;
   UomType?: string;
   Status?: MasterDataStatus;
+  Search?: string;
 }
 
 export interface IUomRepository {

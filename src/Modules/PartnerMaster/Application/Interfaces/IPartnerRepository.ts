@@ -12,6 +12,7 @@ export interface PartnerListFilter {
   PartnerName?: string;
   SourceSystem?: string;
   ExternalReference?: string;
+  Search?: string;
 }
 
 export interface IPartnerRepository {

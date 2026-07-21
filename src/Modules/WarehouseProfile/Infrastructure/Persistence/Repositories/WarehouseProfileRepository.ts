@@ -1,7 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, FindOptionsWhere, IsNull, LessThan, LessThanOrEqual, MoreThan, Not, Repository } from 'typeorm';
+import {
+  EntityManager,
+  FindOptionsWhere,
+  ILike,
+  IsNull,
+  LessThan,
+  LessThanOrEqual,
+  MoreThan,
+  Not,
+  Repository,
+} from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
+import { EscapeLikePattern } from '@common/Helpers/SqlLikeEscape';
 import {
   IWarehouseProfileRepository,
   WarehouseProfileListFilter,
@@ -60,8 +71,16 @@ export class WarehouseProfileRepository implements IWarehouseProfileRepository {
     if (filter.WarehouseTypeCode) where.WarehouseTypeCode = filter.WarehouseTypeCode;
     if (filter.WarehouseId) where.WarehouseId = filter.WarehouseId;
 
+    const searchPattern = filter.Search?.trim() ? `%${EscapeLikePattern(filter.Search.trim())}%` : null;
+    const scopedWhere = searchPattern
+      ? [
+          { ...where, ProfileCode: ILike(searchPattern) },
+          { ...where, ProfileName: ILike(searchPattern) },
+        ]
+      : where;
+
     const [items, total] = await this.profiles.findAndCount({
-      where,
+      where: scopedWhere,
       order: { CreatedAt: 'DESC' },
       skip,
       take,

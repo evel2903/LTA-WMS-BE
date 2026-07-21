@@ -38,6 +38,7 @@ import {
 import { CancelInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CancelInboundPlanUseCase';
 import { ConfirmInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundPlanUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
+import { CreateManualReceiptUseCase } from '@modules/Inbound/Application/UseCases/CreateManualReceiptUseCase';
 import { ImportInboundPlanLinesUseCase } from '@modules/Inbound/Application/UseCases/ImportInboundPlanLinesUseCase';
 import { UpdateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/UpdateInboundPlanUseCase';
 import {
@@ -50,7 +51,10 @@ import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases
 import { EvaluateQcTaskUseCase } from '@modules/Inbound/Application/UseCases/EvaluateQcTaskUseCase';
 import { GetInboundOperationalStateUseCase } from '@modules/Inbound/Application/UseCases/GetInboundOperationalStateUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
+import { GetReceiptOperationalStateUseCase } from '@modules/Inbound/Application/UseCases/GetReceiptOperationalStateUseCase';
+import { GetReceiptUseCase } from '@modules/Inbound/Application/UseCases/GetReceiptUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
+import { ListReceiptsUseCase } from '@modules/Inbound/Application/UseCases/ListReceiptsUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
 import { RecordQcResultUseCase } from '@modules/Inbound/Application/UseCases/RecordQcResultUseCase';
 import { ReleaseInboundToPutawayUseCase } from '@modules/Inbound/Application/UseCases/ReleaseInboundToPutawayUseCase';
@@ -261,6 +265,46 @@ import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRu
       inject: [INBOUND_PLAN_REPOSITORY, RECEIVING_REPOSITORY, PERMISSION_CHECKER],
     },
     {
+      provide: CreateManualReceiptUseCase,
+      useFactory: (
+        receiving: IReceivingRepository,
+        partners: IPartnerRepository,
+        owners: IOwnerRepository,
+        warehouses: IWarehouseRepository,
+        profiles: IWarehouseProfileRepository,
+        audited: AuditedTransaction,
+        permissionChecker: IPermissionChecker,
+      ) =>
+        new CreateManualReceiptUseCase(receiving, partners, owners, warehouses, profiles, audited, permissionChecker),
+      inject: [
+        RECEIVING_REPOSITORY,
+        PARTNER_REPOSITORY,
+        OWNER_REPOSITORY,
+        WAREHOUSE_REPOSITORY,
+        WAREHOUSE_PROFILE_REPOSITORY,
+        AuditedTransaction,
+        PERMISSION_CHECKER,
+      ],
+    },
+    {
+      provide: ListReceiptsUseCase,
+      useFactory: (receiving: IReceivingRepository, permissionChecker: IPermissionChecker) =>
+        new ListReceiptsUseCase(receiving, permissionChecker),
+      inject: [RECEIVING_REPOSITORY, PERMISSION_CHECKER],
+    },
+    {
+      provide: GetReceiptUseCase,
+      useFactory: (receiving: IReceivingRepository, permissionChecker: IPermissionChecker) =>
+        new GetReceiptUseCase(receiving, permissionChecker),
+      inject: [RECEIVING_REPOSITORY, PERMISSION_CHECKER],
+    },
+    {
+      provide: GetReceiptOperationalStateUseCase,
+      useFactory: (receiving: IReceivingRepository, permissionChecker: IPermissionChecker) =>
+        new GetReceiptOperationalStateUseCase(receiving, permissionChecker),
+      inject: [RECEIVING_REPOSITORY, PERMISSION_CHECKER],
+    },
+    {
       provide: ListInboundPlansUseCase,
       useFactory: (inboundPlans: IInboundPlanRepository, permissionChecker: IPermissionChecker) =>
         new ListInboundPlansUseCase(inboundPlans, permissionChecker),
@@ -330,6 +374,7 @@ import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRu
         reasonCatalog: IReasonCodeCatalog,
         readiness: ValidateReceivingReadinessUseCase,
         skus: ISkuRepository,
+        uoms: IUomRepository,
         audited: AuditedTransaction,
         permissionChecker: IPermissionChecker,
       ) =>
@@ -341,6 +386,7 @@ import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRu
           reasonCatalog,
           readiness,
           skus,
+          uoms,
           audited,
           permissionChecker,
         ),
@@ -352,6 +398,7 @@ import { InboundRuleGate } from '@modules/Inbound/Application/Services/InboundRu
         REASON_CODE_CATALOG,
         ValidateReceivingReadinessUseCase,
         SKU_REPOSITORY,
+        UOM_REPOSITORY,
         AuditedTransaction,
         PERMISSION_CHECKER,
       ],

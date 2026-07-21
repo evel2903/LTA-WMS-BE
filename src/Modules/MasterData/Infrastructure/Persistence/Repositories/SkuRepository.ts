@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, FindOptionsWhere, In, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, ILike, In, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
+import { EscapeLikePattern } from '@common/Helpers/SqlLikeEscape';
 import { ISkuRepository, SkuListFilter } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
 import { SkuEntity } from '@modules/MasterData/Domain/Entities/SkuEntity';
 import { SkuOrmMapper } from '@modules/MasterData/Infrastructure/Mappers/SkuOrmMapper';
@@ -64,8 +65,26 @@ export class SkuRepository implements ISkuRepository {
     if (filter.ItemClass) where.ItemClass = filter.ItemClass;
     if (filter.ItemStatus) where.ItemStatus = filter.ItemStatus;
 
+    const searchText = filter.Search?.trim() || null;
+    const searchPattern = searchText ? `%${EscapeLikePattern(searchText)}%` : null;
+    const scopedWhere: FindOptionsWhere<SkuOrmEntity> | FindOptionsWhere<SkuOrmEntity>[] = searchPattern
+      ? [
+          ...(filter.SkuCode
+            ? filter.SkuCode.toLowerCase().includes(searchText!.toLowerCase())
+              ? [{ ...where }]
+              : []
+            : [{ ...where, SkuCode: ILike(searchPattern) }]),
+          ...(filter.SkuName
+            ? filter.SkuName.toLowerCase().includes(searchText!.toLowerCase())
+              ? [{ ...where }]
+              : []
+            : [{ ...where, SkuName: ILike(searchPattern) }]),
+        ]
+      : where;
+    if (Array.isArray(scopedWhere) && scopedWhere.length === 0) return { Items: [], TotalItems: 0 };
+
     const [items, total] = await this.skus.findAndCount({
-      where,
+      where: scopedWhere,
       order: { CreatedAt: 'DESC' },
       skip,
       take,

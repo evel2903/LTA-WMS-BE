@@ -80,20 +80,22 @@ export class CaptureInboundDiscrepancyUseCase {
     const line = await this.receiving.FindReceiptLineById(request.ReceiptLineId);
     if (!line || line.ReceiptId !== receipt.Id) throw new BusinessRuleException('Receipt line not found for receipt');
 
-    const aggregate = await this.inboundPlans.FindById(receipt.InboundPlanId);
-    if (!aggregate) throw new NotFoundException('Inbound plan not found for receipt');
-    // Re-review fix (P1): the plan can be cancelled AFTER its receiving session/receipt
-    // was legitimately started (Draft is allowed to receive; Cancel only requires Draft),
-    // so this receipt-scoped use case must re-check the plan's CURRENT status itself.
-    AssertInboundPlanNotCancelled(aggregate.Plan.Status);
-    const planLine = aggregate.Lines.find((item) => item.Id === line.InboundPlanLineId);
-    if (!planLine) throw new BusinessRuleException('Inbound plan line not found for discrepancy');
+    const aggregate = receipt.InboundPlanId ? await this.inboundPlans.FindById(receipt.InboundPlanId) : null;
+    if (receipt.InboundPlanId) {
+      if (!aggregate) throw new NotFoundException('Inbound plan not found for receipt');
+      AssertInboundPlanNotCancelled(aggregate.Plan.Status);
+      const planLine = aggregate.Lines.find((item) => item.Id === line.InboundPlanLineId);
+      if (!planLine) throw new BusinessRuleException('Inbound plan line not found for discrepancy');
+    }
 
     if (!line.DiscrepancySignals.length && !this.IsExplicitDiscrepancy(request.DiscrepancyType)) {
       throw new BusinessRuleException('Receipt line has no discrepancy signal to route');
     }
     if (!this.IsDiscrepancyTypeCompatible(request.DiscrepancyType, line.DiscrepancySignals)) {
       throw new BusinessRuleException('Discrepancy type does not match receipt-line signal');
+    }
+    if (request.DiscrepancyType === InboundDiscrepancyType.QuantityVariance && line.ExpectedQuantity === null) {
+      throw new BusinessRuleException('Quantity variance requires an expected quantity');
     }
 
     const reason = await this.reasonCatalog.ValidateReason({
@@ -106,7 +108,7 @@ export class CaptureInboundDiscrepancyUseCase {
       request,
       line.ActualQuantity,
       line.ExpectedQuantity,
-      aggregate.Plan.WarehouseProfileId,
+      aggregate ? aggregate.Plan.WarehouseProfileId : receipt.WarehouseProfileId,
       receipt.WarehouseId,
       receipt.OwnerId,
       line.SkuId,
@@ -275,13 +277,17 @@ export class CaptureInboundDiscrepancyUseCase {
   private async DecideTolerance(
     request: CaptureInboundDiscrepancyDto,
     actualQuantity: number,
-    expectedQuantity: number,
+    expectedQuantity: number | null,
     warehouseProfileId: string | null,
     warehouseId: string,
     ownerId: string,
     skuId: string,
   ): Promise<{ Decision: InboundDiscrepancyToleranceDecision; RuleCode: string | null }> {
-    if (request.DiscrepancyType !== InboundDiscrepancyType.QuantityVariance || actualQuantity <= expectedQuantity) {
+    if (
+      request.DiscrepancyType !== InboundDiscrepancyType.QuantityVariance ||
+      expectedQuantity === null ||
+      actualQuantity <= expectedQuantity
+    ) {
       return { Decision: InboundDiscrepancyToleranceDecision.NotApplicable, RuleCode: null };
     }
     // Same formula as the previous hardcoded path — the expectedQuantity===0 boundary yields 100.

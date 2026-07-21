@@ -157,7 +157,7 @@ export interface StartReceivingSessionDto {
 
 export interface ReceivingSessionDto {
   Id: string;
-  InboundPlanId: string;
+  InboundPlanId: string | null;
   ReceiptId: string;
   ReceiptNumber: string;
   SessionKey: string;
@@ -178,13 +178,17 @@ export interface ReceivingSessionDto {
 
 export interface ReceiptDto {
   Id: string;
-  InboundPlanId: string;
+  InboundPlanId: string | null;
   ReceiptNumber: string;
   BusinessReference: string;
   OwnerId: string;
   OwnerCode: string | null;
   WarehouseId: string;
   WarehouseCode: string | null;
+  WarehouseProfileId: string | null;
+  SupplierId: string;
+  SupplierCode: string | null;
+  SupplierName: string | null;
   Status: ReceiptDocumentStatus;
   CoreFlowInstanceId: string | null;
   CreatedAt: Date;
@@ -210,8 +214,9 @@ export interface ReceiptLineScanEvidenceDto {
 
 export interface ConfirmReceiptLineDto {
   ReceiptId: string;
-  InboundPlanLineId: string;
+  InboundPlanLineId?: string | null;
   ActualQuantity: number;
+  ExpectedQuantity?: number | null;
   SkuId?: string | null;
   UomId?: string | null;
   ManualConfirm?: boolean;
@@ -227,14 +232,14 @@ export interface ConfirmReceiptLineDto {
 export interface ReceiptLineDto {
   Id: string;
   ReceiptId: string;
-  InboundPlanId: string;
-  InboundPlanLineId: string;
+  InboundPlanId: string | null;
+  InboundPlanLineId: string | null;
   LineNumber: number;
   SkuId: string;
   SkuCode: string | null;
   UomId: string;
   UomCode: string | null;
-  ExpectedQuantity: number;
+  ExpectedQuantity: number | null;
   ActualQuantity: number;
   Status: ReceiptLineStatus;
   ManualConfirm: boolean;
@@ -270,8 +275,8 @@ export interface InboundLpnDto {
   Id: string;
   ReceiptId: string;
   ReceiptLineId: string;
-  InboundPlanId: string;
-  InboundPlanLineId: string;
+  InboundPlanId: string | null;
+  InboundPlanLineId: string | null;
   OwnerId: string;
   OwnerCode: string | null;
   WarehouseId: string;
@@ -313,8 +318,8 @@ export interface InboundPutawayReleaseDto {
   InboundLpnId: string | null;
   ReceiptId: string;
   ReceiptLineId: string;
-  InboundPlanId: string;
-  InboundPlanLineId: string;
+  InboundPlanId: string | null;
+  InboundPlanLineId: string | null;
   OwnerId: string;
   OwnerCode: string | null;
   WarehouseId: string;
@@ -378,8 +383,8 @@ export interface InboundDiscrepancyDto {
   Id: string;
   ReceiptId: string;
   ReceiptLineId: string;
-  InboundPlanId: string;
-  InboundPlanLineId: string;
+  InboundPlanId: string | null;
+  InboundPlanLineId: string | null;
   OwnerId: string;
   OwnerCode: string | null;
   WarehouseId: string;
@@ -389,7 +394,7 @@ export interface InboundDiscrepancyDto {
   Status: InboundDiscrepancyStatus;
   Severity: ControlExceptionSeverity;
   ToleranceDecision: InboundDiscrepancyToleranceDecision;
-  ExpectedQuantity: number;
+  ExpectedQuantity: number | null;
   ActualQuantity: number;
   ReasonCode: string;
   ReasonCodeId: string;
@@ -421,8 +426,8 @@ export interface QcTaskDto {
   Id: string;
   ReceiptId: string;
   ReceiptLineId: string;
-  InboundPlanId: string;
-  InboundPlanLineId: string;
+  InboundPlanId: string | null;
+  InboundPlanLineId: string | null;
   OwnerId: string;
   OwnerCode: string | null;
   WarehouseId: string;
@@ -470,8 +475,8 @@ export interface QcResultDto {
   QcTaskId: string;
   ReceiptId: string;
   ReceiptLineId: string;
-  InboundPlanId: string;
-  InboundPlanLineId: string;
+  InboundPlanId: string | null;
+  InboundPlanLineId: string | null;
   OwnerId: string;
   OwnerCode: string | null;
   WarehouseId: string;

@@ -46,7 +46,10 @@ export class ReceivingDtoMapper {
     };
   }
 
-  public static ToReceiptDto(receipt: ReceiptEntity): ReceiptDto {
+  public static ToReceiptDto(
+    receipt: ReceiptEntity,
+    supplier?: { SupplierCode: string | null; SupplierName: string | null },
+  ): ReceiptDto {
     return {
       Id: receipt.Id,
       InboundPlanId: receipt.InboundPlanId,
@@ -56,6 +59,10 @@ export class ReceivingDtoMapper {
       OwnerCode: receipt.OwnerCode,
       WarehouseId: receipt.WarehouseId,
       WarehouseCode: receipt.WarehouseCode,
+      WarehouseProfileId: receipt.WarehouseProfileId,
+      SupplierId: receipt.SupplierId,
+      SupplierCode: supplier?.SupplierCode ?? null,
+      SupplierName: supplier?.SupplierName ?? null,
       Status: receipt.Status,
       CoreFlowInstanceId: receipt.CoreFlowInstanceId,
       CreatedAt: receipt.CreatedAt,

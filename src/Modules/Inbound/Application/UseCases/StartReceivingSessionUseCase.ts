@@ -65,6 +65,8 @@ export class StartReceivingSessionUseCase {
         OwnerCode: aggregate.Plan.OwnerCode,
         WarehouseId: aggregate.Plan.WarehouseId,
         WarehouseCode: aggregate.Plan.WarehouseCode,
+        WarehouseProfileId: aggregate.Plan.WarehouseProfileId,
+        SupplierId: aggregate.Plan.SupplierId,
         CoreFlowInstanceId: aggregate.Plan.CoreFlowInstanceId,
         CreatedAt: now,
         UpdatedAt: now,

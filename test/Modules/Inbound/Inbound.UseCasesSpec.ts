@@ -23,6 +23,9 @@ import { CaptureInboundDiscrepancyUseCase } from '@modules/Inbound/Application/U
 import { ConfirmInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundPlanUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
+import { CreateManualReceiptUseCase } from '@modules/Inbound/Application/UseCases/CreateManualReceiptUseCase';
+import { GetReceiptOperationalStateUseCase } from '@modules/Inbound/Application/UseCases/GetReceiptOperationalStateUseCase';
+import { ListReceiptsUseCase } from '@modules/Inbound/Application/UseCases/ListReceiptsUseCase';
 import { UpdateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/UpdateInboundPlanUseCase';
 import { GetInboundOperationalStateUseCase } from '@modules/Inbound/Application/UseCases/GetInboundOperationalStateUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
@@ -235,17 +238,28 @@ class FakeReceivingRepository implements IReceivingRepository {
   public PutawayReleases: InboundPutawayReleaseEntity[] = [];
   public QcTasks: QcTaskEntity[] = [];
   public QcResults: QcResultEntity[] = [];
+  public RaceNextManualCreate = false;
+  public InjectConcurrentReleaseOnNextLock: InboundPutawayReleaseEntity | null = null;
 
   public async CreateSessionWithReceipt(
     session: ReceivingSessionEntity,
     receipt: ReceiptEntity,
   ): Promise<{ Session: ReceivingSessionEntity; Receipt: ReceiptEntity }> {
+    if (this.RaceNextManualCreate && receipt.InboundPlanId === null) {
+      this.RaceNextManualCreate = false;
+      this.Receipts.push(receipt);
+      this.Sessions.push(session);
+      throw new ConflictException('Manual receipt idempotency key already exists');
+    }
     const existingReceiptIndex = this.Receipts.findIndex((item) => item.Id === receipt.Id);
     if (existingReceiptIndex >= 0) this.Receipts[existingReceiptIndex] = receipt;
     else this.Receipts.push(receipt);
     if (
       this.Sessions.some(
-        (item) => item.InboundPlanId === session.InboundPlanId && item.SessionKey === session.SessionKey,
+        (item) =>
+          (item.ReceiptId === session.ReceiptId ||
+            (session.InboundPlanId !== null && item.InboundPlanId === session.InboundPlanId)) &&
+          item.SessionKey === session.SessionKey,
       )
     ) {
       throw new ConflictException('Receiving session already exists');
@@ -267,6 +281,16 @@ class FakeReceivingRepository implements IReceivingRepository {
     return { Session: session, Receipt: receipt };
   }
 
+  public async FindSessionByReceiptAndKey(
+    receiptId: string,
+    sessionKey: string,
+  ): Promise<{ Session: ReceivingSessionEntity; Receipt: ReceiptEntity } | null> {
+    const session = this.Sessions.find((item) => item.ReceiptId === receiptId && item.SessionKey === sessionKey);
+    if (!session) return null;
+    const receipt = this.Receipts.find((item) => item.Id === receiptId);
+    return receipt ? { Session: session, Receipt: receipt } : null;
+  }
+
   public async FindReceiptById(id: string): Promise<ReceiptEntity | null> {
     return this.Receipts.find((item) => item.Id === id) ?? null;
   }
@@ -275,11 +299,70 @@ class FakeReceivingRepository implements IReceivingRepository {
     return this.Receipts.find((item) => item.InboundPlanId === inboundPlanId) ?? null;
   }
 
+  public async FindReceiptByIdempotencyKey(
+    ownerId: string,
+    warehouseId: string,
+    idempotencyKey: string,
+  ): Promise<ReceiptEntity | null> {
+    return (
+      this.Receipts.find(
+        (item) =>
+          item.OwnerId === ownerId && item.WarehouseId === warehouseId && item.IdempotencyKey === idempotencyKey,
+      ) ?? null
+    );
+  }
+
+  public async ListReceipts(
+    skip: number,
+    take: number,
+    filter: {
+      WarehouseId?: string;
+      OwnerId?: string;
+      WarehouseIds?: string[] | null;
+      OwnerIds?: string[] | null;
+      Search?: string;
+    } = {},
+  ): Promise<{
+    Items: Array<{ Receipt: ReceiptEntity; SupplierCode: string | null; SupplierName: string | null }>;
+    TotalItems: number;
+  }> {
+    const items = this.Receipts.filter((item) => {
+      if (filter.WarehouseId && item.WarehouseId !== filter.WarehouseId) return false;
+      if (filter.OwnerId && item.OwnerId !== filter.OwnerId) return false;
+      if (filter.WarehouseIds && !filter.WarehouseIds.includes(item.WarehouseId)) return false;
+      if (filter.OwnerIds && !filter.OwnerIds.includes(item.OwnerId)) return false;
+      if (
+        filter.Search &&
+        !`${item.ReceiptNumber} ${item.BusinessReference}`.toLowerCase().includes(filter.Search.toLowerCase())
+      ) {
+        return false;
+      }
+      return true;
+    });
+    return {
+      Items: items.slice(skip, skip + take).map((receipt) => ({
+        Receipt: receipt,
+        SupplierCode: 'SUP-A',
+        SupplierName: 'Supplier A',
+      })),
+      TotalItems: items.length,
+    };
+  }
+
   public async UpdateReceipt(receipt: ReceiptEntity): Promise<ReceiptEntity> {
     const index = this.Receipts.findIndex((item) => item.Id === receipt.Id);
     if (index >= 0) this.Receipts[index] = receipt;
     else this.Receipts.push(receipt);
     return receipt;
+  }
+
+  public async GetNextReceiptLineNumber(receiptId: string): Promise<number> {
+    return (
+      this.Lines.filter((item) => item.ReceiptId === receiptId).reduce(
+        (maximum, item) => Math.max(maximum, item.LineNumber),
+        0,
+      ) + 1
+    );
   }
 
   public async CreateReceiptLine(line: ReceiptLineEntity): Promise<ReceiptLineEntity> {
@@ -395,6 +478,24 @@ class FakeReceivingRepository implements IReceivingRepository {
     return this.PutawayReleases.find((item) => item.Id === id) ?? null;
   }
 
+  public async FindInboundPutawayReleaseByReceiptLineId(
+    receiptLineId: string,
+  ): Promise<InboundPutawayReleaseEntity | null> {
+    return this.PutawayReleases.find((item) => item.ReceiptLineId === receiptLineId) ?? null;
+  }
+
+  // Simulates a concurrent transaction committing a release for this line while THIS call
+  // waited on the row lock -- lets tests reproduce the race the lock is meant to close.
+  public async LockReceiptLineForRelease(receiptLineId: string): Promise<void> {
+    if (
+      this.InjectConcurrentReleaseOnNextLock &&
+      this.InjectConcurrentReleaseOnNextLock.ReceiptLineId === receiptLineId
+    ) {
+      this.PutawayReleases.push(this.InjectConcurrentReleaseOnNextLock);
+      this.InjectConcurrentReleaseOnNextLock = null;
+    }
+  }
+
   public async FindInboundPutawayReleaseByIdempotencyKey(
     receiptLineId: string,
     idempotencyKey: string,
@@ -461,6 +562,10 @@ class FakeReceivingRepository implements IReceivingRepository {
 
   public async ListReceivingSessionsByInboundPlanId(inboundPlanId: string): Promise<ReceivingSessionEntity[]> {
     return this.Sessions.filter((item) => item.InboundPlanId === inboundPlanId);
+  }
+
+  public async ListReceivingSessionsByReceiptId(receiptId: string): Promise<ReceivingSessionEntity[]> {
+    return this.Sessions.filter((item) => item.ReceiptId === receiptId);
   }
 
   public async ListReceiptLinesByReceiptId(receiptId: string): Promise<ReceiptLineEntity[]> {
@@ -550,7 +655,7 @@ const warehouse = () =>
     UpdatedAt: now,
   });
 
-const uom = () =>
+const uom = (overrides: Partial<ConstructorParameters<typeof UomEntity>[0]> = {}) =>
   new UomEntity({
     Id: 'uom-1',
     UomCode: 'EA',
@@ -558,6 +663,7 @@ const uom = () =>
     Status: MasterDataStatus.Active,
     CreatedAt: now,
     UpdatedAt: now,
+    ...overrides,
   });
 
 const sku = (overrides: Partial<ConstructorParameters<typeof SkuEntity>[0]> = {}) =>
@@ -720,7 +826,7 @@ const repoBundle = () => {
     ),
     FindById: jest.fn<Promise<LocationEntity | null>, [string]>(async (id) => location({ Id: id })),
   };
-  const uoms = { FindById: jest.fn(async () => uom()) };
+  const uoms = { FindById: jest.fn<Promise<UomEntity | null>, [string]>(async () => uom()) };
   const coreFlows = {
     Instances: [] as unknown[],
     Milestones: [] as unknown[],
@@ -743,7 +849,9 @@ const repoBundle = () => {
       return message;
     }),
   };
-  const profiles = { FindById: jest.fn(async () => profile()) };
+  const profiles = {
+    FindById: jest.fn<Promise<WarehouseProfileEntity | null>, [string]>(async () => profile()),
+  };
   const reasonCatalog = {
     ValidateReason: jest.fn(async () => ({
       ReasonCodeId: 'reason-1',
@@ -774,6 +882,11 @@ const repoBundle = () => {
   };
   const permissionChecker = {
     Check: jest.fn<Promise<PermissionDecision>, [PermissionCheckContext]>(async () => ({ Allowed: true })),
+    ResolveDataScope: jest.fn(async () => ({
+      Allowed: true,
+      WarehouseIds: null as string[] | null,
+      OwnerIds: null as string[] | null,
+    })),
   };
   const inventoryStatuses = new MemoryInventoryStatusRepository([
     MakeInventoryStatus({ Id: 'status-ready-for-putaway', StatusCode: 'READY_FOR_PUTAWAY' }),
@@ -902,6 +1015,18 @@ const confirmReceiptLineUseCase = (bundle: ReturnType<typeof repoBundle>) =>
     bundle.reasonCatalog,
     readinessUseCase(bundle),
     bundle.skus as unknown as ISkuRepository,
+    bundle.uoms as unknown as IUomRepository,
+    bundle.audited as unknown as AuditedTransaction,
+    bundle.permissionChecker,
+  );
+
+const createManualReceiptUseCase = (bundle: ReturnType<typeof repoBundle>) =>
+  new CreateManualReceiptUseCase(
+    bundle.receiving,
+    bundle.partners as unknown as IPartnerRepository,
+    bundle.owners as unknown as IOwnerRepository,
+    bundle.warehouses as unknown as IWarehouseRepository,
+    bundle.profiles as unknown as IWarehouseProfileRepository,
     bundle.audited as unknown as AuditedTransaction,
     bundle.permissionChecker,
   );
@@ -975,6 +1100,795 @@ const recordQcResultUseCase = (bundle: ReturnType<typeof repoBundle>) =>
     bundle.audited as unknown as AuditedTransaction,
     bundle.permissionChecker,
   );
+
+const getReceiptOperationalStateUseCase = (bundle: ReturnType<typeof repoBundle>) =>
+  new GetReceiptOperationalStateUseCase(bundle.receiving, bundle.permissionChecker);
+
+const listReceiptsUseCase = (bundle: ReturnType<typeof repoBundle>) =>
+  new ListReceiptsUseCase(bundle.receiving, bundle.permissionChecker);
+
+describe('IPR-02 manual inbound receipt', () => {
+  const manualRequest = () => ({
+    OwnerId: 'owner-1',
+    WarehouseId: 'warehouse-1',
+    WarehouseProfileId: 'profile-1',
+    SupplierId: 'supplier-1',
+    ReceiptNumber: 'RCPT-MANUAL-001',
+    BusinessReference: 'MANUAL:RCPT:001',
+    SessionKey: 'dock-1:user-1',
+    DeviceCode: 'RF-01',
+    IdempotencyKey: 'manual-receipt-001',
+  });
+
+  it('creates a receipt and initial session without Plan/CoreFlow and returns an exact retry once', async () => {
+    const bundle = repoBundle();
+    const useCase = createManualReceiptUseCase(bundle);
+
+    const created = await useCase.Execute(manualRequest(), {
+      ...SystemAuditContext,
+      ActorUserId: 'user-1',
+    });
+    const retried = await useCase.Execute(manualRequest(), {
+      ...SystemAuditContext,
+      ActorUserId: 'user-1',
+    });
+
+    expect(created.IsDuplicate).toBe(false);
+    expect(created.Receipt).toMatchObject({
+      InboundPlanId: null,
+      CoreFlowInstanceId: null,
+      SupplierId: 'supplier-1',
+      WarehouseProfileId: 'profile-1',
+    });
+    expect(created.Session.InboundPlanId).toBeNull();
+    expect(retried.IsDuplicate).toBe(true);
+    expect(retried.Receipt.Id).toBe(created.Receipt.Id);
+    expect(bundle.receiving.Receipts).toHaveLength(1);
+    expect(bundle.receiving.Sessions).toHaveLength(1);
+    expect(bundle.audited.Entries).toHaveLength(1);
+  });
+
+  it('normalizes a lowercase-typed ReceiptNumber to uppercase', async () => {
+    const bundle = repoBundle();
+    const created = await createManualReceiptUseCase(bundle).Execute(
+      { ...manualRequest(), ReceiptNumber: 'rcpt-manual-001' },
+      SystemAuditContext,
+    );
+
+    expect(created.Receipt.ReceiptNumber).toBe('RCPT-MANUAL-001');
+    expect(bundle.receiving.Receipts[0].ReceiptNumber).toBe('RCPT-MANUAL-001');
+  });
+
+  it('rejects reuse of a manual receipt idempotency key with a changed payload', async () => {
+    const bundle = repoBundle();
+    const useCase = createManualReceiptUseCase(bundle);
+    await useCase.Execute(manualRequest(), SystemAuditContext);
+
+    await expect(
+      useCase.Execute({ ...manualRequest(), BusinessReference: 'MANUAL:RCPT:CHANGED' }, SystemAuditContext),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('returns an exact idempotent retry even when supplier master data was deactivated after creation', async () => {
+    const bundle = repoBundle();
+    const useCase = createManualReceiptUseCase(bundle);
+    const created = await useCase.Execute(manualRequest(), SystemAuditContext);
+    bundle.partners.FindById.mockResolvedValue(Object.assign(supplier(), { Status: PartnerStatus.Inactive }));
+
+    const duplicate = await useCase.Execute(manualRequest(), SystemAuditContext);
+
+    expect(duplicate.IsDuplicate).toBe(true);
+    expect(duplicate.Receipt.Id).toBe(created.Receipt.Id);
+    expect(bundle.receiving.Receipts).toHaveLength(1);
+  });
+
+  it('recovers the winning manual receipt after a concurrent unique-key conflict', async () => {
+    const bundle = repoBundle();
+    bundle.receiving.RaceNextManualCreate = true;
+
+    const result = await createManualReceiptUseCase(bundle).Execute(manualRequest(), SystemAuditContext);
+
+    expect(result.IsDuplicate).toBe(true);
+    expect(bundle.receiving.Receipts).toHaveLength(1);
+    expect(bundle.receiving.Sessions).toHaveLength(1);
+  });
+
+  it('denies manual receipt creation without Create:Receipt permission and persists nothing', async () => {
+    const bundle = repoBundle();
+    bundle.permissionChecker.Check.mockResolvedValue({ Allowed: false, Reason: 'PERMISSION_DENIED' });
+
+    await expect(
+      createManualReceiptUseCase(bundle).Execute(manualRequest(), {
+        ...SystemAuditContext,
+        ActorUserId: 'user-denied',
+      }),
+    ).rejects.toThrow(ForbiddenAppException);
+
+    expect(bundle.receiving.Receipts).toHaveLength(0);
+    expect(bundle.receiving.Sessions).toHaveLength(0);
+  });
+
+  it('checks receipt scope before exposing an existing release for a manual receipt line', async () => {
+    const bundle = repoBundle();
+    const created = await createManualReceiptUseCase(bundle).Execute(manualRequest(), SystemAuditContext);
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: created.Receipt.Id,
+        SkuId: 'sku-1',
+        UomId: 'uom-1',
+        ActualQuantity: 1,
+        IdempotencyKey: 'manual-release-scope-line',
+        ScanEvidence: { RawValue: 'SKU-A' },
+      },
+      SystemAuditContext,
+    );
+    bundle.receiving.PutawayReleases.push({
+      Id: 'release-hidden-from-out-of-scope-actor',
+      ReceiptId: created.Receipt.Id,
+      ReceiptLineId: line.Id,
+    } as unknown as InboundPutawayReleaseEntity);
+    bundle.permissionChecker.Check.mockResolvedValue({ Allowed: false, Reason: 'OUT_OF_SCOPE' } as never);
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        {
+          ReceiptId: created.Receipt.Id,
+          ReceiptLineId: line.Id,
+          IdempotencyKey: 'manual-release-scope-probe',
+        },
+        { ...SystemAuditContext, ActorUserId: 'user-out-of-scope' },
+      ),
+    ).rejects.toThrow(ForbiddenAppException);
+  });
+
+  it('rejects a manual receipt whose warehouse profile is outside the requested scope', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockResolvedValue(Object.assign(profile(), { WarehouseId: 'warehouse-other' }));
+
+    await expect(createManualReceiptUseCase(bundle).Execute(manualRequest(), SystemAuditContext)).rejects.toThrow(
+      'WarehouseProfile warehouse scope does not match manual receipt',
+    );
+    expect(bundle.receiving.Receipts).toHaveLength(0);
+  });
+
+  it('confirms manual lines with sequential numbers and only emits QuantityVariance when ExpectedQuantity exists', async () => {
+    const bundle = repoBundle();
+    const created = await createManualReceiptUseCase(bundle).Execute(manualRequest(), SystemAuditContext);
+    const useCase = confirmReceiptLineUseCase(bundle);
+
+    const actualOnly = await useCase.Execute(
+      {
+        ReceiptId: created.Receipt.Id,
+        SkuId: 'sku-1',
+        UomId: 'uom-1',
+        ActualQuantity: 5,
+        IdempotencyKey: 'manual-line-1',
+        ScanEvidence: { RawValue: 'SKU-A' },
+      },
+      SystemAuditContext,
+    );
+    const withExpected = await useCase.Execute(
+      {
+        ReceiptId: created.Receipt.Id,
+        SkuId: 'sku-1',
+        UomId: 'uom-1',
+        ExpectedQuantity: 10,
+        ActualQuantity: 8,
+        IdempotencyKey: 'manual-line-2',
+        ScanEvidence: { RawValue: 'SKU-A' },
+      },
+      SystemAuditContext,
+    );
+
+    expect(actualOnly).toMatchObject({
+      InboundPlanId: null,
+      InboundPlanLineId: null,
+      LineNumber: 1,
+      ExpectedQuantity: null,
+      DiscrepancySignals: [],
+    });
+    expect(withExpected.LineNumber).toBe(2);
+    expect(withExpected.DiscrepancySignals).toContain(ReceiptLineDiscrepancySignal.QuantityVariance);
+  });
+
+  it('uses cumulative quantity by SKU for a multi-unit SerialControlled manual line', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createManualReceiptUseCase(bundle).Execute(manualRequest(), SystemAuditContext);
+    const useCase = confirmReceiptLineUseCase(bundle);
+
+    for (let unit = 1; unit <= 3; unit += 1) {
+      const line = await useCase.Execute(
+        {
+          ReceiptId: created.Receipt.Id,
+          SkuId: 'sku-1',
+          UomId: 'uom-1',
+          ExpectedQuantity: 3,
+          ActualQuantity: 1,
+          SerialNumber: `MANUAL-SERIAL-${unit}`,
+          IdempotencyKey: `manual-serial-${unit}`,
+          ScanEvidence: { RawValue: `MANUAL-SERIAL-${unit}` },
+        },
+        SystemAuditContext,
+      );
+      expect(line.DiscrepancySignals).not.toContain(ReceiptLineDiscrepancySignal.QuantityVariance);
+    }
+
+    const overReceipt = await useCase.Execute(
+      {
+        ReceiptId: created.Receipt.Id,
+        SkuId: 'sku-1',
+        UomId: 'uom-1',
+        ExpectedQuantity: 3,
+        ActualQuantity: 1,
+        SerialNumber: 'MANUAL-SERIAL-4',
+        IdempotencyKey: 'manual-serial-4',
+        ScanEvidence: { RawValue: 'MANUAL-SERIAL-4' },
+      },
+      SystemAuditContext,
+    );
+    expect(overReceipt.DiscrepancySignals).toContain(ReceiptLineDiscrepancySignal.QuantityVariance);
+  });
+
+  it('blocks release of a SerialControlled manual line until the declared expected quantity is fully received', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createManualReceiptUseCase(bundle).Execute(manualRequest(), SystemAuditContext);
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: created.Receipt.Id,
+        SkuId: 'sku-1',
+        UomId: 'uom-1',
+        ExpectedQuantity: 3,
+        ActualQuantity: 1,
+        SerialNumber: 'MANUAL-RELEASE-SERIAL-1',
+        IdempotencyKey: 'manual-release-serial-1',
+        ScanEvidence: { RawValue: 'MANUAL-RELEASE-SERIAL-1' },
+      },
+      SystemAuditContext,
+    );
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      {
+        ReceiptId: created.Receipt.Id,
+        ReceiptLineId: line.Id,
+        ForceRequired: true,
+        IdempotencyKey: 'manual-release-qc-task',
+      },
+      SystemAuditContext,
+    );
+    await recordQcResultUseCase(bundle).Execute(
+      {
+        QcTaskId: task.Id,
+        ResultStatus: QcResultStatus.Passed,
+        DispositionCode: QcDispositionCode.Release,
+        InspectedQuantity: 1,
+        AcceptedQuantity: 1,
+        RejectedQuantity: 0,
+        IdempotencyKey: 'manual-release-qc-result',
+      },
+      SystemAuditContext,
+    );
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        {
+          ReceiptId: created.Receipt.Id,
+          ReceiptLineId: line.Id,
+          IdempotencyKey: 'manual-release-before-complete',
+        },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow('has not received its full expected quantity');
+    expect(bundle.receiving.PutawayReleases).toHaveLength(0);
+  });
+
+  it('runs the null-plan LPN, QC result, release and receipt operational-state chain idempotently', async () => {
+    const bundle = repoBundle();
+    const created = await createManualReceiptUseCase(bundle).Execute(manualRequest(), SystemAuditContext);
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: created.Receipt.Id,
+        SkuId: 'sku-1',
+        UomId: 'uom-1',
+        ActualQuantity: 2,
+        IdempotencyKey: 'manual-chain-line',
+        ScanEvidence: { RawValue: 'SKU-A' },
+      },
+      SystemAuditContext,
+    );
+    const lpn = await confirmInboundLpnUseCase(bundle).Execute(
+      {
+        ReceiptId: created.Receipt.Id,
+        ReceiptLineId: line.Id,
+        LpnCode: 'LPN-MANUAL-CHAIN',
+        Quantity: 2,
+        IdempotencyKey: 'manual-chain-lpn',
+      },
+      SystemAuditContext,
+    );
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      {
+        ReceiptId: created.Receipt.Id,
+        ReceiptLineId: line.Id,
+        ForceRequired: true,
+        IdempotencyKey: 'manual-chain-qc-task',
+      },
+      SystemAuditContext,
+    );
+    const result = await recordQcResultUseCase(bundle).Execute(
+      {
+        QcTaskId: task.Id,
+        ResultStatus: QcResultStatus.Passed,
+        DispositionCode: QcDispositionCode.Release,
+        InspectedQuantity: 2,
+        AcceptedQuantity: 2,
+        RejectedQuantity: 0,
+        IdempotencyKey: 'manual-chain-qc-result',
+      },
+      SystemAuditContext,
+    );
+    const releaseRequest = {
+      ReceiptId: created.Receipt.Id,
+      ReceiptLineId: line.Id,
+      RequireLpn: true,
+      IdempotencyKey: 'manual-chain-release',
+    };
+    const release = await releaseInboundToPutawayUseCase(bundle).Execute(releaseRequest, SystemAuditContext);
+    const duplicateRelease = await releaseInboundToPutawayUseCase(bundle).Execute(releaseRequest, SystemAuditContext);
+    const putawayTasks = new MemoryPutawayTaskRepository();
+    const targetLocation = location({
+      Id: 'manual-chain-target-location',
+      LocationCode: 'A-MANUAL-01',
+      LocationType: 'Storage',
+      LocationProfileId: 'manual-chain-location-profile',
+    });
+    const putawayLocations = {
+      FindByWarehouseAndCode: bundle.locations.FindByWarehouseAndCode,
+      FindById: jest.fn(async (id: string) => (id === targetLocation.Id ? targetLocation : null)),
+      List: jest.fn(async () => ({ Items: [targetLocation], TotalItems: 1 })),
+    };
+    const locationProfiles = {
+      FindById: jest.fn(
+        async () =>
+          new LocationProfileEntity({
+            Id: 'manual-chain-location-profile',
+            ProfileCode: 'STORAGE',
+            ProfileName: 'Storage',
+            LocationType: 'Storage',
+            Status: MasterDataStatus.Active,
+            CreatedAt: now,
+            UpdatedAt: now,
+          }),
+      ),
+    };
+    const releasePutawayTask = new ReleasePutawayTaskUseCase(
+      putawayTasks,
+      bundle.receiving,
+      putawayLocations as unknown as ILocationRepository,
+      bundle.skus as unknown as ISkuRepository,
+      locationProfiles as unknown as ILocationProfileRepository,
+      BuildEmptyPutawayRuleGate('warehouse-1'),
+      bundle.integrations as unknown as IIntegrationRepository,
+      new FakeTaskExecutionRepository(),
+      bundle.reasonCatalog,
+      bundle.audited as unknown as AuditedTransaction,
+      bundle.permissionChecker,
+    );
+    const putawayRequest = {
+      InboundPutawayReleaseId: release.Id,
+      TargetLocationId: targetLocation.Id,
+      IdempotencyKey: 'manual-chain-putaway-task',
+    };
+    const putawayContext = { ...SystemAuditContext, ActorUserId: 'putaway-user' };
+    const putawayTask = await releasePutawayTask.Execute(putawayRequest, putawayContext);
+    const duplicatePutawayTask = await releasePutawayTask.Execute(putawayRequest, putawayContext);
+    const state = await getReceiptOperationalStateUseCase(bundle).Execute(created.Receipt.Id);
+
+    expect(lpn.InboundPlanId).toBeNull();
+    expect(task.InboundPlanId).toBeNull();
+    expect(result.InboundPlanId).toBeNull();
+    expect(release.InboundPlanId).toBeNull();
+    expect(duplicateRelease.IsDuplicate).toBe(true);
+    expect(putawayTask.InboundPlanId).toBeNull();
+    expect(duplicatePutawayTask.Id).toBe(putawayTask.Id);
+    expect(putawayTasks.tasks).toHaveLength(1);
+    expect(state.InboundPlanId).toBeNull();
+    expect(state).toMatchObject({
+      ReceiptLines: [expect.objectContaining({ InboundPlanId: null })],
+      QcTasks: [expect.objectContaining({ InboundPlanId: null })],
+      QcResults: [expect.objectContaining({ InboundPlanId: null })],
+      Lpns: [expect.objectContaining({ InboundPlanId: null })],
+      Releases: [expect.objectContaining({ InboundPlanId: null })],
+    });
+    expect(bundle.inventoryDimensions.dimensions.size).toBe(1);
+    expect(bundle.inventoryBalances.balances.size).toBe(1);
+  });
+
+  // Round-5 re-review fix: the original version of this test built its fixture via
+  // createManualReceiptUseCase, so it only ever exercised the manual path -- the ONE path
+  // that still keeps a DB-level unique index (UQ_inbound_putaway_releases_receipt_line
+  // WHERE inbound_plan_id IS NULL). It never touched a plan-based line (aggregate !== null),
+  // which is the exact branch the narrowing migration left with no DB-level protection.
+  // Rebuilt on a genuine plan-based receipt (createConfirmedPlan + startReceivingUseCase,
+  // same helpers as the "IPR-02 plan-path baseline preservation" describe block) so this
+  // actually proves the claim its title makes, not just code coverage that happens to overlap.
+  const buildPlanBasedReleasableLine = async (bundle: ReturnType<typeof repoBundle>, suffix: string) => {
+    const plan = await createConfirmedPlan(bundle);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: plan.Id, SessionKey: `plan-lock-race-${suffix}` },
+      SystemAuditContext,
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: plan.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: `plan-lock-race-line-${suffix}`,
+        ScanEvidence: { RawValue: 'SKU-A' },
+      },
+      SystemAuditContext,
+    );
+    const lpn = await confirmInboundLpnUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        LpnCode: `LPN-PLAN-LOCK-RACE-${suffix}`,
+        Quantity: 12,
+        IdempotencyKey: `plan-lock-race-lpn-${suffix}`,
+      },
+      SystemAuditContext,
+    );
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        ForceRequired: true,
+        IdempotencyKey: `plan-lock-race-qc-task-${suffix}`,
+      },
+      SystemAuditContext,
+    );
+    await recordQcResultUseCase(bundle).Execute(
+      {
+        QcTaskId: task.Id,
+        ResultStatus: QcResultStatus.Passed,
+        DispositionCode: QcDispositionCode.Release,
+        InspectedQuantity: 12,
+        AcceptedQuantity: 12,
+        RejectedQuantity: 0,
+        IdempotencyKey: `plan-lock-race-qc-result-${suffix}`,
+      },
+      SystemAuditContext,
+    );
+    return { plan, session, line, lpn };
+  };
+
+  const concurrentPlanRelease = (opts: {
+    receiptId: string;
+    lineId: string;
+    planId: string;
+    planLineId: string;
+    lpnId: string;
+    lpnCode: string;
+    idempotencyKey: string;
+    idSuffix: string;
+  }) =>
+    new InboundPutawayReleaseEntity({
+      Id: `concurrent-release-committed-while-waiting-on-lock-${opts.idSuffix}`,
+      InboundLpnId: opts.lpnId,
+      ReceiptId: opts.receiptId,
+      ReceiptLineId: opts.lineId,
+      InboundPlanId: opts.planId,
+      InboundPlanLineId: opts.planLineId,
+      OwnerId: 'owner-1',
+      OwnerCode: 'OWNER-1',
+      WarehouseId: 'warehouse-1',
+      WarehouseCode: 'WH-1',
+      SkuId: 'sku-1',
+      SkuCode: 'SKU-1',
+      UomId: 'uom-1',
+      UomCode: 'EA',
+      Quantity: 12,
+      LpnCode: opts.lpnCode,
+      SsccCode: null,
+      LotNumber: null,
+      ExpiryDate: null,
+      SerialNumber: null,
+      InventoryStatusCode: 'READY_FOR_PUTAWAY',
+      CurrentLocationId: 'loc-1',
+      CurrentLocationCode: 'RECEIVING',
+      WarehouseProfileId: 'profile-1',
+      LabelDecision: null,
+      LabelReason: null,
+      MatchedPrintJobId: null,
+      ConstraintJson: {},
+      RuleCode: null,
+      OutboxMessageId: `outbox-concurrent-release-${opts.idSuffix}`,
+      CoreFlowMilestoneId: null,
+      ReasonCode: null,
+      ReasonCodeId: null,
+      ReasonNote: null,
+      EvidenceRefs: [],
+      IdempotencyKey: opts.idempotencyKey,
+      ReleasedAt: now,
+      ReleasedBy: 'concurrent-actor',
+      CreatedAt: now,
+      UpdatedAt: now,
+    });
+
+  it('closes the plan-based release race with a row lock: a release committed while waiting on the lock surfaces as a conflict, not a silent duplicate', async () => {
+    const bundle = repoBundle();
+    const { plan, session, line, lpn } = await buildPlanBasedReleasableLine(bundle, 'conflict');
+
+    const concurrentRelease = concurrentPlanRelease({
+      receiptId: session.ReceiptId,
+      lineId: line.Id,
+      planId: plan.Id,
+      planLineId: plan.Lines[0].Id,
+      lpnId: lpn.Id,
+      lpnCode: lpn.LpnCode,
+      idempotencyKey: 'concurrent-actor-different-key',
+      idSuffix: 'conflict',
+    });
+    bundle.receiving.InjectConcurrentReleaseOnNextLock = concurrentRelease;
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        {
+          ReceiptId: session.ReceiptId,
+          ReceiptLineId: line.Id,
+          RequireLpn: true,
+          IdempotencyKey: 'plan-lock-race-release-attempt-conflict',
+        },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow(ConflictException);
+
+    expect(bundle.receiving.PutawayReleases.filter((item) => item.ReceiptLineId === line.Id)).toHaveLength(1);
+    expect(bundle.receiving.PutawayReleases[0].Id).toBe(concurrentRelease.Id);
+  });
+
+  it('returns the concurrent release as an idempotent duplicate when it was committed under the SAME idempotency key while waiting on the lock', async () => {
+    const bundle = repoBundle();
+    const { plan, session, line, lpn } = await buildPlanBasedReleasableLine(bundle, 'duplicate');
+
+    const concurrentRelease = concurrentPlanRelease({
+      receiptId: session.ReceiptId,
+      lineId: line.Id,
+      planId: plan.Id,
+      planLineId: plan.Lines[0].Id,
+      lpnId: lpn.Id,
+      lpnCode: lpn.LpnCode,
+      idempotencyKey: 'plan-lock-race-release-attempt-duplicate',
+      idSuffix: 'duplicate',
+    });
+    bundle.receiving.InjectConcurrentReleaseOnNextLock = concurrentRelease;
+
+    const result = await releaseInboundToPutawayUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        RequireLpn: true,
+        IdempotencyKey: 'plan-lock-race-release-attempt-duplicate',
+      },
+      SystemAuditContext,
+    );
+
+    expect(result.IsDuplicate).toBe(true);
+    expect(result.Id).toBe(concurrentRelease.Id);
+    expect(bundle.receiving.PutawayReleases.filter((item) => item.ReceiptLineId === line.Id)).toHaveLength(1);
+  });
+
+  it('pushes receipt pagination and resolved warehouse/owner scope into the repository', async () => {
+    const bundle = repoBundle();
+    await createManualReceiptUseCase(bundle).Execute(manualRequest(), SystemAuditContext);
+    bundle.permissionChecker.ResolveDataScope.mockResolvedValue({
+      Allowed: true,
+      WarehouseIds: ['warehouse-1'],
+      OwnerIds: ['owner-1'],
+    });
+    const listSpy = jest.spyOn(bundle.receiving, 'ListReceipts');
+
+    const result = await listReceiptsUseCase(bundle).Execute({
+      Page: 1,
+      PageSize: 50,
+      ActorUserId: 'user-1',
+    });
+
+    expect(listSpy).toHaveBeenCalledWith(
+      0,
+      50,
+      expect.objectContaining({
+        WarehouseIds: ['warehouse-1'],
+        OwnerIds: ['owner-1'],
+      }),
+    );
+    expect(result.Meta.TotalItems).toBe(1);
+  });
+
+  it('rejects QuantityVariance capture when a manual line has no expected quantity', async () => {
+    const bundle = repoBundle();
+    const created = await createManualReceiptUseCase(bundle).Execute(manualRequest(), SystemAuditContext);
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: created.Receipt.Id,
+        SkuId: 'sku-1',
+        UomId: 'uom-1',
+        ActualQuantity: 5,
+        IdempotencyKey: 'manual-line-no-expected',
+        ScanEvidence: { RawValue: 'SKU-A' },
+      },
+      SystemAuditContext,
+    );
+    line.DiscrepancySignals.push(ReceiptLineDiscrepancySignal.QuantityVariance);
+
+    await expect(
+      captureInboundDiscrepancyUseCase(bundle).Execute(
+        {
+          ReceiptId: created.Receipt.Id,
+          ReceiptLineId: line.Id,
+          DiscrepancyType: InboundDiscrepancyType.QuantityVariance,
+          ReasonCode: 'QTY_VARIANCE',
+          EvidenceRefs: ['photo-ref'],
+          IdempotencyKey: 'manual-discrepancy-no-expected',
+        },
+        SystemAuditContext,
+      ),
+    ).rejects.toThrow('Quantity variance requires an expected quantity');
+  });
+});
+
+describe('IPR-02 plan-path baseline preservation', () => {
+  it('keeps plan receiving permissive for deactivated substituted SKU/UOM and preserves null substitution markers', async () => {
+    const bundle = repoBundle();
+    const created = await createConfirmedPlan(bundle);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'plan-baseline-inactive-master' },
+      SystemAuditContext,
+    );
+    bundle.skus.FindById.mockResolvedValue(
+      sku({ Id: 'sku-substitute', SkuCode: 'SKU-SUB', ItemStatus: SkuStatus.Blocked }),
+    );
+    bundle.uoms.FindById.mockResolvedValue(null);
+
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        SkuId: 'sku-substitute',
+        UomId: 'uom-substitute',
+        ActualQuantity: 12,
+        IdempotencyKey: 'plan-baseline-substitute-line',
+        ScanEvidence: { RawValue: 'SKU-SUB' },
+      },
+      SystemAuditContext,
+    );
+
+    expect(line.SkuCode).toBeNull();
+    expect(line.UomCode).toBeNull();
+    expect(line.DiscrepancySignals).toEqual(
+      expect.arrayContaining([ReceiptLineDiscrepancySignal.WrongSku, ReceiptLineDiscrepancySignal.WrongUom]),
+    );
+  });
+
+  it('reads the live Plan supplier/profile for QC after the receipt snapshot becomes stale', async () => {
+    const bundle = repoBundle();
+    const created = await createConfirmedPlan(bundle);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'plan-live-qc-policy' },
+      SystemAuditContext,
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'plan-live-qc-line',
+        ScanEvidence: { RawValue: 'SKU-A' },
+      },
+      SystemAuditContext,
+    );
+    bundle.inbound.Plans[0].WarehouseProfileId = 'profile-live';
+    bundle.inbound.Plans[0].SupplierId = 'supplier-live';
+    bundle.profiles.FindById.mockImplementation(async (id: string) =>
+      Object.assign(profile({ inboundQcRequired: id === 'profile-live' }), { Id: id }),
+    );
+    bundle.partners.FindById.mockImplementation(async (id: string) => Object.assign(supplier(), { Id: id }));
+
+    const task = await evaluateQcTaskUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        IdempotencyKey: 'plan-live-qc-task',
+      },
+      SystemAuditContext,
+    );
+
+    expect(task.Required).toBe(true);
+    expect(bundle.profiles.FindById).toHaveBeenLastCalledWith('profile-live');
+    expect(bundle.partners.FindById).toHaveBeenLastCalledWith('supplier-live');
+  });
+
+  it('reads the live Plan profile for discrepancy tolerance after the receipt snapshot becomes stale', async () => {
+    const bundle = repoBundle();
+    const created = await createConfirmedPlan(bundle);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'plan-live-tolerance' },
+      SystemAuditContext,
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 14,
+        IdempotencyKey: 'plan-live-tolerance-line',
+        ScanEvidence: { RawValue: 'SKU-A' },
+      },
+      SystemAuditContext,
+    );
+    bundle.inbound.Plans[0].WarehouseProfileId = 'profile-live';
+    bundle.profiles.FindById.mockImplementation(async (id: string) =>
+      Object.assign(profile({}, { receivingOverTolerancePercent: id === 'profile-live' ? 100 : 0 }), { Id: id }),
+    );
+
+    const discrepancy = await captureInboundDiscrepancyUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        DiscrepancyType: InboundDiscrepancyType.QuantityVariance,
+        ReasonCode: 'RC-V1-DISCREPANCY',
+        EvidenceRefs: ['evidence://plan-live-tolerance'],
+        IdempotencyKey: 'plan-live-tolerance-discrepancy',
+      },
+      SystemAuditContext,
+    );
+
+    expect(discrepancy.ToleranceDecision).toBe(InboundDiscrepancyToleranceDecision.WithinTolerance);
+    expect(bundle.profiles.FindById).toHaveBeenLastCalledWith('profile-live');
+  });
+
+  it('reads the live Plan profile for release policy after the receipt snapshot becomes stale', async () => {
+    const bundle = repoBundle();
+    bundle.profiles.FindById.mockImplementation(async (id: string) =>
+      Object.assign(profile({ inboundLpnRequired: id === 'profile-1' }), { Id: id }),
+    );
+    const created = await createConfirmedPlan(bundle);
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'plan-live-release-policy' },
+      SystemAuditContext,
+    );
+    const line = await confirmReceiptLineUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        InboundPlanLineId: created.Lines[0].Id,
+        ActualQuantity: 12,
+        IdempotencyKey: 'plan-live-release-line',
+        ScanEvidence: { RawValue: 'SKU-A' },
+      },
+      SystemAuditContext,
+    );
+    await evaluateQcTaskUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        IdempotencyKey: 'plan-live-release-qc',
+      },
+      SystemAuditContext,
+    );
+    bundle.inbound.Plans[0].WarehouseProfileId = 'profile-live';
+
+    const release = await releaseInboundToPutawayUseCase(bundle).Execute(
+      {
+        ReceiptId: session.ReceiptId,
+        ReceiptLineId: line.Id,
+        IdempotencyKey: 'plan-live-release',
+      },
+      SystemAuditContext,
+    );
+
+    expect(release.WarehouseProfileId).toBe('profile-live');
+    expect(bundle.profiles.FindById).toHaveBeenLastCalledWith('profile-live');
+  });
+});
 
 describe('Inbound plan use cases', () => {
   // IFB-24: plans are born Draft, with no CoreFlow instance/outbox event yet --
@@ -5776,5 +6690,46 @@ describe('IFB-21 release blocked for SerialControlled plan line until fully rece
     );
 
     expect(release2.InventoryStatusCode).toBe('READY_FOR_PUTAWAY');
+  });
+
+  it('review-fix: throws "Inbound plan line not found for release" when the confirmed plan line no longer exists on the (Draft-edited) plan, instead of silently succeeding', async () => {
+    const bundle = repoBundle();
+    bundle.skus.FindById.mockResolvedValue(sku({ SerialControlled: true }));
+    const created = await createUseCase(bundle).Execute(
+      {
+        ...createRequest(),
+        Lines: [{ LineNumber: 1, SkuId: 'sku-1', UomId: 'uom-1', ExpectedQuantity: 3, ExternalLineReference: '10' }],
+      },
+      SystemAuditContext,
+    );
+    const session = await startReceivingUseCase(bundle).Execute(
+      { InboundPlanId: created.Id, SessionKey: 'dock-1:user-1' },
+      { ...SystemAuditContext, ActorUserId: 'user-1' },
+    );
+
+    const line1 = await confirmSerialUnit(
+      bundle,
+      session.ReceiptId,
+      created.Lines[0].Id,
+      'SN-IFB21-STALE-LINE-1',
+      'ifb21-stale-line-unit-1',
+    );
+    await evaluateQcForLine(bundle, session.ReceiptId, line1.Id, 'ifb21-stale-line-qc-1');
+
+    // Simulate UpdateInboundPlanUseCase.ReplaceLines running while the plan is still Draft
+    // (ValidateReceivingReadinessUseCase deliberately allows receiving during Draft) after this
+    // receipt line was already confirmed against the old plan line id -- ReplaceLines assigns a
+    // brand new randomUUID() id to every plan line on every edit, so the aggregate no longer
+    // contains a line matching this receipt line's InboundPlanLineId.
+    const aggregateBefore = await bundle.inbound.FindById(created.Id);
+    const staleLine = aggregateBefore!.Lines[0];
+    await bundle.inbound.ReplaceLines(created.Id, [new InboundPlanLineEntity({ ...staleLine, Id: randomUUID() })]);
+
+    await expect(
+      releaseInboundToPutawayUseCase(bundle).Execute(
+        { ReceiptId: session.ReceiptId, ReceiptLineId: line1.Id, IdempotencyKey: 'ifb21-stale-line-release' },
+        { ...SystemAuditContext, ActorUserId: 'user-1' },
+      ),
+    ).rejects.toThrow('Inbound plan line not found for release');
   });
 });

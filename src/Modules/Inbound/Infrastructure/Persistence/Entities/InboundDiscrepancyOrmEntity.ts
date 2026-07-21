@@ -16,11 +16,11 @@ export class InboundDiscrepancyOrmEntity {
   @Column({ name: 'receipt_line_id', type: 'char', length: 36 })
   public ReceiptLineId!: string;
 
-  @Column({ name: 'inbound_plan_id', type: 'char', length: 36 })
-  public InboundPlanId!: string;
+  @Column({ name: 'inbound_plan_id', type: 'char', length: 36, nullable: true })
+  public InboundPlanId!: string | null;
 
-  @Column({ name: 'inbound_plan_line_id', type: 'char', length: 36 })
-  public InboundPlanLineId!: string;
+  @Column({ name: 'inbound_plan_line_id', type: 'char', length: 36, nullable: true })
+  public InboundPlanLineId!: string | null;
 
   @Column({ name: 'owner_id', type: 'char', length: 36 })
   public OwnerId!: string;
@@ -49,8 +49,8 @@ export class InboundDiscrepancyOrmEntity {
   @Column({ name: 'tolerance_decision', type: 'varchar', length: 60 })
   public ToleranceDecision!: string;
 
-  @Column({ name: 'expected_quantity', type: 'numeric', precision: 18, scale: 4 })
-  public ExpectedQuantity!: number;
+  @Column({ name: 'expected_quantity', type: 'numeric', precision: 18, scale: 4, nullable: true })
+  public ExpectedQuantity!: number | null;
 
   @Column({ name: 'actual_quantity', type: 'numeric', precision: 18, scale: 4 })
   public ActualQuantity!: number;
