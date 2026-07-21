@@ -14,11 +14,15 @@ import { ConfirmInboundLpnUseCase } from '@modules/Inbound/Application/UseCases/
 import { ConfirmInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/ConfirmInboundPlanUseCase';
 import { ConfirmReceiptLineUseCase } from '@modules/Inbound/Application/UseCases/ConfirmReceiptLineUseCase';
 import { CreateInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/CreateInboundPlanUseCase';
+import { CreateManualReceiptUseCase } from '@modules/Inbound/Application/UseCases/CreateManualReceiptUseCase';
 import { ImportInboundPlanLinesUseCase } from '@modules/Inbound/Application/UseCases/ImportInboundPlanLinesUseCase';
 import { EvaluateQcTaskUseCase } from '@modules/Inbound/Application/UseCases/EvaluateQcTaskUseCase';
 import { GetInboundOperationalStateUseCase } from '@modules/Inbound/Application/UseCases/GetInboundOperationalStateUseCase';
 import { GetInboundPlanUseCase } from '@modules/Inbound/Application/UseCases/GetInboundPlanUseCase';
+import { GetReceiptOperationalStateUseCase } from '@modules/Inbound/Application/UseCases/GetReceiptOperationalStateUseCase';
+import { GetReceiptUseCase } from '@modules/Inbound/Application/UseCases/GetReceiptUseCase';
 import { ListInboundPlansUseCase } from '@modules/Inbound/Application/UseCases/ListInboundPlansUseCase';
+import { ListReceiptsUseCase } from '@modules/Inbound/Application/UseCases/ListReceiptsUseCase';
 import { RecordGateInUseCase } from '@modules/Inbound/Application/UseCases/RecordGateInUseCase';
 import { RecordQcResultUseCase } from '@modules/Inbound/Application/UseCases/RecordQcResultUseCase';
 import { StartReceivingSessionUseCase } from '@modules/Inbound/Application/UseCases/StartReceivingSessionUseCase';
@@ -52,6 +56,10 @@ describe('E2E InboundPlanController (no DB)', () => {
   const captureDiscrepancyExecute = jest.fn();
   const evaluateQcTaskExecute = jest.fn();
   const recordQcResultExecute = jest.fn();
+  const createManualReceiptExecute = jest.fn();
+  const listReceiptsExecute = jest.fn();
+  const getReceiptExecute = jest.fn();
+  const receiptOperationalStateExecute = jest.fn();
 
   const buildModule = () =>
     Test.createTestingModule({
@@ -76,6 +84,10 @@ describe('E2E InboundPlanController (no DB)', () => {
         { provide: RecordGateInUseCase, useValue: { Execute: gateInExecute } },
         { provide: ValidateReceivingReadinessUseCase, useValue: { Execute: readinessExecute } },
         { provide: StartReceivingSessionUseCase, useValue: { Execute: startReceivingExecute } },
+        { provide: CreateManualReceiptUseCase, useValue: { Execute: createManualReceiptExecute } },
+        { provide: ListReceiptsUseCase, useValue: { Execute: listReceiptsExecute } },
+        { provide: GetReceiptUseCase, useValue: { Execute: getReceiptExecute } },
+        { provide: GetReceiptOperationalStateUseCase, useValue: { Execute: receiptOperationalStateExecute } },
         { provide: ConfirmReceiptLineUseCase, useValue: { Execute: confirmReceiptLineExecute } },
         { provide: ConfirmInboundLpnUseCase, useValue: { Execute: confirmInboundLpnExecute } },
         { provide: ReleaseInboundToPutawayUseCase, useValue: { Execute: releaseInboundToPutawayExecute } },
@@ -119,6 +131,10 @@ describe('E2E InboundPlanController (no DB)', () => {
     captureDiscrepancyExecute.mockReset();
     evaluateQcTaskExecute.mockReset();
     recordQcResultExecute.mockReset();
+    createManualReceiptExecute.mockReset();
+    listReceiptsExecute.mockReset();
+    getReceiptExecute.mockReset();
+    receiptOperationalStateExecute.mockReset();
   });
 
   it('declares InboundPlan and Receipt permissions on inbound and receiving endpoints', () => {
@@ -166,6 +182,22 @@ describe('E2E InboundPlanController (no DB)', () => {
       Reflect.getMetadata(REQUIRE_PERMISSION_KEY, InboundPlanController.prototype.StartReceivingSession),
     ).toMatchObject({
       Action: ActionCode.Create,
+      ObjectType: ObjectType.Receipt,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ReceiptController.prototype.Create)).toMatchObject({
+      Action: ActionCode.Create,
+      ObjectType: ObjectType.Receipt,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ReceiptController.prototype.List)).toMatchObject({
+      Action: ActionCode.Read,
+      ObjectType: ObjectType.Receipt,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ReceiptController.prototype.GetById)).toMatchObject({
+      Action: ActionCode.Read,
+      ObjectType: ObjectType.Receipt,
+    });
+    expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ReceiptController.prototype.GetOperationalState)).toMatchObject({
+      Action: ActionCode.Read,
       ObjectType: ObjectType.Receipt,
     });
     expect(Reflect.getMetadata(REQUIRE_PERMISSION_KEY, ReceiptController.prototype.ConfirmReceiptLine)).toMatchObject({
@@ -349,6 +381,46 @@ describe('E2E InboundPlanController (no DB)', () => {
       SourceDocumentNumber: 'ASN-10001',
       ActorUserId: 'test-admin',
     });
+  });
+
+  it('validates and forwards manual Receipt create/list/detail contracts', async () => {
+    createManualReceiptExecute.mockResolvedValue({
+      Receipt: { Id: 'receipt-manual-1', InboundPlanId: null },
+      Session: { Id: 'session-manual-1', ReceiptId: 'receipt-manual-1', InboundPlanId: null },
+      IsDuplicate: false,
+    });
+    listReceiptsExecute.mockResolvedValue({
+      Items: [],
+      Meta: { Page: 1, PageSize: 50, TotalItems: 0, TotalPages: 1 },
+    });
+    getReceiptExecute.mockResolvedValue({ Id: 'receipt-manual-1', InboundPlanId: null });
+    receiptOperationalStateExecute.mockResolvedValue({ ReceiptId: 'receipt-manual-1', InboundPlanId: null });
+
+    await request(app.getHttpServer())
+      .post('/receipts')
+      .send({
+        OwnerId: 'owner-1',
+        WarehouseId: 'warehouse-1',
+        SupplierId: 'supplier-1',
+        ReceiptNumber: 'RCPT-MANUAL-001',
+        BusinessReference: 'MANUAL:RCPT:001',
+        SessionKey: 'dock-1:user-1',
+        IdempotencyKey: 'manual-receipt-001',
+      })
+      .expect(201);
+    await request(app.getHttpServer()).get('/receipts?Page=1&PageSize=50').expect(200);
+    await request(app.getHttpServer()).get('/receipts/receipt-manual-1').expect(200);
+    await request(app.getHttpServer()).get('/receipts/receipt-manual-1/operational-state').expect(200);
+
+    expect(createManualReceiptExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ SupplierId: 'supplier-1', ReceiptNumber: 'RCPT-MANUAL-001' }),
+      expect.objectContaining({ ActorUserId: 'test-admin' }),
+    );
+    expect(listReceiptsExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ Page: 1, PageSize: 50, ActorUserId: 'test-admin' }),
+    );
+    expect(getReceiptExecute).toHaveBeenCalledWith('receipt-manual-1', 'test-admin');
+    expect(receiptOperationalStateExecute).toHaveBeenCalledWith('receipt-manual-1', 'test-admin');
   });
 
   it('POST /receipts/:id/discrepancies rejects non-string evidence refs before use case', async () => {

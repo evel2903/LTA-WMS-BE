@@ -7,7 +7,10 @@ import {
   PermissionDecision,
   ScopeTarget,
 } from '@modules/AccessControl/Application/DTOs/PermissionCheckContext';
-import { IPermissionChecker } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
+import {
+  IPermissionChecker,
+  PermissionDataScopeDecision,
+} from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
 import { IUserRoleRepository } from '@modules/AccessControl/Application/Interfaces/IUserRoleRepository';
 import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/IRoleRepository';
 import { IRolePermissionRepository } from '@modules/AccessControl/Application/Interfaces/IRolePermissionRepository';
@@ -81,6 +84,35 @@ export class PermissionChecker implements IPermissionChecker {
     return { Allowed: true };
   }
 
+  public async ResolveDataScope(context: {
+    UserId: string;
+    Action: ActionCode;
+    ObjectType: PermissionCheckContext['ObjectType'];
+  }): Promise<PermissionDataScopeDecision> {
+    const permission = await this.Check(context);
+    if (!permission.Allowed) {
+      return {
+        ...permission,
+        WarehouseIds: [],
+        OwnerIds: [],
+      };
+    }
+
+    const userRoles = await this.userRoleRepository.FindByUserId(context.UserId);
+    const roles = await this.roleRepository.FindByIds(userRoles.map((userRole) => userRole.RoleId));
+    const activeRoleIds = roles.filter((role) => role.Status === RoleStatus.Active).map((role) => role.Id);
+    const principals: PrincipalRef[] = [
+      { Type: PrincipalType.User, Id: context.UserId },
+      ...activeRoleIds.map((id) => ({ Type: PrincipalType.Role, Id: id })),
+    ];
+    const scopes = await this.dataScopeRepository.FindByPrincipals(principals);
+    return {
+      Allowed: true,
+      WarehouseIds: this.ResolveAxis(scopes, DataScopeType.Warehouse),
+      OwnerIds: this.ResolveAxis(scopes, DataScopeType.Owner),
+    };
+  }
+
   private RequestedAxes(scope?: ScopeTarget): Array<{ Type: DataScopeType; Value: string }> {
     if (!scope) return [];
     const axes: Array<{ Type: DataScopeType; Value: string | null | undefined }> = [
@@ -89,5 +121,20 @@ export class PermissionChecker implements IPermissionChecker {
       { Type: DataScopeType.Owner, Value: scope.OwnerId },
     ];
     return axes.filter((a): a is { Type: DataScopeType; Value: string } => a.Value != null);
+  }
+
+  private ResolveAxis(
+    scopes: Awaited<ReturnType<IDataScopeRepository['FindByPrincipals']>>,
+    type: DataScopeType,
+  ): string[] | null {
+    const axisScopes = scopes.filter((scope) => scope.ScopeType === type);
+    if (axisScopes.some((scope) => scope.IncludeAll)) return null;
+    return [
+      ...new Set(
+        axisScopes
+          .map((scope) => scope.ScopeValueId)
+          .filter((scopeValueId): scopeValueId is string => scopeValueId !== null),
+      ),
+    ];
   }
 }

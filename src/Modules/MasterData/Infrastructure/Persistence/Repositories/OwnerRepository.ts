@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, ILike, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
+import { EscapeLikePattern } from '@common/Helpers/SqlLikeEscape';
 import { IOwnerRepository, OwnerListFilter } from '@modules/MasterData/Application/Interfaces/IOwnerRepository';
 import { OwnerEntity } from '@modules/MasterData/Domain/Entities/OwnerEntity';
 import { OwnerOrmMapper } from '@modules/MasterData/Infrastructure/Mappers/OwnerOrmMapper';
@@ -56,8 +57,26 @@ export class OwnerRepository implements IOwnerRepository {
     if (filter.OwnerName) where.OwnerName = filter.OwnerName;
     if (filter.Status) where.Status = filter.Status;
 
+    const searchText = filter.Search?.trim() || null;
+    const searchPattern = searchText ? `%${EscapeLikePattern(searchText)}%` : null;
+    const scopedWhere: FindOptionsWhere<OwnerOrmEntity> | FindOptionsWhere<OwnerOrmEntity>[] = searchPattern
+      ? [
+          ...(filter.OwnerCode
+            ? filter.OwnerCode.toLowerCase().includes(searchText!.toLowerCase())
+              ? [{ ...where }]
+              : []
+            : [{ ...where, OwnerCode: ILike(searchPattern) }]),
+          ...(filter.OwnerName
+            ? filter.OwnerName.toLowerCase().includes(searchText!.toLowerCase())
+              ? [{ ...where }]
+              : []
+            : [{ ...where, OwnerName: ILike(searchPattern) }]),
+        ]
+      : where;
+    if (Array.isArray(scopedWhere) && scopedWhere.length === 0) return { Items: [], TotalItems: 0 };
+
     const [items, total] = await this.owners.findAndCount({
-      where,
+      where: scopedWhere,
       order: { CreatedAt: 'DESC' },
       skip,
       take,

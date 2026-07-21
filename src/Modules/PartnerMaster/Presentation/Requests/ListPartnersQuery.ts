@@ -43,4 +43,9 @@ export class ListPartnersQuery {
   @IsString()
   @MaxLength(100)
   public ExternalReference?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  public Search?: string;
 }

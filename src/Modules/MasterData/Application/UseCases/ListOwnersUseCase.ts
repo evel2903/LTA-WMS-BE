@@ -15,6 +15,7 @@ export class ListOwnersUseCase {
       OwnerCode: query.OwnerCode,
       OwnerName: query.OwnerName,
       Status: query.Status,
+      Search: query.Search,
     });
 
     return ToPagedResult(result.Items.map(OwnerDtoMapper.ToDto), result.TotalItems, paging.Page, paging.PageSize);

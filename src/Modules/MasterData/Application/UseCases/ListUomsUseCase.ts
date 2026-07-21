@@ -16,6 +16,7 @@ export class ListUomsUseCase {
       UomName: query.UomName,
       UomType: query.UomType,
       Status: query.Status,
+      Search: query.Search,
     });
 
     return ToPagedResult(result.Items.map(UomDtoMapper.ToDto), result.TotalItems, paging.Page, paging.PageSize);

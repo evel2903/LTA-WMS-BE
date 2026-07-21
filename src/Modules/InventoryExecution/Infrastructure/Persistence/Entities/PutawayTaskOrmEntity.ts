@@ -25,11 +25,11 @@ export class PutawayTaskOrmEntity {
   @Column({ name: 'receipt_line_id', type: 'char', length: 36 })
   public ReceiptLineId!: string;
 
-  @Column({ name: 'inbound_plan_id', type: 'char', length: 36 })
-  public InboundPlanId!: string;
+  @Column({ name: 'inbound_plan_id', type: 'char', length: 36, nullable: true })
+  public InboundPlanId!: string | null;
 
-  @Column({ name: 'inbound_plan_line_id', type: 'char', length: 36 })
-  public InboundPlanLineId!: string;
+  @Column({ name: 'inbound_plan_line_id', type: 'char', length: 36, nullable: true })
+  public InboundPlanLineId!: string | null;
 
   @Column({ name: 'inbound_lpn_id', type: 'char', length: 36, nullable: true })
   public InboundLpnId!: string | null;

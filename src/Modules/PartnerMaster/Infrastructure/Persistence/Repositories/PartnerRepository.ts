@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, ILike, Repository } from 'typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
+import { EscapeLikePattern } from '@common/Helpers/SqlLikeEscape';
 import {
   IPartnerRepository,
   PartnerListFilter,
@@ -78,8 +79,26 @@ export class PartnerRepository implements IPartnerRepository {
     if (filter.SourceSystem) where.SourceSystem = filter.SourceSystem;
     if (filter.ExternalReference) where.ExternalReference = filter.ExternalReference;
 
+    const searchText = filter.Search?.trim() || null;
+    const searchPattern = searchText ? `%${EscapeLikePattern(searchText)}%` : null;
+    const scopedWhere: FindOptionsWhere<PartnerOrmEntity> | FindOptionsWhere<PartnerOrmEntity>[] = searchPattern
+      ? [
+          ...(filter.PartnerCode
+            ? filter.PartnerCode.toLowerCase().includes(searchText!.toLowerCase())
+              ? [{ ...where }]
+              : []
+            : [{ ...where, PartnerCode: ILike(searchPattern) }]),
+          ...(filter.PartnerName
+            ? filter.PartnerName.toLowerCase().includes(searchText!.toLowerCase())
+              ? [{ ...where }]
+              : []
+            : [{ ...where, PartnerName: ILike(searchPattern) }]),
+        ]
+      : where;
+    if (Array.isArray(scopedWhere) && scopedWhere.length === 0) return { Items: [], TotalItems: 0 };
+
     const [items, total] = await this.partners.findAndCount({
-      where,
+      where: scopedWhere,
       order: { CreatedAt: 'DESC' },
       skip,
       take,

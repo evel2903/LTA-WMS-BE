@@ -12,11 +12,11 @@ export class ReceiptLineOrmEntity {
   @Column({ name: 'receipt_id', type: 'char', length: 36 })
   public ReceiptId!: string;
 
-  @Column({ name: 'inbound_plan_id', type: 'char', length: 36 })
-  public InboundPlanId!: string;
+  @Column({ name: 'inbound_plan_id', type: 'char', length: 36, nullable: true })
+  public InboundPlanId!: string | null;
 
-  @Column({ name: 'inbound_plan_line_id', type: 'char', length: 36 })
-  public InboundPlanLineId!: string;
+  @Column({ name: 'inbound_plan_line_id', type: 'char', length: 36, nullable: true })
+  public InboundPlanLineId!: string | null;
 
   @Column({ name: 'line_number', type: 'integer' })
   public LineNumber!: number;
@@ -33,8 +33,8 @@ export class ReceiptLineOrmEntity {
   @Column({ name: 'uom_code', type: 'varchar', length: 40, nullable: true })
   public UomCode!: string | null;
 
-  @Column({ name: 'expected_quantity', type: 'numeric', precision: 18, scale: 4 })
-  public ExpectedQuantity!: number;
+  @Column({ name: 'expected_quantity', type: 'numeric', precision: 18, scale: 4, nullable: true })
+  public ExpectedQuantity!: number | null;
 
   @Column({ name: 'actual_quantity', type: 'numeric', precision: 18, scale: 4 })
   public ActualQuantity!: number;

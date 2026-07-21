@@ -39,4 +39,9 @@ export class ListSkusQuery {
   @IsString()
   @MaxLength(50)
   public ItemClass?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  public Search?: string;
 }

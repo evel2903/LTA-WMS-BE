@@ -166,6 +166,25 @@ describe('PermissionChecker', () => {
     expect(decision.Allowed).toBe(true);
   });
 
+  it('resolves warehouse/owner list scopes once for database-paginated receipt queries', async () => {
+    const world = await buildWorld();
+    const roleId = await world.assign('admin', RoleCode.WmsAdmin);
+    await world.grantUserScope('admin', DataScopeType.Warehouse, 'warehouse-1');
+    await world.grantRoleIncludeAll(roleId, DataScopeType.Owner);
+
+    const scope = await world.checker.ResolveDataScope({
+      UserId: 'admin',
+      Action: ActionCode.Read,
+      ObjectType: ObjectType.Receipt,
+    });
+
+    expect(scope).toEqual({
+      Allowed: true,
+      WarehouseIds: ['warehouse-1'],
+      OwnerIds: null,
+    });
+  });
+
   it('blocks self-approval (Approve on own request) even with the permission', async () => {
     const world = await buildWorld();
     await world.assign('sup', RoleCode.WarehouseSupervisor); // supervisor has Approve:ApprovalRequest

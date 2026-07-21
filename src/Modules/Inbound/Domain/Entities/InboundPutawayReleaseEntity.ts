@@ -3,8 +3,8 @@ export class InboundPutawayReleaseEntity {
   public InboundLpnId: string | null;
   public ReceiptId: string;
   public ReceiptLineId: string;
-  public InboundPlanId: string;
-  public InboundPlanLineId: string;
+  public InboundPlanId: string | null;
+  public InboundPlanLineId: string | null;
   public OwnerId: string;
   public OwnerCode: string | null;
   public WarehouseId: string;
@@ -45,8 +45,8 @@ export class InboundPutawayReleaseEntity {
     InboundLpnId?: string | null;
     ReceiptId: string;
     ReceiptLineId: string;
-    InboundPlanId: string;
-    InboundPlanLineId: string;
+    InboundPlanId: string | null;
+    InboundPlanLineId: string | null;
     OwnerId: string;
     OwnerCode?: string | null;
     WarehouseId: string;

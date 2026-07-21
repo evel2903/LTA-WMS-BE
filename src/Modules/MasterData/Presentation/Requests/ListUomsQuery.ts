@@ -34,4 +34,9 @@ export class ListUomsQuery {
   @IsString()
   @MaxLength(50)
   public UomType?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  public Search?: string;
 }

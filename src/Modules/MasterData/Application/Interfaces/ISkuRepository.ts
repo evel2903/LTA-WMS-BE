@@ -10,6 +10,7 @@ export interface SkuListFilter {
   DefaultOwnerId?: string;
   ItemClass?: string;
   ItemStatus?: SkuStatus;
+  Search?: string;
 }
 
 export interface ISkuRepository {

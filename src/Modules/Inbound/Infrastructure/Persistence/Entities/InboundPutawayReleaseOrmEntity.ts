@@ -3,6 +3,10 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, UpdateDateColum
 @Index('IDX_inbound_putaway_releases_receipt', ['ReceiptId'])
 @Index('IDX_inbound_putaway_releases_line', ['ReceiptLineId'])
 @Index('IDX_inbound_putaway_releases_owner_warehouse', ['OwnerId', 'WarehouseId'])
+@Index('UQ_inbound_putaway_releases_receipt_line', ['ReceiptLineId'], {
+  unique: true,
+  where: '"inbound_plan_id" IS NULL',
+})
 @Index('UQ_inbound_putaway_releases_idempotency', ['ReceiptLineId', 'IdempotencyKey'], { unique: true })
 @Entity({ name: 'inbound_putaway_releases' })
 export class InboundPutawayReleaseOrmEntity {
@@ -18,11 +22,11 @@ export class InboundPutawayReleaseOrmEntity {
   @Column({ name: 'receipt_line_id', type: 'char', length: 36 })
   public ReceiptLineId!: string;
 
-  @Column({ name: 'inbound_plan_id', type: 'char', length: 36 })
-  public InboundPlanId!: string;
+  @Column({ name: 'inbound_plan_id', type: 'char', length: 36, nullable: true })
+  public InboundPlanId!: string | null;
 
-  @Column({ name: 'inbound_plan_line_id', type: 'char', length: 36 })
-  public InboundPlanLineId!: string;
+  @Column({ name: 'inbound_plan_line_id', type: 'char', length: 36, nullable: true })
+  public InboundPlanLineId!: string | null;
 
   @Column({ name: 'owner_id', type: 'char', length: 36 })
   public OwnerId!: string;

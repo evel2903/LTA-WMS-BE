@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConflictException } from '@common/Exceptions/AppException';
+import { EscapeLikePattern } from '@common/Helpers/SqlLikeEscape';
 import { EntityManager, Repository } from 'typeorm';
 import {
   IReceivingRepository,
+  ReceiptListFilter,
+  ReceiptListRecord,
   ReceivingSessionAggregate,
 } from '@modules/Inbound/Application/Interfaces/IReceivingRepository';
 import { InboundDiscrepancyEntity } from '@modules/Inbound/Domain/Entities/InboundDiscrepancyEntity';
@@ -25,6 +28,10 @@ import { QcTaskOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Ent
 import { ReceiptOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptOrmEntity';
 import { ReceiptLineOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceiptLineOrmEntity';
 import { ReceivingSessionOrmEntity } from '@modules/Inbound/Infrastructure/Persistence/Entities/ReceivingSessionOrmEntity';
+import { PartnerOrmEntity } from '@modules/PartnerMaster/Infrastructure/Persistence/Entities/PartnerOrmEntity';
+
+// Re-exported for test/Modules/Inbound/Inbound.SchemaSpec.ts, which imports this name directly.
+export { EscapeLikePattern as EscapeReceiptLikePattern } from '@common/Helpers/SqlLikeEscape';
 
 @Injectable()
 export class ReceivingRepository implements IReceivingRepository {
@@ -83,6 +90,20 @@ export class ReceivingRepository implements IReceivingRepository {
     };
   }
 
+  public async FindSessionByReceiptAndKey(
+    receiptId: string,
+    sessionKey: string,
+  ): Promise<ReceivingSessionAggregate | null> {
+    const session = await this.sessions.findOne({ where: { ReceiptId: receiptId, SessionKey: sessionKey } });
+    if (!session) return null;
+    const receipt = await this.receipts.findOne({ where: { Id: receiptId } });
+    if (!receipt) return null;
+    return {
+      Session: ReceivingOrmMapper.ToSessionDomain(session),
+      Receipt: ReceivingOrmMapper.ToReceiptDomain(receipt),
+    };
+  }
+
   public async FindReceiptById(id: string): Promise<ReceiptEntity | null> {
     const entity = await this.receipts.findOne({ where: { Id: id } });
     return entity ? ReceivingOrmMapper.ToReceiptDomain(entity) : null;
@@ -93,10 +114,90 @@ export class ReceivingRepository implements IReceivingRepository {
     return entity ? ReceivingOrmMapper.ToReceiptDomain(entity) : null;
   }
 
+  public async FindReceiptByIdempotencyKey(
+    ownerId: string,
+    warehouseId: string,
+    idempotencyKey: string,
+  ): Promise<ReceiptEntity | null> {
+    const entity = await this.receipts.findOne({
+      where: { OwnerId: ownerId, WarehouseId: warehouseId, IdempotencyKey: idempotencyKey },
+    });
+    return entity ? ReceivingOrmMapper.ToReceiptDomain(entity) : null;
+  }
+
+  public async ListReceipts(
+    skip: number,
+    take: number,
+    filter: ReceiptListFilter = {},
+  ): Promise<{ Items: ReceiptListRecord[]; TotalItems: number }> {
+    const query = this.receipts
+      .createQueryBuilder('receipt')
+      .leftJoin(PartnerOrmEntity, 'supplier', 'supplier.Id = receipt.SupplierId')
+      .addSelect('supplier.PartnerCode', 'supplier_code')
+      .addSelect('supplier.PartnerName', 'supplier_name');
+    if (filter.WarehouseId) {
+      query.andWhere('receipt.WarehouseId = :warehouseId', { warehouseId: filter.WarehouseId });
+      if (filter.WarehouseIds && !filter.WarehouseIds.includes(filter.WarehouseId)) {
+        query.andWhere('1 = 0');
+      }
+    } else if (filter.WarehouseIds) {
+      if (filter.WarehouseIds.length === 0) query.andWhere('1 = 0');
+      else query.andWhere('receipt.WarehouseId IN (:...warehouseIds)', { warehouseIds: filter.WarehouseIds });
+    }
+    if (filter.OwnerId) {
+      query.andWhere('receipt.OwnerId = :ownerId', { ownerId: filter.OwnerId });
+      if (filter.OwnerIds && !filter.OwnerIds.includes(filter.OwnerId)) query.andWhere('1 = 0');
+    } else if (filter.OwnerIds) {
+      if (filter.OwnerIds.length === 0) query.andWhere('1 = 0');
+      else query.andWhere('receipt.OwnerId IN (:...ownerIds)', { ownerIds: filter.OwnerIds });
+    }
+    if (filter.Search?.trim()) {
+      const escapedSearch = EscapeLikePattern(filter.Search.trim().toLowerCase());
+      query.andWhere(
+        `(LOWER(receipt.ReceiptNumber) LIKE :search ESCAPE E'\\\\' OR ` +
+          `LOWER(receipt.BusinessReference) LIKE :search ESCAPE E'\\\\')`,
+        { search: `%${escapedSearch}%` },
+      );
+    }
+    const total = await query.getCount();
+    const sortColumn = filter.SortBy === 'ReceiptNumber' ? 'receipt.ReceiptNumber' : 'receipt.CreatedAt';
+    const sortDirection = filter.SortDirection === 'ASC' ? 'ASC' : 'DESC';
+    const page = await query
+      .orderBy(sortColumn, sortDirection)
+      .addOrderBy('receipt.Id', 'DESC')
+      .skip(skip)
+      .take(take)
+      .getRawAndEntities();
+    return {
+      Items: page.entities.map((entity, index) => ({
+        Receipt: ReceivingOrmMapper.ToReceiptDomain(entity),
+        SupplierCode: (page.raw[index]?.supplier_code as string | undefined) ?? null,
+        SupplierName: (page.raw[index]?.supplier_name as string | undefined) ?? null,
+      })),
+      TotalItems: total,
+    };
+  }
+
   public async UpdateReceipt(receipt: ReceiptEntity, manager?: EntityManager): Promise<ReceiptEntity> {
     const repo = manager ? manager.getRepository(ReceiptOrmEntity) : this.receipts;
     const saved = await repo.save(ReceivingOrmMapper.ToReceiptOrm(receipt));
     return ReceivingOrmMapper.ToReceiptDomain(saved);
+  }
+
+  public async GetNextReceiptLineNumber(receiptId: string, manager: EntityManager): Promise<number> {
+    await manager
+      .getRepository(ReceiptOrmEntity)
+      .createQueryBuilder('receipt')
+      .setLock('pessimistic_write')
+      .where('receipt.Id = :receiptId', { receiptId })
+      .getOneOrFail();
+    const raw = await manager
+      .getRepository(ReceiptLineOrmEntity)
+      .createQueryBuilder('line')
+      .select('COALESCE(MAX(line.LineNumber), 0)', 'max')
+      .where('line.ReceiptId = :receiptId', { receiptId })
+      .getRawOne<{ max: string | number }>();
+    return Number(raw?.max ?? 0) + 1;
   }
 
   public async CreateReceiptLine(line: ReceiptLineEntity, manager?: EntityManager): Promise<ReceiptLineEntity> {
@@ -235,6 +336,27 @@ export class ReceivingRepository implements IReceivingRepository {
     return entity ? ReceivingOrmMapper.ToInboundPutawayReleaseDomain(entity) : null;
   }
 
+  public async FindInboundPutawayReleaseByReceiptLineId(
+    receiptLineId: string,
+  ): Promise<InboundPutawayReleaseEntity | null> {
+    const entity = await this.putawayReleases.findOne({ where: { ReceiptLineId: receiptLineId } });
+    return entity ? ReceivingOrmMapper.ToInboundPutawayReleaseDomain(entity) : null;
+  }
+
+  // UQ_inbound_putaway_releases_receipt_line only protects the manual-receipt path
+  // (WHERE inbound_plan_id IS NULL) -- this row lock is the sole race-safety net left for
+  // concurrent releases against the same plan-based receipt line. Held for the caller's
+  // transaction lifetime; the caller must re-check for an existing release AFTER this
+  // resolves, since a concurrent transaction may have committed one while this waited.
+  public async LockReceiptLineForRelease(receiptLineId: string, manager: EntityManager): Promise<void> {
+    await manager
+      .getRepository(ReceiptLineOrmEntity)
+      .createQueryBuilder('line')
+      .setLock('pessimistic_write')
+      .where('line.Id = :receiptLineId', { receiptLineId })
+      .getOneOrFail();
+  }
+
   public async FindInboundPutawayReleaseByIdempotencyKey(
     receiptLineId: string,
     idempotencyKey: string,
@@ -309,6 +431,11 @@ export class ReceivingRepository implements IReceivingRepository {
       where: { InboundPlanId: inboundPlanId },
       order: { CreatedAt: 'ASC' },
     });
+    return entities.map(ReceivingOrmMapper.ToSessionDomain);
+  }
+
+  public async ListReceivingSessionsByReceiptId(receiptId: string): Promise<ReceivingSessionEntity[]> {
+    const entities = await this.sessions.find({ where: { ReceiptId: receiptId }, order: { CreatedAt: 'ASC' } });
     return entities.map(ReceivingOrmMapper.ToSessionDomain);
   }
 

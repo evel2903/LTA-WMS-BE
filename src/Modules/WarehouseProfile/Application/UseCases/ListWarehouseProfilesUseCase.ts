@@ -18,6 +18,7 @@ export class ListWarehouseProfilesUseCase {
       Status: query.Status,
       WarehouseTypeCode: query.WarehouseTypeCode,
       WarehouseId: query.WarehouseId,
+      Search: query.Search,
     });
 
     return ToPagedResult(

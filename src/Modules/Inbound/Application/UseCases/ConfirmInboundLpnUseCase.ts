@@ -48,15 +48,13 @@ export class ConfirmInboundLpnUseCase {
 
     await AssertReceiptPermission(this.permissionChecker, context.ActorUserId, ActionCode.Update, receipt);
 
-    const aggregate = await this.inboundPlans.FindById(receipt.InboundPlanId);
-    if (!aggregate) throw new NotFoundException('Inbound plan not found for LPN');
-    // Re-review fix (P1): the plan can be cancelled AFTER its receiving session/receipt
-    // was legitimately started (Draft is allowed to receive; Cancel only requires Draft),
-    // so this receipt-scoped use case must re-check the plan's CURRENT status itself --
-    // it can't rely on StartReceivingSessionUseCase's own (transitive) readiness check.
-    AssertInboundPlanNotCancelled(aggregate.Plan.Status);
-    const planLine = aggregate.Lines.find((item) => item.Id === line.InboundPlanLineId);
-    if (!planLine) throw new BusinessRuleException('Inbound plan line not found for LPN');
+    if (receipt.InboundPlanId) {
+      const aggregate = await this.inboundPlans.FindById(receipt.InboundPlanId);
+      if (!aggregate) throw new NotFoundException('Inbound plan not found for LPN');
+      AssertInboundPlanNotCancelled(aggregate.Plan.Status);
+      const planLine = aggregate.Lines.find((item) => item.Id === line.InboundPlanLineId);
+      if (!planLine) throw new BusinessRuleException('Inbound plan line not found for LPN');
+    }
 
     const existing = await this.receiving.FindInboundLpnByScopeCode(
       receipt.WarehouseId,

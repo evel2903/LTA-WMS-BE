@@ -66,21 +66,20 @@ export class EvaluateQcTaskUseCase {
     const line = await this.receiving.FindReceiptLineById(request.ReceiptLineId);
     if (!line || line.ReceiptId !== receipt.Id) throw new BusinessRuleException('Receipt line not found for QC');
 
-    const aggregate = await this.inboundPlans.FindById(receipt.InboundPlanId);
-    if (!aggregate) throw new NotFoundException('Inbound plan not found for QC');
-    // Re-review fix (P1): the plan can be cancelled AFTER its receiving session/receipt
-    // was legitimately started (Draft is allowed to receive; Cancel only requires Draft),
-    // so this receipt-scoped use case must re-check the plan's CURRENT status itself.
-    AssertInboundPlanNotCancelled(aggregate.Plan.Status);
-    const planLine = aggregate.Lines.find((item) => item.Id === line.InboundPlanLineId);
-    if (!planLine) throw new BusinessRuleException('Inbound plan line not found for QC');
+    const aggregate = receipt.InboundPlanId ? await this.inboundPlans.FindById(receipt.InboundPlanId) : null;
+    if (receipt.InboundPlanId) {
+      if (!aggregate) throw new NotFoundException('Inbound plan not found for QC');
+      AssertInboundPlanNotCancelled(aggregate.Plan.Status);
+      const planLine = aggregate.Lines.find((item) => item.Id === line.InboundPlanLineId);
+      if (!planLine) throw new BusinessRuleException('Inbound plan line not found for QC');
+    }
 
+    const warehouseProfileId = aggregate ? aggregate.Plan.WarehouseProfileId : receipt.WarehouseProfileId;
+    const supplierId = aggregate ? aggregate.Plan.SupplierId : receipt.SupplierId;
     const [profile, sku, supplier] = await Promise.all([
-      aggregate.Plan.WarehouseProfileId
-        ? this.profiles.FindById(aggregate.Plan.WarehouseProfileId)
-        : Promise.resolve(null),
+      warehouseProfileId ? this.profiles.FindById(warehouseProfileId) : Promise.resolve(null),
       this.skus.FindById(line.SkuId),
-      this.partners.FindById(aggregate.Plan.SupplierId),
+      this.partners.FindById(supplierId),
     ]);
     // ADR-5 (IRE-08): a plan with no linked WarehouseProfile was never gated pre-migration, so we do
     // NOT let a scope-resolved rule newly gate it — matches decision point #1's identical guard.
@@ -89,7 +88,7 @@ export class EvaluateQcTaskUseCase {
           WarehouseId: receipt.WarehouseId,
           OwnerId: receipt.OwnerId,
           SkuId: line.SkuId,
-          SupplierId: aggregate.Plan.SupplierId,
+          SupplierId: supplierId,
           Attributes: { [InboundRuleAttributeKeys.SupplierRisk]: supplier?.RiskLevel?.toLowerCase() ?? null },
         })
       : {
@@ -149,7 +148,9 @@ export class EvaluateQcTaskUseCase {
       CreatedAt: now,
       UpdatedAt: now,
     });
-    const outbox = task.Required ? this.BuildQcRequiredOutbox(aggregate.Plan.BusinessReference, task) : null;
+    const outbox = task.Required
+      ? this.BuildQcRequiredOutbox(aggregate?.Plan.BusinessReference ?? receipt.BusinessReference, task)
+      : null;
     const milestone =
       !task.Required && receipt.CoreFlowInstanceId
         ? new WorkflowMilestoneEntity({

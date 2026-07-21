@@ -17,6 +17,7 @@ export class ListSkusUseCase {
       DefaultOwnerId: query.DefaultOwnerId,
       ItemClass: query.ItemClass,
       ItemStatus: query.ItemStatus,
+      Search: query.Search,
     });
 
     return ToPagedResult(result.Items.map(SkuDtoMapper.ToDto), result.TotalItems, paging.Page, paging.PageSize);

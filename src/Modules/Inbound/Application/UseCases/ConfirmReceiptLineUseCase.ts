@@ -30,7 +30,10 @@ import { ReceiptLineEntity } from '@modules/Inbound/Domain/Entities/ReceiptLineE
 import { ReceiptLineDiscrepancySignal } from '@modules/Inbound/Domain/Enums/ReceiptLineDiscrepancySignal';
 import { ReceiptLineStatus } from '@modules/Inbound/Domain/Enums/ReceiptLineStatus';
 import { ISkuRepository } from '@modules/MasterData/Application/Interfaces/ISkuRepository';
+import { IUomRepository } from '@modules/MasterData/Application/Interfaces/IUomRepository';
+import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
 import { SkuEntity } from '@modules/MasterData/Domain/Entities/SkuEntity';
+import { SkuStatus } from '@modules/MasterData/Domain/Enums/SkuStatus';
 
 export class ConfirmReceiptLineUseCase {
   constructor(
@@ -41,6 +44,7 @@ export class ConfirmReceiptLineUseCase {
     private readonly reasonCatalog: IReasonCodeCatalog,
     private readonly readiness: ValidateReceivingReadinessUseCase,
     private readonly skus: ISkuRepository,
+    private readonly uoms: IUomRepository,
     private readonly audited: AuditedTransaction,
     private readonly permissionChecker?: IPermissionChecker,
   ) {}
@@ -61,13 +65,27 @@ export class ConfirmReceiptLineUseCase {
       return ReceivingDtoMapper.ToLineDto(duplicate, true);
     }
 
-    const readiness = await this.readiness.Execute({ Id: receipt.InboundPlanId }, context);
-    if (!readiness.Allowed) throw new BusinessRuleException(readiness.Reason);
-
-    const aggregate = await this.inboundPlans.FindById(receipt.InboundPlanId);
-    if (!aggregate) throw new NotFoundException('Inbound plan not found for receipt');
-    const planLine = aggregate.Lines.find((line) => line.Id === request.InboundPlanLineId);
-    if (!planLine) throw new BusinessRuleException('Inbound plan line not found for receipt line');
+    let planLine: InboundPlanLineEntity | null = null;
+    let planBusinessReference: string | null = null;
+    if (receipt.InboundPlanId) {
+      if (!request.InboundPlanLineId?.trim()) {
+        throw new BusinessRuleException('Inbound plan line is required for plan-based receipt');
+      }
+      const readiness = await this.readiness.Execute({ Id: receipt.InboundPlanId }, context);
+      if (!readiness.Allowed) throw new BusinessRuleException(readiness.Reason);
+      const aggregate = await this.inboundPlans.FindById(receipt.InboundPlanId);
+      if (!aggregate) throw new NotFoundException('Inbound plan not found for receipt');
+      planBusinessReference = aggregate.Plan.BusinessReference;
+      planLine = aggregate.Lines.find((line) => line.Id === request.InboundPlanLineId) ?? null;
+      if (!planLine) throw new BusinessRuleException('Inbound plan line not found for receipt line');
+    } else {
+      if (request.InboundPlanLineId?.trim()) {
+        throw new BusinessRuleException('Manual receipt must not reference an inbound plan line');
+      }
+      if (!request.SkuId?.trim() || !request.UomId?.trim()) {
+        throw new BusinessRuleException('SkuId and UomId are required for manual receipt line');
+      }
+    }
 
     let reasonCodeId: string | null = null;
     if (request.ManualConfirm) {
@@ -83,10 +101,18 @@ export class ConfirmReceiptLineUseCase {
       throw new BusinessRuleException('Scan evidence is required for receipt line confirm');
     }
 
-    const actualSkuId = request.SkuId?.trim() || planLine.SkuId;
-    const actualUomId = request.UomId?.trim() || planLine.UomId;
-    const sku = await this.skus.FindById(actualSkuId);
-    if (!sku) throw new BusinessRuleException('SKU not found for receipt line', { SkuId: actualSkuId });
+    const actualSkuId = request.SkuId?.trim() || planLine?.SkuId || '';
+    const actualUomId = request.UomId?.trim() || planLine?.UomId || '';
+    const [sku, uom] = await Promise.all([this.skus.FindById(actualSkuId), this.uoms.FindById(actualUomId)]);
+    if (!sku) {
+      throw new BusinessRuleException('SKU not found for receipt line', { SkuId: actualSkuId });
+    }
+    if (!planLine && sku.ItemStatus !== SkuStatus.Active) {
+      throw new BusinessRuleException('SKU not found or inactive for receipt line', { SkuId: actualSkuId });
+    }
+    if (!planLine && (!uom || uom.Status !== MasterDataStatus.Active)) {
+      throw new BusinessRuleException('UOM not found or inactive for receipt line', { UomId: actualUomId });
+    }
     this.AssertCaptureRequiredBySku(sku, request);
     await this.AssertSerialNotDuplicated(sku, request);
     // IFB-20: a SerialControlled SKU is forced (above) to ActualQuantity=1 per call, so comparing
@@ -95,27 +121,64 @@ export class ConfirmReceiptLineUseCase {
     // total received so far (across all existing receipt lines for this plan line) plus this call.
     // Review fix: scope the sum to actualSkuId too -- a prior call substituted to a different SKU
     // is already flagged WrongSku on its own line and must not inflate THIS SKU's over-receipt count.
+    const serialGroupLines = sku.SerialControlled
+      ? (await this.receiving.ListReceiptLinesByReceiptId(receipt.Id)).filter(
+          (existingLine) =>
+            existingLine.SkuId === actualSkuId &&
+            existingLine.UomId === actualUomId &&
+            (planLine ? existingLine.InboundPlanLineId === planLine.Id : existingLine.InboundPlanId === null),
+        )
+      : [];
     const cumulativeActualQuantity = sku.SerialControlled
-      ? request.ActualQuantity +
-        (await this.receiving.ListReceiptLinesByReceiptId(receipt.Id))
-          .filter(
-            (existingLine) => existingLine.InboundPlanLineId === planLine.Id && existingLine.SkuId === actualSkuId,
-          )
-          .reduce((sum, existingLine) => sum + existingLine.ActualQuantity, 0)
+      ? request.ActualQuantity + serialGroupLines.reduce((sum, existingLine) => sum + existingLine.ActualQuantity, 0)
       : request.ActualQuantity;
-    const signals = this.DiscrepancySignals(request, planLine, actualSkuId, actualUomId, sku, cumulativeActualQuantity);
+    const manualExpectedQuantities = planLine
+      ? []
+      : [
+          ...new Set(
+            serialGroupLines.flatMap((existingLine) =>
+              existingLine.ExpectedQuantity === null ? [] : [existingLine.ExpectedQuantity],
+            ),
+          ),
+        ];
+    if (sku.SerialControlled && !planLine && manualExpectedQuantities.length > 1) {
+      throw new BusinessRuleException('Manual serial receipt has conflicting expected quantities for the same SKU/UOM');
+    }
+    if (
+      sku.SerialControlled &&
+      !planLine &&
+      request.ExpectedQuantity !== undefined &&
+      manualExpectedQuantities.length === 1 &&
+      request.ExpectedQuantity !== manualExpectedQuantities[0]
+    ) {
+      throw new BusinessRuleException('Expected quantity must remain consistent for a manual serial SKU/UOM group', {
+        ExistingExpectedQuantity: manualExpectedQuantities[0],
+        RequestedExpectedQuantity: request.ExpectedQuantity,
+      });
+    }
+    const expectedQuantity =
+      planLine?.ExpectedQuantity ?? request.ExpectedQuantity ?? manualExpectedQuantities[0] ?? null;
+    const signals = this.DiscrepancySignals(
+      request,
+      planLine,
+      expectedQuantity,
+      actualSkuId,
+      actualUomId,
+      sku,
+      cumulativeActualQuantity,
+    );
     const now = new Date();
     const line = new ReceiptLineEntity({
       Id: randomUUID(),
       ReceiptId: receipt.Id,
       InboundPlanId: receipt.InboundPlanId,
-      InboundPlanLineId: planLine.Id,
-      LineNumber: planLine.LineNumber,
+      InboundPlanLineId: planLine?.Id ?? null,
+      LineNumber: planLine?.LineNumber ?? 0,
       SkuId: actualSkuId,
-      SkuCode: actualSkuId === planLine.SkuId ? planLine.SkuCode : null,
+      SkuCode: planLine ? (actualSkuId === planLine.SkuId ? planLine.SkuCode : null) : sku.SkuCode,
       UomId: actualUomId,
-      UomCode: actualUomId === planLine.UomId ? planLine.UomCode : null,
-      ExpectedQuantity: planLine.ExpectedQuantity,
+      UomCode: planLine ? (actualUomId === planLine.UomId ? planLine.UomCode : null) : (uom?.UomCode ?? null),
+      ExpectedQuantity: expectedQuantity,
       ActualQuantity: request.ActualQuantity,
       Status: signals.length ? ReceiptLineStatus.Discrepancy : ReceiptLineStatus.Received,
       ManualConfirm: request.ManualConfirm ?? false,
@@ -136,7 +199,7 @@ export class ConfirmReceiptLineUseCase {
     const beforeReceipt = ReceivingDtoMapper.ToReceiptDto(receipt);
     receipt.MarkLineReceived(context.ActorUserId);
 
-    const outbox = this.BuildOutbox(receipt, line, aggregate.Plan.BusinessReference);
+    const outbox = this.BuildOutbox(receipt, line, planBusinessReference ?? receipt.BusinessReference);
     const milestone = receipt.CoreFlowInstanceId
       ? new WorkflowMilestoneEntity({
           Id: randomUUID(),
@@ -157,6 +220,7 @@ export class ConfirmReceiptLineUseCase {
       : null;
 
     return this.audited.Run(async (manager) => {
+      if (!planLine) line.LineNumber = await this.receiving.GetNextReceiptLineNumber(receipt.Id, manager);
       await this.receiving.UpdateReceipt(receipt, manager);
       const createdLine = await this.receiving.CreateReceiptLine(line, manager);
       await this.integrations.CreateOutboxMessage(outbox, manager);
@@ -185,17 +249,36 @@ export class ConfirmReceiptLineUseCase {
 
   private AssertRequest(request: ConfirmReceiptLineDto): void {
     if (!request.IdempotencyKey?.trim()) throw new BusinessRuleException('Receipt line idempotency key is required');
-    if (!request.InboundPlanLineId?.trim()) throw new BusinessRuleException('Inbound plan line is required');
-    if (request.ActualQuantity <= 0) throw new BusinessRuleException('Actual quantity must be positive');
+    this.AssertQuantity(request.ActualQuantity, 'Actual quantity');
+    if (request.ExpectedQuantity !== undefined && request.ExpectedQuantity !== null) {
+      this.AssertQuantity(request.ExpectedQuantity, 'Expected quantity');
+    }
     // class-validator's @IsDateString() is a format regex, not calendar-aware -- it accepts
     // '2027-02-30'. JS then silently rolls that forward to 2027-03-02 instead of erroring, which
     // would corrupt the exact field this story exists to make trustworthy. Round-trip through
     // ISO and compare the date part to catch calendar-invalid input before it's ever persisted.
     if (request.ExpiryDate) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(request.ExpiryDate)) {
+        throw new BusinessRuleException('ExpiryDate must use YYYY-MM-DD without a time component');
+      }
       const parsed = new Date(request.ExpiryDate);
-      if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== request.ExpiryDate.slice(0, 10)) {
+      if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== request.ExpiryDate) {
         throw new BusinessRuleException('ExpiryDate must be a valid calendar date');
       }
+    }
+  }
+
+  private AssertQuantity(value: number, label: string): void {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new BusinessRuleException(`${label} must be a positive finite number`);
+    }
+    if (value > 99_999_999_999_999) {
+      throw new BusinessRuleException(`${label} exceeds numeric(18,4) capacity`);
+    }
+    const rounded = Number(value.toFixed(4));
+    const tolerance = Number.EPSILON * Math.max(1, Math.abs(value)) * 4;
+    if (Math.abs(value - rounded) > tolerance) {
+      throw new BusinessRuleException(`${label} supports at most 4 decimal places`);
     }
   }
 
@@ -251,7 +334,10 @@ export class ConfirmReceiptLineUseCase {
       if (actual !== expected) mismatches.push(field);
     };
 
-    compare('InboundPlanLineId', request.InboundPlanLineId, existing.InboundPlanLineId);
+    compare('InboundPlanLineId', request.InboundPlanLineId?.trim() || null, existing.InboundPlanLineId);
+    if (existing.InboundPlanId === null) {
+      compare('ExpectedQuantity', request.ExpectedQuantity ?? null, existing.ExpectedQuantity);
+    }
     compare('ActualQuantity', request.ActualQuantity, existing.ActualQuantity);
     compare('ManualConfirm', request.ManualConfirm ?? false, existing.ManualConfirm);
     compare('ReasonCode', request.ReasonCode ?? null, existing.ReasonCode);
@@ -301,7 +387,8 @@ export class ConfirmReceiptLineUseCase {
 
   private DiscrepancySignals(
     request: ConfirmReceiptLineDto,
-    planLine: InboundPlanLineEntity,
+    planLine: InboundPlanLineEntity | null,
+    expectedQuantity: number | null,
     actualSkuId: string,
     actualUomId: string,
     sku: SkuEntity,
@@ -314,16 +401,19 @@ export class ConfirmReceiptLineUseCase {
     // no more units are coming, so a partial total is never provably wrong yet. Non-serial SKUs
     // keep the original single-call comparison unchanged (a single confirm already represents
     // the whole receiving action for that line).
-    const hasQuantityVariance = sku.SerialControlled
-      ? cumulativeActualQuantity > planLine.ExpectedQuantity
-      : request.ActualQuantity !== planLine.ExpectedQuantity;
+    const hasQuantityVariance =
+      expectedQuantity !== null &&
+      (sku.SerialControlled
+        ? cumulativeActualQuantity > expectedQuantity
+        : request.ActualQuantity !== expectedQuantity);
     if (hasQuantityVariance) {
       signals.push(ReceiptLineDiscrepancySignal.QuantityVariance);
     }
-    if (actualSkuId !== planLine.SkuId) signals.push(ReceiptLineDiscrepancySignal.WrongSku);
-    if (actualUomId !== planLine.UomId) signals.push(ReceiptLineDiscrepancySignal.WrongUom);
+    if (planLine && actualSkuId !== planLine.SkuId) signals.push(ReceiptLineDiscrepancySignal.WrongSku);
+    if (planLine && actualUomId !== planLine.UomId) signals.push(ReceiptLineDiscrepancySignal.WrongUom);
     if (
       request.ScanEvidence?.ResolvedSkuId &&
+      planLine &&
       request.ScanEvidence.ResolvedSkuId !== planLine.SkuId &&
       !signals.includes(ReceiptLineDiscrepancySignal.WrongSku)
     ) {
@@ -331,6 +421,7 @@ export class ConfirmReceiptLineUseCase {
     }
     if (
       request.ScanEvidence?.ResolvedUomId &&
+      planLine &&
       request.ScanEvidence.ResolvedUomId !== planLine.UomId &&
       !signals.includes(ReceiptLineDiscrepancySignal.WrongUom)
     ) {
@@ -354,7 +445,7 @@ export class ConfirmReceiptLineUseCase {
       WarehouseContext: receipt.WarehouseCode ?? receipt.WarehouseId,
       OwnerContext: receipt.OwnerCode ?? receipt.OwnerId,
       EventTime: line.ReceivedAt,
-      CorrelationId: receipt.CoreFlowInstanceId,
+      CorrelationId: receipt.CoreFlowInstanceId ?? receipt.Id,
       CausationId: line.Id,
       Payload: {
         ReceiptId: receipt.Id,

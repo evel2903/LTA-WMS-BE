@@ -25,3 +25,19 @@ export const AssertReceiptPermission = async (
     });
   }
 };
+
+export const CheckReceiptPermission = async (
+  permissionChecker: IPermissionChecker | undefined,
+  actorUserId: string | null | undefined,
+  action: ActionCode,
+  receipt: ReceiptEntity,
+): Promise<boolean> => {
+  if (!permissionChecker || !actorUserId) return true;
+  const decision = await permissionChecker.Check({
+    UserId: actorUserId,
+    Action: action,
+    ObjectType: ObjectType.Receipt,
+    Scope: { WarehouseId: receipt.WarehouseId, OwnerId: receipt.OwnerId },
+  });
+  return decision.Allowed;
+};

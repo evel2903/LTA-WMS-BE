@@ -2,7 +2,7 @@ import { ReceivingSessionStatus } from '@modules/Inbound/Domain/Enums/ReceivingS
 
 export class ReceivingSessionEntity {
   public readonly Id: string;
-  public InboundPlanId: string;
+  public InboundPlanId: string | null;
   public ReceiptId: string;
   public SessionKey: string;
   public DeviceCode: string | null;
@@ -20,7 +20,7 @@ export class ReceivingSessionEntity {
 
   constructor(params: {
     Id: string;
-    InboundPlanId: string;
+    InboundPlanId: string | null;
     ReceiptId: string;
     SessionKey: string;
     DeviceCode?: string | null;

@@ -4,14 +4,14 @@ import { ReceiptLineStatus } from '@modules/Inbound/Domain/Enums/ReceiptLineStat
 export class ReceiptLineEntity {
   public readonly Id: string;
   public ReceiptId: string;
-  public InboundPlanId: string;
-  public InboundPlanLineId: string;
+  public InboundPlanId: string | null;
+  public InboundPlanLineId: string | null;
   public LineNumber: number;
   public SkuId: string;
   public SkuCode: string | null;
   public UomId: string;
   public UomCode: string | null;
-  public ExpectedQuantity: number;
+  public ExpectedQuantity: number | null;
   public ActualQuantity: number;
   public Status: ReceiptLineStatus;
   public ManualConfirm: boolean;
@@ -32,14 +32,14 @@ export class ReceiptLineEntity {
   constructor(params: {
     Id: string;
     ReceiptId: string;
-    InboundPlanId: string;
-    InboundPlanLineId: string;
+    InboundPlanId: string | null;
+    InboundPlanLineId: string | null;
     LineNumber: number;
     SkuId: string;
     SkuCode?: string | null;
     UomId: string;
     UomCode?: string | null;
-    ExpectedQuantity: number;
+    ExpectedQuantity: number | null;
     ActualQuantity: number;
     Status?: ReceiptLineStatus;
     ManualConfirm?: boolean;

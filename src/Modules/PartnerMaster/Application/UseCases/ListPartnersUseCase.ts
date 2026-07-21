@@ -24,6 +24,7 @@ export class ListPartnersUseCase {
     if (query.PartnerName) filter.PartnerName = query.PartnerName;
     if (query.SourceSystem) filter.SourceSystem = query.SourceSystem;
     if (query.ExternalReference) filter.ExternalReference = query.ExternalReference;
+    if (query.Search) filter.Search = query.Search;
 
     const result = await this.partnerRepository.List(paging.Skip, paging.Take, filter);
     return ToPagedResult(result.Items.map(PartnerDtoMapper.ToDto), result.TotalItems, paging.Page, paging.PageSize);

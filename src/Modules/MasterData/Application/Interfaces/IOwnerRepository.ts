@@ -8,6 +8,7 @@ export interface OwnerListFilter {
   OwnerCode?: string;
   OwnerName?: string;
   Status?: MasterDataStatus;
+  Search?: string;
 }
 
 export interface IOwnerRepository {

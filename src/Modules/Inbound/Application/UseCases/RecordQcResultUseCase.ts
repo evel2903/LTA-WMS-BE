@@ -71,12 +71,11 @@ export class RecordQcResultUseCase {
 
     const receipt = await this.receiving.FindReceiptById(task.ReceiptId);
     if (!receipt) throw new NotFoundException('Receipt not found for QC result');
-    const aggregate = await this.inboundPlans.FindById(task.InboundPlanId);
-    if (!aggregate) throw new NotFoundException('Inbound plan not found for QC result');
-    // Re-review fix (P1): the plan can be cancelled AFTER its receiving session/receipt
-    // was legitimately started (Draft is allowed to receive; Cancel only requires Draft),
-    // so this QC-task-scoped use case must re-check the plan's CURRENT status itself.
-    AssertInboundPlanNotCancelled(aggregate.Plan.Status);
+    const aggregate = task.InboundPlanId ? await this.inboundPlans.FindById(task.InboundPlanId) : null;
+    if (task.InboundPlanId) {
+      if (!aggregate) throw new NotFoundException('Inbound plan not found for QC result');
+      AssertInboundPlanNotCancelled(aggregate.Plan.Status);
+    }
     const reasonCodeId = await this.ValidateReasonIfNeeded(request);
     const status = this.ResolveInventoryStatuses(request);
     const now = new Date();
@@ -120,7 +119,11 @@ export class RecordQcResultUseCase {
       CreatedAt: now,
       UpdatedAt: now,
     });
-    const outbox = this.BuildQcResultOutbox(aggregate.Plan.BusinessReference, result, task);
+    const outbox = this.BuildQcResultOutbox(
+      aggregate?.Plan.BusinessReference ?? receipt.BusinessReference,
+      result,
+      task,
+    );
     const milestone = receipt.CoreFlowInstanceId
       ? new WorkflowMilestoneEntity({
           Id: randomUUID(),

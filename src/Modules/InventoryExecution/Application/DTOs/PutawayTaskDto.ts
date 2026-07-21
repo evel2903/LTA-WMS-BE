@@ -7,8 +7,8 @@ export interface PutawayTaskDto {
   InboundPutawayReleaseId: string;
   ReceiptId: string;
   ReceiptLineId: string;
-  InboundPlanId: string;
-  InboundPlanLineId: string;
+  InboundPlanId: string | null;
+  InboundPlanLineId: string | null;
   InboundLpnId: string | null;
   OwnerId: string;
   OwnerCode: string | null;
