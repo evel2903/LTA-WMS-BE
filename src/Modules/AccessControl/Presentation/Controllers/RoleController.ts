@@ -25,9 +25,10 @@ interface EffectivePermissionsResponse {
   version: number;
 }
 
-// Contract §4 AC3/AC4: PUT/reset respond with the effective set plus the new
-// permissionsVersion (RA-04 review, Decision #1), lower-camel, no role metadata -- distinct
-// from this controller's usual PascalCase bodies (see request DTOs).
+// Contract §4 AC3/AC4: PUT/reset keep their existing lower-camel response. Permission writes
+// still advance the role metadata token in the locked row, but a token without its corresponding
+// metadata representation must not be exposed: pairing it with stale client metadata would
+// bypass RH-02's compare-and-set protection.
 const ToEffectivePermissionsResponse = (dto: EffectivePermissionsDto): EffectivePermissionsResponse => ({
   permissions: dto.Permissions.map((p) => ({ action: p.Action, objectType: p.ObjectType })),
   version: dto.Version,

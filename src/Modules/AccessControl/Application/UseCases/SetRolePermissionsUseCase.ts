@@ -17,6 +17,7 @@ import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/I
 import { IRolePermissionRepository } from '@modules/AccessControl/Application/Interfaces/IRolePermissionRepository';
 import { IPermissionRepository } from '@modules/AccessControl/Application/Interfaces/IPermissionRepository';
 import { EffectivePermissionsDto, SetRolePermissionsDto } from '@modules/AccessControl/Application/DTOs/RoleDto';
+import { NextRoleUpdatedAt } from '@modules/AccessControl/Application/Services/RoleMetadataVersion';
 
 /**
  * PUT: sets a role's permissions as a declarative full-set diff (contract §4). Order is
@@ -79,7 +80,10 @@ export class SetRolePermissionsUseCase {
         ActorUserId: request.ActorUserId,
         RolePermissionRepository: this.rolePermissionRepository,
       });
-      return { Permissions: desiredPermissions, Version: request.Version };
+      return {
+        Permissions: desiredPermissions,
+        Version: request.Version,
+      };
     }
 
     return this.auditedTransaction.Run(async (manager) => {
@@ -106,6 +110,7 @@ export class SetRolePermissionsUseCase {
         Manager: manager,
       });
       locked.PermissionsVersion += 1;
+      locked.UpdatedAt = NextRoleUpdatedAt(locked.UpdatedAt);
       await this.roleRepository.Update(locked, manager);
 
       const entry = BuildRolePermissionAuditEntry({

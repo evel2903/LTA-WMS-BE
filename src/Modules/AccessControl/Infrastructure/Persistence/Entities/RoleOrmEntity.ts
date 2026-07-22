@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm';
 
 @Entity({ name: 'roles' })
 export class RoleOrmEntity {
@@ -27,7 +27,10 @@ export class RoleOrmEntity {
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   public CreatedAt!: Date;
 
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  // RH-CON-01: application code issues a strict millisecond successor for every real role-row
+  // write. A regular column (not @UpdateDateColumn) prevents TypeORM from replacing it with an
+  // implicit wall-clock value that can repeat or move behind the locked before-image.
+  @Column({ name: 'updated_at', type: 'timestamptz', default: () => 'now()' })
   public UpdatedAt!: Date;
 
   @Column({ name: 'created_by', type: 'char', length: 36, nullable: true })

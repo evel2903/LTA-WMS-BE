@@ -13,6 +13,7 @@ export class RoleDtoMapper {
       IsSystem: entity.IsSystem,
       Status: entity.Status,
       PermissionsVersion: entity.PermissionsVersion,
+      UpdatedAt: entity.UpdatedAt.toISOString(),
       ...(permissions ? { Permissions: permissions.map(PermissionDtoMapper.ToDto) } : {}),
     };
   }

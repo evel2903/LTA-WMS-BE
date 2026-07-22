@@ -416,9 +416,9 @@ export class FakeAuditWriter implements IAuditWriter {
 export class StubAuditedTransaction {
   public readonly Entries: AuditEntry[] = [];
 
-  public async Run<T>(work: (manager: never) => Promise<{ result: T; entry: AuditEntry }>): Promise<T> {
+  public async Run<T>(work: (manager: never) => Promise<{ result: T; entry: AuditEntry | AuditEntry[] }>): Promise<T> {
     const { result, entry } = await work(undefined as never);
-    this.Entries.push(entry);
+    this.Entries.push(...(Array.isArray(entry) ? entry : [entry]));
     return result;
   }
 }

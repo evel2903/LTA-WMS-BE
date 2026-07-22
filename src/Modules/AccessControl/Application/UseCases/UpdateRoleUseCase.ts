@@ -1,7 +1,6 @@
-import { BusinessRuleException, NotFoundException } from '@common/Exceptions/AppException';
+import { BusinessRuleException, ConflictException, NotFoundException } from '@common/Exceptions/AppException';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
-import { RoleEntity } from '@modules/AccessControl/Domain/Entities/RoleEntity';
 import {
   AuditContext,
   MergeAuditContext,
@@ -11,6 +10,7 @@ import { AuditedTransaction } from '@modules/AccessControl/Application/Services/
 import { UpdateRoleDto, RoleDto } from '@modules/AccessControl/Application/DTOs/RoleDto';
 import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/IRoleRepository';
 import { RoleDtoMapper } from '@modules/AccessControl/Application/Mappers/RoleDtoMapper';
+import { NextRoleUpdatedAt } from '@modules/AccessControl/Application/Services/RoleMetadataVersion';
 
 /**
  * PATCH: `role_name`/`description` may change on ANY role (including system roles).
@@ -26,22 +26,55 @@ export class UpdateRoleUseCase {
   ) {}
 
   public async Execute(request: UpdateRoleDto, context: AuditContext = SystemAuditContext): Promise<RoleDto> {
-    const role = await this.roleRepository.FindById(request.Id);
-    if (!role) throw new NotFoundException('Role not found');
-    const before = RoleDtoMapper.ToDto(role) as unknown as Record<string, unknown>;
-
-    if (request.Status !== undefined && role.IsSystem) {
-      throw new BusinessRuleException('A system role status cannot be changed');
+    if (!this.auditedTransaction) {
+      throw new BusinessRuleException('Role metadata updates require an audited transaction');
     }
+    return this.auditedTransaction.Run(async (manager) => {
+      const locked = await this.roleRepository.FindByIdForUpdate(request.Id, manager);
+      if (!locked) throw new NotFoundException('Role not found');
 
-    if (request.RoleName !== undefined) role.RoleName = request.RoleName;
-    if (request.Description !== undefined) role.Description = request.Description;
-    if (request.Status !== undefined) role.Status = request.Status;
-    role.UpdatedAt = new Date();
-    role.UpdatedBy = request.ActorUserId ?? role.UpdatedBy;
+      // Status on system roles is invalid whenever supplied, including the same value. This
+      // domain validation intentionally wins over stale-token and no-op classification.
+      if (request.Status !== undefined && locked.IsSystem) {
+        throw new BusinessRuleException('A system role status cannot be changed');
+      }
 
-    const buildEntry = (updated: RoleEntity) =>
-      MergeAuditContext(context, {
+      if (new Date(request.ExpectedUpdatedAt).getTime() !== locked.UpdatedAt.getTime()) {
+        throw new ConflictException('Role metadata changed since this page was loaded.', {
+          Reason: 'ROLE_METADATA_STALE',
+          CurrentUpdatedAt: locked.UpdatedAt.toISOString(),
+        });
+      }
+
+      const nextRoleName = request.RoleName === undefined ? locked.RoleName : request.RoleName.trim();
+      if (nextRoleName.length === 0) {
+        throw new BusinessRuleException('RoleName must not be empty');
+      }
+      const nextDescription =
+        request.Description === undefined
+          ? locked.Description
+          : request.Description === null || request.Description === ''
+            ? null
+            : request.Description;
+      const nextStatus = request.Status ?? locked.Status;
+      const changed =
+        nextRoleName !== locked.RoleName ||
+        (nextDescription ?? '') !== (locked.Description ?? '') ||
+        nextStatus !== locked.Status;
+
+      if (!changed) {
+        return { result: RoleDtoMapper.ToDto(locked), entry: [] };
+      }
+
+      const before = RoleDtoMapper.ToDto(locked) as unknown as Record<string, unknown>;
+      locked.RoleName = nextRoleName;
+      locked.Description = nextDescription;
+      locked.Status = nextStatus;
+      locked.UpdatedAt = NextRoleUpdatedAt(locked.UpdatedAt);
+      locked.UpdatedBy = request.ActorUserId ?? locked.UpdatedBy;
+
+      const updated = await this.roleRepository.Update(locked, manager);
+      const entry = MergeAuditContext(context, {
         Action: ActionCode.Update,
         ObjectType: ObjectType.Role,
         ObjectId: updated.Id,
@@ -49,14 +82,7 @@ export class UpdateRoleUseCase {
         BeforeJson: before,
         AfterJson: RoleDtoMapper.ToDto(updated) as unknown as Record<string, unknown>,
       });
-
-    if (!this.auditedTransaction) {
-      const updated = await this.roleRepository.Update(role);
-      return RoleDtoMapper.ToDto(updated);
-    }
-    return this.auditedTransaction.Run(async (manager) => {
-      const updated = await this.roleRepository.Update(role, manager);
-      return { result: RoleDtoMapper.ToDto(updated), entry: buildEntry(updated) };
+      return { result: RoleDtoMapper.ToDto(updated), entry };
     });
   }
 }

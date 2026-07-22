@@ -6,7 +6,7 @@ import { overrideAccessGuards } from '@test/Helpers/GuardOverrides';
 import { ResponseInterceptor } from '@common/Interceptors/ResponseInterceptor';
 import { GlobalExceptionFilter } from '@common/Filters/GlobalExceptionFilter';
 import { LoggingService } from '@common/Logging/LoggingService';
-import { NotFoundException, BusinessRuleException } from '@common/Exceptions/AppException';
+import { NotFoundException, BusinessRuleException, ConflictException } from '@common/Exceptions/AppException';
 import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
 import { PERMISSION_CHECKER } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
@@ -14,6 +14,7 @@ import { PermissionChecker } from '@modules/AccessControl/Application/Services/P
 import { ScopeExtractor } from '@modules/AccessControl/Presentation/Services/ScopeExtractor';
 import { SeedAccessControlRbac } from '@modules/AccessControl/Application/Services/AccessControlRbacSeed';
 import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
+import { RoleStatus } from '@modules/AccessControl/Domain/Enums/RoleStatus';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { UserRoleEntity } from '@modules/AccessControl/Domain/Entities/UserRoleEntity';
@@ -46,6 +47,7 @@ describe('E2E RoleController permissions endpoints (no DB)', () => {
   let app: INestApplication;
   const setExecute = jest.fn();
   const resetExecute = jest.fn();
+  const updateExecute = jest.fn();
 
   beforeAll(async () => {
     const moduleRef = await overrideAccessGuards(
@@ -55,7 +57,7 @@ describe('E2E RoleController permissions endpoints (no DB)', () => {
           { provide: ListRolesUseCase, useValue: { Execute: jest.fn() } },
           { provide: GetRoleUseCase, useValue: { Execute: jest.fn() } },
           { provide: CreateRoleUseCase, useValue: { Execute: jest.fn() } },
-          { provide: UpdateRoleUseCase, useValue: { Execute: jest.fn() } },
+          { provide: UpdateRoleUseCase, useValue: { Execute: updateExecute } },
           { provide: SetRolePermissionsUseCase, useValue: { Execute: setExecute } },
           { provide: ResetRolePermissionsUseCase, useValue: { Execute: resetExecute } },
           { provide: LoggingService, useValue: { LogError: jest.fn() } },
@@ -77,6 +79,7 @@ describe('E2E RoleController permissions endpoints (no DB)', () => {
   beforeEach(() => {
     setExecute.mockReset();
     resetExecute.mockReset();
+    updateExecute.mockReset();
   });
 
   const validPutBody = () => ({
@@ -85,8 +88,95 @@ describe('E2E RoleController permissions endpoints (no DB)', () => {
     reasonCode: 'RC-X',
   });
 
+  const metadataToken = '2026-07-22T06:00:00.123Z';
+  const roleResponse = (updatedAt = metadataToken) => ({
+    Id: 'role-1',
+    RoleCode: 'CUSTOM_ROLE',
+    RoleName: 'Custom Role',
+    Description: null,
+    IsSystem: false,
+    Status: RoleStatus.Active,
+    PermissionsVersion: 2,
+    UpdatedAt: updatedAt,
+  });
+
+  it.each([
+    ['literal empty body', {}],
+    ['missing token', { RoleName: 'Name' }],
+    ['malformed token', { ExpectedUpdatedAt: 'not-a-date', RoleName: 'Name' }],
+    ['whitespace-only name', { ExpectedUpdatedAt: metadataToken, RoleName: '   ' }],
+    ['unknown field', { ExpectedUpdatedAt: metadataToken, Unknown: true }],
+  ])('PATCH rejects %s with 400 before the use case', async (_label, body) => {
+    await request(app.getHttpServer()).patch('/access-control/roles/role-1').send(body).expect(400);
+    expect(updateExecute).not.toHaveBeenCalled();
+  });
+
+  it('PATCH forwards the server token and returns UpdatedAt in the global success envelope', async () => {
+    const successor = '2026-07-22T06:00:00.124Z';
+    updateExecute.mockResolvedValue(roleResponse(successor));
+
+    const res = await request(app.getHttpServer())
+      .patch('/access-control/roles/role-1')
+      .send({ ExpectedUpdatedAt: metadataToken, RoleName: '  Custom Role  ' })
+      .expect(200);
+
+    expect(updateExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Id: 'role-1',
+        ExpectedUpdatedAt: metadataToken,
+        RoleName: 'Custom Role',
+      }),
+      expect.anything(),
+    );
+    expect(res.body).toEqual({ Success: true, Data: roleResponse(successor) });
+  });
+
+  it('PATCH stale token returns exact CONFLICT details in the global error envelope', async () => {
+    const current = '2026-07-22T06:00:00.124Z';
+    updateExecute.mockRejectedValue(
+      new ConflictException('Role metadata changed since this page was loaded.', {
+        Reason: 'ROLE_METADATA_STALE',
+        CurrentUpdatedAt: current,
+      }),
+    );
+
+    const res = await request(app.getHttpServer())
+      .patch('/access-control/roles/role-1')
+      .send({ ExpectedUpdatedAt: metadataToken, RoleName: 'Changed' })
+      .expect(409);
+
+    expect(res.body).toEqual({
+      Success: false,
+      Errors: [
+        {
+          Code: 'CONFLICT',
+          Message: 'Role metadata changed since this page was loaded.',
+          Details: { Reason: 'ROLE_METADATA_STALE', CurrentUpdatedAt: current },
+        },
+      ],
+    });
+  });
+
+  it('PATCH maps locked-row 404 and system-status 400 through the global filter', async () => {
+    updateExecute.mockRejectedValueOnce(new NotFoundException('Role not found'));
+    await request(app.getHttpServer())
+      .patch('/access-control/roles/missing')
+      .send({ ExpectedUpdatedAt: metadataToken, RoleName: 'Changed' })
+      .expect(404);
+
+    updateExecute.mockRejectedValueOnce(new BusinessRuleException('A system role status cannot be changed'));
+    await request(app.getHttpServer())
+      .patch('/access-control/roles/system')
+      .send({ ExpectedUpdatedAt: metadataToken, Status: RoleStatus.Active })
+      .expect(400);
+  });
+
   it('binds a lower-camel PUT body, maps it to the PascalCase use-case DTO, and returns a lower-camel response', async () => {
-    setExecute.mockResolvedValue({ Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Role }] });
+    setExecute.mockResolvedValue({
+      Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Role }],
+      Version: 1,
+      UpdatedAt: '2026-07-22T06:00:00.124Z',
+    });
 
     const res = await request(app.getHttpServer())
       .put('/access-control/roles/role-1/permissions')
@@ -104,7 +194,10 @@ describe('E2E RoleController permissions endpoints (no DB)', () => {
     );
     expect(res.body).toEqual({
       Success: true,
-      Data: { permissions: [{ action: ActionCode.Read, objectType: ObjectType.Role }] },
+      Data: {
+        permissions: [{ action: ActionCode.Read, objectType: ObjectType.Role }],
+        version: 1,
+      },
     });
   });
 
@@ -141,7 +234,11 @@ describe('E2E RoleController permissions endpoints (no DB)', () => {
   });
 
   it('reset binds a lower-camel body and returns a lower-camel response', async () => {
-    resetExecute.mockResolvedValue({ Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Role }] });
+    resetExecute.mockResolvedValue({
+      Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Role }],
+      Version: 2,
+      UpdatedAt: '2026-07-22T06:00:00.125Z',
+    });
 
     const res = await request(app.getHttpServer())
       .post('/access-control/roles/role-1/permissions/reset')
@@ -152,7 +249,10 @@ describe('E2E RoleController permissions endpoints (no DB)', () => {
       expect.objectContaining({ Id: 'role-1', ReasonCode: 'RC-RESET' }),
       expect.anything(),
     );
-    expect(res.body.Data).toEqual({ permissions: [{ action: ActionCode.Read, objectType: ObjectType.Role }] });
+    expect(res.body.Data).toEqual({
+      permissions: [{ action: ActionCode.Read, objectType: ObjectType.Role }],
+      version: 2,
+    });
   });
 
   it('reset on a missing role -> 404', async () => {
@@ -178,6 +278,7 @@ describe('E2E RoleController permissions endpoints (no DB)', () => {
       Reflect.getMetadata(REQUIRE_PERMISSION_KEY, RoleController.prototype[method]) as RequirePermissionMetadata;
     expect(meta('SetPermissions')).toEqual({ Action: ActionCode.Update, ObjectType: ObjectType.Role });
     expect(meta('ResetPermissions')).toEqual({ Action: ActionCode.Update, ObjectType: ObjectType.Role });
+    expect(meta('Update')).toEqual({ Action: ActionCode.Update, ObjectType: ObjectType.Role });
   });
 });
 
