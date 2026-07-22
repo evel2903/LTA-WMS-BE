@@ -547,6 +547,33 @@ describe('SetRolePermissionsUseCase', () => {
     expect(second.Version).toBe(2);
   });
 
+  it('advances the role metadata token with the shared strict successor helper', async () => {
+    const { roles, permissions, setUseCase } = buildWorld();
+    const before = new Date('2999-01-01T00:00:00.123Z');
+    const role = await roles.Create(
+      new RoleEntity({
+        Id: 'role-token',
+        RoleCode: 'TOKEN_ROLE',
+        RoleName: 'Token',
+        CreatedAt: now,
+        UpdatedAt: before,
+      }),
+    );
+    await seedPermissions(permissions, [[ActionCode.Read, ObjectType.Sku]]);
+
+    await setUseCase.Execute(
+      {
+        Id: role.Id,
+        Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Sku }],
+        Version: 0,
+        ReasonCode: 'RC-X',
+      },
+      ctx,
+    );
+
+    expect((await roles.FindById(role.Id))?.UpdatedAt.toISOString()).toBe('2999-01-01T00:00:00.124Z');
+  });
+
   it('rejects with ConflictException when the submitted Version does not match the role current PermissionsVersion', async () => {
     const { roles, permissions, setUseCase } = buildWorld();
     const role = await roles.Create(
@@ -817,6 +844,32 @@ describe('ResetRolePermissionsUseCase', () => {
     const result = await resetUseCase.Execute({ Id: role.Id, ReasonCode: 'RC-X' }, ctx);
 
     expect(result.Version).toBe(1);
+  });
+
+  it('reset also advances the role metadata token with the shared strict successor helper', async () => {
+    const { roles, permissions, resetUseCase } = buildWorld();
+    const before = new Date('2999-01-01T00:00:00.123Z');
+    const role = await roles.Create(
+      new RoleEntity({
+        Id: 'role-qc-token',
+        RoleCode: RoleCode.Qc,
+        RoleName: 'QC',
+        IsSystem: true,
+        CreatedAt: now,
+        UpdatedAt: before,
+      }),
+    );
+    await seedPermissions(
+      permissions,
+      ROLE_PERMISSION_GRANTS.filter((g) => g.Role === RoleCode.Qc).map((g): [ActionCode, ObjectType] => [
+        g.Action,
+        g.ObjectType,
+      ]),
+    );
+
+    await resetUseCase.Execute({ Id: role.Id, ReasonCode: 'RC-X' }, ctx);
+
+    expect((await roles.FindById(role.Id))?.UpdatedAt.toISOString()).toBe('2999-01-01T00:00:00.124Z');
   });
 });
 

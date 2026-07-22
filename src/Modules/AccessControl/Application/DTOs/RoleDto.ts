@@ -12,6 +12,8 @@ export interface RoleDto {
   Status: RoleStatus;
   /** Optimistic-lock counter for role_permissions writes -- see SetRolePermissionsDto.Version. */
   PermissionsVersion: number;
+  /** Server-issued optimistic-concurrency token for role metadata writes. */
+  UpdatedAt: string;
   Permissions?: PermissionDto[];
 }
 
@@ -24,6 +26,7 @@ export interface CreateRoleDto {
 
 export interface UpdateRoleDto {
   Id: string;
+  ExpectedUpdatedAt: string;
   RoleName?: string;
   Description?: string | null;
   Status?: RoleStatus;

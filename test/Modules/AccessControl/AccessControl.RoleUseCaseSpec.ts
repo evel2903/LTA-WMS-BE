@@ -3,7 +3,37 @@ import { RoleStatus } from '@modules/AccessControl/Domain/Enums/RoleStatus';
 import { RoleEntity } from '@modules/AccessControl/Domain/Entities/RoleEntity';
 import { CreateRoleUseCase } from '@modules/AccessControl/Application/UseCases/CreateRoleUseCase';
 import { UpdateRoleUseCase } from '@modules/AccessControl/Application/UseCases/UpdateRoleUseCase';
-import { InMemoryRoleRepository } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
+import {
+  InMemoryRoleRepository,
+  StubAuditedTransaction,
+} from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
+
+const BASE_UPDATED_AT = new Date('2026-07-22T06:00:00.123Z');
+
+const seedRole = async (
+  repo: InMemoryRoleRepository,
+  overrides: Partial<ConstructorParameters<typeof RoleEntity>[0]> = {},
+) =>
+  repo.Create(
+    new RoleEntity({
+      Id: 'role-1',
+      RoleCode: 'CUSTOM_ROLE',
+      RoleName: 'Original name',
+      Description: null,
+      IsSystem: false,
+      Status: RoleStatus.Active,
+      CreatedAt: new Date('2026-07-22T05:00:00.000Z'),
+      UpdatedAt: BASE_UPDATED_AT,
+      ...overrides,
+    }),
+  );
+
+const updateWorld = () => {
+  const repo = new InMemoryRoleRepository();
+  const audited = new StubAuditedTransaction();
+  const useCase = new UpdateRoleUseCase(repo, audited as never);
+  return { repo, audited, useCase };
+};
 
 describe('CreateRoleUseCase / UpdateRoleUseCase', () => {
   it('creates a custom role as Active, non-system, uppercased', async () => {
@@ -30,55 +60,117 @@ describe('CreateRoleUseCase / UpdateRoleUseCase', () => {
   });
 
   it('throws NotFound when updating a missing role', async () => {
-    const repo = new InMemoryRoleRepository();
-    await expect(new UpdateRoleUseCase(repo).Execute({ Id: 'missing', RoleName: 'X' })).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    const { useCase } = updateWorld();
+    await expect(
+      useCase.Execute({
+        Id: 'missing',
+        ExpectedUpdatedAt: BASE_UPDATED_AT.toISOString(),
+        RoleName: 'X',
+      } as never),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('updates role_name/description on a custom role and leaves role_code unchanged', async () => {
-    const repo = new InMemoryRoleRepository();
-    const created = await new CreateRoleUseCase(repo).Execute({ RoleCode: 'CUSTOM_ROLE', RoleName: 'Old Name' });
+  it('updates canonical metadata, advances the server token and appends exactly one audit entry', async () => {
+    const { repo, audited, useCase } = updateWorld();
+    const created = await seedRole(repo);
 
-    const updated = await new UpdateRoleUseCase(repo).Execute({
+    const updated = await useCase.Execute({
       Id: created.Id,
-      RoleName: 'New Name',
+      ExpectedUpdatedAt: BASE_UPDATED_AT.toISOString(),
+      RoleName: '  New Name  ',
       Description: 'updated desc',
-    });
+    } as never);
 
     expect(updated.RoleName).toBe('New Name');
     expect(updated.Description).toBe('updated desc');
     expect(updated.RoleCode).toBe('CUSTOM_ROLE');
-  });
-
-  it('allows deactivating a custom role via status', async () => {
-    const repo = new InMemoryRoleRepository();
-    const created = await new CreateRoleUseCase(repo).Execute({ RoleCode: 'CUSTOM_ROLE_2', RoleName: 'A' });
-
-    const updated = await new UpdateRoleUseCase(repo).Execute({ Id: created.Id, Status: RoleStatus.Inactive });
-    expect(updated.Status).toBe(RoleStatus.Inactive);
-  });
-
-  it('allows editing role_name on a system role but rejects changing its status', async () => {
-    const repo = new InMemoryRoleRepository();
-    const systemRole = await repo.Create(
-      new RoleEntity({
-        Id: 'sys-1',
-        RoleCode: 'WMS_ADMIN',
-        RoleName: 'WMS Admin',
-        IsSystem: true,
-        Status: RoleStatus.Active,
-        CreatedAt: new Date(),
-        UpdatedAt: new Date(),
-      }),
+    expect(new Date((updated as unknown as { UpdatedAt: string }).UpdatedAt).getTime()).toBeGreaterThan(
+      BASE_UPDATED_AT.getTime(),
     );
+    expect(audited.Entries).toHaveLength(1);
+  });
 
-    const updated = await new UpdateRoleUseCase(repo).Execute({ Id: systemRole.Id, RoleName: 'Renamed Admin' });
-    expect(updated.RoleName).toBe('Renamed Admin');
-    expect(updated.IsSystem).toBe(true);
+  it('returns exact stale conflict details and performs no write or audit', async () => {
+    const { repo, audited, useCase } = updateWorld();
+    const role = await seedRole(repo);
+    const update = jest.spyOn(repo, 'Update');
+
+    const promise = useCase.Execute({
+      Id: role.Id,
+      ExpectedUpdatedAt: new Date(BASE_UPDATED_AT.getTime() - 1).toISOString(),
+      RoleName: 'Stale write',
+    } as never);
+
+    await expect(promise).rejects.toMatchObject({
+      Details: {
+        Reason: 'ROLE_METADATA_STALE',
+        CurrentUpdatedAt: BASE_UPDATED_AT.toISOString(),
+      },
+    });
+    await expect(promise).rejects.toBeInstanceOf(ConflictException);
+    expect(update).not.toHaveBeenCalled();
+    expect(audited.Entries).toHaveLength(0);
+  });
+
+  it.each([
+    ['token-only', {}],
+    ['same canonical name', { RoleName: '  Original name  ' }],
+    ['null and empty description equivalence', { Description: '' }],
+    ['same custom status', { Status: RoleStatus.Active }],
+  ])('treats %s as a no-op without Update, actor/timestamp change or audit', async (_label, patch) => {
+    const { repo, audited, useCase } = updateWorld();
+    const role = await seedRole(repo, { UpdatedBy: 'original-actor' });
+    const update = jest.spyOn(repo, 'Update');
+
+    const result = await useCase.Execute({
+      Id: role.Id,
+      ExpectedUpdatedAt: BASE_UPDATED_AT.toISOString(),
+      ActorUserId: 'new-actor',
+      ...patch,
+    } as never);
+
+    expect((result as unknown as { UpdatedAt: string }).UpdatedAt).toBe(BASE_UPDATED_AT.toISOString());
+    expect(update).not.toHaveBeenCalled();
+    expect((await repo.FindById(role.Id))?.UpdatedBy).toBe('original-actor');
+    expect(audited.Entries).toHaveLength(0);
+  });
+
+  it('rejects supplied Status on a system role before evaluating a stale token', async () => {
+    const { repo, audited, useCase } = updateWorld();
+    const systemRole = await seedRole(repo, {
+      Id: 'sys-1',
+      RoleCode: 'WMS_ADMIN',
+      RoleName: 'WMS Admin',
+      IsSystem: true,
+    });
+    const update = jest.spyOn(repo, 'Update');
 
     await expect(
-      new UpdateRoleUseCase(repo).Execute({ Id: systemRole.Id, Status: RoleStatus.Inactive }),
+      useCase.Execute({
+        Id: systemRole.Id,
+        ExpectedUpdatedAt: new Date(BASE_UPDATED_AT.getTime() - 1).toISOString(),
+        Status: RoleStatus.Active,
+      } as never),
     ).rejects.toBeInstanceOf(BusinessRuleException);
+    expect(update).not.toHaveBeenCalled();
+    expect(audited.Entries).toHaveLength(0);
+  });
+
+  it('still allows editing name/description on a system role when the token matches', async () => {
+    const { repo, useCase } = updateWorld();
+    const systemRole = await seedRole(repo, {
+      Id: 'sys-2',
+      RoleCode: 'QC',
+      RoleName: 'QC',
+      IsSystem: true,
+    });
+
+    const updated = await useCase.Execute({
+      Id: systemRole.Id,
+      ExpectedUpdatedAt: BASE_UPDATED_AT.toISOString(),
+      RoleName: '  Quality Control  ',
+    } as never);
+    expect(updated.RoleName).toBe('Quality Control');
+    expect(updated.IsSystem).toBe(true);
   });
 });

@@ -15,6 +15,7 @@ import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/I
 import { IRolePermissionRepository } from '@modules/AccessControl/Application/Interfaces/IRolePermissionRepository';
 import { IPermissionRepository } from '@modules/AccessControl/Application/Interfaces/IPermissionRepository';
 import { EffectivePermissionsDto, ResetRolePermissionsDto } from '@modules/AccessControl/Application/DTOs/RoleDto';
+import { NextRoleUpdatedAt } from '@modules/AccessControl/Application/Services/RoleMetadataVersion';
 
 /**
  * POST reset: restores a SYSTEM role's permissions to exactly its default seed grants
@@ -81,7 +82,10 @@ export class ResetRolePermissionsUseCase {
         ActorUserId: request.ActorUserId,
         RolePermissionRepository: this.rolePermissionRepository,
       });
-      return { Permissions: defaultPermissions, Version: role.PermissionsVersion };
+      return {
+        Permissions: defaultPermissions,
+        Version: role.PermissionsVersion,
+      };
     }
 
     return this.auditedTransaction.Run(async (manager) => {
@@ -102,6 +106,7 @@ export class ResetRolePermissionsUseCase {
         Manager: manager,
       });
       locked.PermissionsVersion += 1;
+      locked.UpdatedAt = NextRoleUpdatedAt(locked.UpdatedAt);
       await this.roleRepository.Update(locked, manager);
 
       const entry = BuildRolePermissionAuditEntry({

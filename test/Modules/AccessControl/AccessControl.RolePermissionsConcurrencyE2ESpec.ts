@@ -27,6 +27,7 @@ import { RolePermissionOrmEntity } from '@modules/AccessControl/Infrastructure/P
 import { AuditLogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/AuditLogOrmEntity';
 import { SetRolePermissionsUseCase } from '@modules/AccessControl/Application/UseCases/SetRolePermissionsUseCase';
 import { ResetRolePermissionsUseCase } from '@modules/AccessControl/Application/UseCases/ResetRolePermissionsUseCase';
+import { UpdateRoleUseCase } from '@modules/AccessControl/Application/UseCases/UpdateRoleUseCase';
 
 jest.setTimeout(60_000);
 
@@ -75,6 +76,7 @@ describeConcurrency('RA-02 role-permissions concurrency (real Postgres, gated)',
   let permissionRepository: PermissionRepository;
   let setUseCase: SetRolePermissionsUseCase;
   let resetUseCase: ResetRolePermissionsUseCase;
+  let updateUseCase: UpdateRoleUseCase;
 
   beforeAll(async () => {
     if (!AppDataSource.isInitialized) await AppDataSource.initialize();
@@ -97,6 +99,7 @@ describeConcurrency('RA-02 role-permissions concurrency (real Postgres, gated)',
       reasonCatalog,
       auditedTransaction,
     );
+    updateUseCase = new UpdateRoleUseCase(roleRepository, auditedTransaction);
   });
 
   afterAll(async () => {
@@ -119,6 +122,59 @@ describeConcurrency('RA-02 role-permissions concurrency (real Postgres, gated)',
     const last = rows[rows.length - 1];
     return ((last.AfterJson as { Permissions: string[] }).Permissions ?? []).slice().sort();
   };
+
+  it('two metadata PATCH commands with one token have exactly one winner and one audit row', async () => {
+    const initialUpdatedAt = new Date('2099-01-01T00:00:00.123Z');
+    const role = await roleRepository.Create(
+      new RoleEntity({
+        Id: randomUUID(),
+        RoleCode: `RH02_META_${randomUUID().slice(0, 8)}`,
+        RoleName: 'RH-02 metadata concurrency role',
+        IsSystem: false,
+        CreatedAt: new Date(),
+        UpdatedAt: initialUpdatedAt,
+      }),
+    );
+
+    try {
+      const token = role.UpdatedAt.toISOString();
+      const settled = await Promise.allSettled([
+        updateUseCase.Execute({ Id: role.Id, ExpectedUpdatedAt: token, RoleName: 'Winner A' }, ctx),
+        updateUseCase.Execute({ Id: role.Id, ExpectedUpdatedAt: token, RoleName: 'Winner B' }, ctx),
+      ]);
+
+      const fulfilled = settled.filter(
+        (result): result is PromiseFulfilledResult<Awaited<ReturnType<UpdateRoleUseCase['Execute']>>> =>
+          result.status === 'fulfilled',
+      );
+      const rejected = settled.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0].reason).toMatchObject({
+        Details: {
+          Reason: 'ROLE_METADATA_STALE',
+          CurrentUpdatedAt: '2099-01-01T00:00:00.124Z',
+        },
+      });
+
+      const persisted = await roleRepository.FindById(role.Id);
+      expect(persisted?.RoleName).toBe(fulfilled[0].value.RoleName);
+      expect(persisted?.UpdatedAt.toISOString()).toBe('2099-01-01T00:00:00.124Z');
+
+      const auditRows = await AppDataSource.getRepository(AuditLogOrmEntity).find({ where: { ObjectId: role.Id } });
+      expect(auditRows).toHaveLength(1);
+
+      const noOp = await updateUseCase.Execute(
+        { Id: role.Id, ExpectedUpdatedAt: persisted!.UpdatedAt.toISOString(), RoleName: persisted!.RoleName },
+        ctx,
+      );
+      expect(noOp.UpdatedAt).toBe('2099-01-01T00:00:00.124Z');
+      expect(await AppDataSource.getRepository(AuditLogOrmEntity).count({ where: { ObjectId: role.Id } })).toBe(1);
+    } finally {
+      await AppDataSource.getRepository(RoleOrmEntity).delete({ Id: role.Id });
+      // Audit rows are append-only and intentionally remain as runtime evidence.
+    }
+  });
 
   it('PUT concurrent with a different PUT on the same (custom) role: no lost update', async () => {
     const role = await roleRepository.Create(

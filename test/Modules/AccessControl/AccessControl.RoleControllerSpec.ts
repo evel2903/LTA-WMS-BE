@@ -66,19 +66,31 @@ describe('RoleController', () => {
       {} as never,
       {} as never,
     );
-    const request = Object.assign(new UpdateRoleRequest(), { Status: RoleStatus.Inactive });
+    const request = Object.assign(new UpdateRoleRequest(), {
+      ExpectedUpdatedAt: '2026-07-22T06:00:00.123Z',
+      Status: RoleStatus.Inactive,
+    });
 
     await controller.Update('role-1', request, context, { UserId: 'actor-1' });
 
     expect(updateRoleUseCase.Execute).toHaveBeenCalledWith(
-      expect.objectContaining({ Id: 'role-1', Status: RoleStatus.Inactive, ActorUserId: 'actor-1' }),
+      expect.objectContaining({
+        Id: 'role-1',
+        ExpectedUpdatedAt: '2026-07-22T06:00:00.123Z',
+        Status: RoleStatus.Inactive,
+        ActorUserId: 'actor-1',
+      }),
       context,
     );
   });
 
   it('SetPermissions maps the lower-camel request body to the PascalCase use-case DTO and back to a lower-camel response', async () => {
     const setRolePermissionsUseCase = {
-      Execute: jest.fn(async () => ({ Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Role }] })),
+      Execute: jest.fn(async () => ({
+        Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Role }],
+        Version: 4,
+        UpdatedAt: '2026-07-22T06:00:00.125Z',
+      })),
     };
     const controller = new RoleController(
       {} as never,
@@ -104,12 +116,19 @@ describe('RoleController', () => {
       }),
       context,
     );
-    expect(response).toEqual({ permissions: [{ action: ActionCode.Read, objectType: ObjectType.Role }] });
+    expect(response).toEqual({
+      permissions: [{ action: ActionCode.Read, objectType: ObjectType.Role }],
+      version: 4,
+    });
   });
 
   it('ResetPermissions maps the lower-camel request body to the PascalCase use-case DTO and back to a lower-camel response', async () => {
     const resetRolePermissionsUseCase = {
-      Execute: jest.fn(async () => ({ Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Role }] })),
+      Execute: jest.fn(async () => ({
+        Permissions: [{ Action: ActionCode.Read, ObjectType: ObjectType.Role }],
+        Version: 5,
+        UpdatedAt: '2026-07-22T06:00:00.126Z',
+      })),
     };
     const controller = new RoleController(
       {} as never,
@@ -127,6 +146,9 @@ describe('RoleController', () => {
       expect.objectContaining({ Id: 'role-1', ReasonCode: 'RC-ADMIN-RESET', ActorUserId: 'actor-1' }),
       context,
     );
-    expect(response).toEqual({ permissions: [{ action: ActionCode.Read, objectType: ObjectType.Role }] });
+    expect(response).toEqual({
+      permissions: [{ action: ActionCode.Read, objectType: ObjectType.Role }],
+      version: 5,
+    });
   });
 });
