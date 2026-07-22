@@ -244,6 +244,9 @@ describe('RH-05 role catalog proof', () => {
     await expect(useCase.Execute({ CompleteCatalog: true, Page: Number.MAX_SAFE_INTEGER + 1 })).rejects.toBeInstanceOf(
       CatalogMetadataRangeException,
     );
+    await expect(
+      useCase.Execute({ CompleteCatalog: true, Page: Number.MAX_SAFE_INTEGER, PageSize: 100 }),
+    ).rejects.toBeInstanceOf(CatalogMetadataRangeException);
     expect(catalog.Calls).toBe(0);
   });
 
