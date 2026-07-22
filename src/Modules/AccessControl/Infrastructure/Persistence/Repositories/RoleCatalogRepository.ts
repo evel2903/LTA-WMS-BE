@@ -132,16 +132,23 @@ export class RoleCatalogRepository implements IRoleCatalogRepository {
   }
 
   private async AssertSingletonSchema(manager: EntityManager): Promise<void> {
-    const constraints = (await manager.query(
-      `SELECT "conname" AS "Name", pg_get_constraintdef("oid") AS "Definition"
-         FROM pg_constraint
-        WHERE "conrelid" = 'role_catalog_versions'::regclass
-          AND "conname" IN (
-            'PK_role_catalog_versions',
-            'CHK_role_catalog_versions_singleton',
-            'CHK_role_catalog_versions_nonnegative'
-          )`,
-    )) as Array<{ Name: string; Definition: string }>;
+    let constraints: Array<{ Name: string; Definition: string }>;
+    try {
+      constraints = (await manager.query(
+        `SELECT "conname" AS "Name", pg_get_constraintdef("oid") AS "Definition"
+           FROM pg_constraint
+          WHERE "conrelid" = 'role_catalog_versions'::regclass
+            AND "conname" IN (
+              'PK_role_catalog_versions',
+              'CHK_role_catalog_versions_singleton',
+              'CHK_role_catalog_versions_nonnegative'
+            )`,
+      )) as Array<{ Name: string; Definition: string }>;
+    } catch {
+      // A missing table makes the regclass cast fail with 42P01. Keep the catalog seam's
+      // fail-closed contract stable instead of leaking a raw QueryFailedError as HTTP 500.
+      throw new CatalogVersionUnavailableException('Role catalog singleton schema is unavailable');
+    }
     const definitions = new Map(
       (Array.isArray(constraints) ? constraints : []).map((row) => [
         row.Name,
