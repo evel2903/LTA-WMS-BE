@@ -14,6 +14,7 @@ import { AssignRoleDto } from '@modules/AccessControl/Application/DTOs/AssignRol
 import { UserRoleDto } from '@modules/AccessControl/Application/DTOs/UserRoleDto';
 import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/IRoleRepository';
 import { IUserRoleRepository } from '@modules/AccessControl/Application/Interfaces/IUserRoleRepository';
+import { CanonicalizeRoleCode } from '@modules/AccessControl/Application/Utils/CanonicalizeRoleCode';
 
 /**
  * Assigns a V0 role to a user (manual grant). Unknown role → NotFound; duplicate
@@ -29,7 +30,7 @@ export class AssignRoleToUserUseCase {
   ) {}
 
   public async Execute(input: AssignRoleDto, context: AuditContext = SystemAuditContext): Promise<UserRoleDto> {
-    const role = await this.roleRepository.FindByCode(input.RoleCode);
+    const role = await this.roleRepository.FindByCode(CanonicalizeRoleCode(input.RoleCode));
     if (!role) throw new NotFoundException('Role not found');
 
     const existing = await this.userRoleRepository.FindByUserAndRole(input.UserId, role.Id);
