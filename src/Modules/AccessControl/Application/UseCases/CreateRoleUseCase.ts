@@ -13,6 +13,8 @@ import { CreateRoleDto, RoleDto } from '@modules/AccessControl/Application/DTOs/
 import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/IRoleRepository';
 import { RoleDtoMapper } from '@modules/AccessControl/Application/Mappers/RoleDtoMapper';
 import { CanonicalizeRoleCode } from '@modules/AccessControl/Application/Utils/CanonicalizeRoleCode';
+import { IRoleCatalogRepository } from '@modules/AccessControl/Application/Interfaces/IRoleCatalogRepository';
+import { BusinessRuleException, CatalogVersionUnavailableException } from '@common/Exceptions/AppException';
 
 /**
  * Creates a custom (non-system) role, always Active. `role_code` is canonicalized via the
@@ -20,15 +22,21 @@ import { CanonicalizeRoleCode } from '@modules/AccessControl/Application/Utils/C
  * lower/mixed case while Unicode expansion/confusables are rejected before persist.
  */
 export class CreateRoleUseCase {
-  // auditedTransaction is optional only so fixture-setup tests can construct the use case
-  // bare; the module always wires it.
   constructor(
     private readonly roleRepository: IRoleRepository,
-    private readonly auditedTransaction?: AuditedTransaction,
+    private readonly auditedTransaction: AuditedTransaction,
+    private readonly catalogRepository: IRoleCatalogRepository,
   ) {}
 
   public async Execute(request: CreateRoleDto, context: AuditContext = SystemAuditContext): Promise<RoleDto> {
     const roleCode = CanonicalizeRoleCode(request.RoleCode);
+
+    if (!this.auditedTransaction) {
+      throw new BusinessRuleException('Role creation requires an audited transaction');
+    }
+    if (!this.catalogRepository) throw new CatalogVersionUnavailableException();
+    const auditedTransaction = this.auditedTransaction;
+    const catalogRepository = this.catalogRepository;
 
     const now = new Date();
     const role = new RoleEntity({
@@ -53,12 +61,9 @@ export class CreateRoleUseCase {
         AfterJson: RoleDtoMapper.ToDto(created) as unknown as Record<string, unknown>,
       });
 
-    if (!this.auditedTransaction) {
-      const created = await this.roleRepository.Create(role);
-      return RoleDtoMapper.ToDto(created);
-    }
-    return this.auditedTransaction.Run(async (manager) => {
+    return auditedTransaction.Run(async (manager) => {
       const created = await this.roleRepository.Create(role, manager);
+      await catalogRepository.Bump(manager);
       return { result: RoleDtoMapper.ToDto(created), entry: buildEntry(created) };
     });
   }

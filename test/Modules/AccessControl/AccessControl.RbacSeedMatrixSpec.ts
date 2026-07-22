@@ -10,6 +10,7 @@ import {
 import { SeedAccessControlRbac } from '@modules/AccessControl/Application/Services/AccessControlRbacSeed';
 import {
   InMemoryRoleRepository,
+  InMemoryRoleCatalogRepository,
   InMemoryPermissionRepository,
   InMemoryRolePermissionRepository,
 } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
@@ -18,7 +19,7 @@ const seedFreshRepositories = async () => {
   const roles = new InMemoryRoleRepository();
   const permissions = new InMemoryPermissionRepository();
   const rolePermissions = new InMemoryRolePermissionRepository();
-  await SeedAccessControlRbac(roles, permissions, rolePermissions);
+  await SeedAccessControlRbac(roles, permissions, rolePermissions, new InMemoryRoleCatalogRepository(roles));
   return { roles, permissions, rolePermissions };
 };
 
@@ -95,7 +96,8 @@ describe('Access control RBAC seed and matrix', () => {
 
   it('is idempotent: re-running creates no duplicates and does not throw', async () => {
     const { roles, permissions, rolePermissions } = await seedFreshRepositories();
-    await expect(SeedAccessControlRbac(roles, permissions, rolePermissions)).resolves.not.toThrow();
+    const catalog = new InMemoryRoleCatalogRepository(roles);
+    await expect(SeedAccessControlRbac(roles, permissions, rolePermissions, catalog)).resolves.not.toThrow();
 
     expect((await roles.List(0, 100)).TotalItems).toBe(6);
     expect((await permissions.List(0, 1000)).TotalItems).toBe(PERMISSION_CATALOG.length);

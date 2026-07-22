@@ -27,6 +27,7 @@ import {
   InMemoryApprovalRequestRepository,
   InMemoryPermissionRepository,
   InMemoryRolePermissionRepository,
+  InMemoryRoleCatalogRepository,
   InMemoryRoleRepository,
   StubAuditedTransaction,
 } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
@@ -76,7 +77,7 @@ const approverDirectoryWithSeed = async (): Promise<ApproverDirectory> => {
   const roles = new InMemoryRoleRepository();
   const permissions = new InMemoryPermissionRepository();
   const rolePermissions = new InMemoryRolePermissionRepository();
-  await SeedAccessControlRbac(roles, permissions, rolePermissions);
+  await SeedAccessControlRbac(roles, permissions, rolePermissions, new InMemoryRoleCatalogRepository(roles));
   return new ApproverDirectory(permissions, rolePermissions);
 };
 

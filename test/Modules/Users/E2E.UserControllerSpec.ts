@@ -27,6 +27,7 @@ import {
   InMemoryDataScopeRepository,
   InMemoryPermissionRepository,
   InMemoryRolePermissionRepository,
+  InMemoryRoleCatalogRepository,
   InMemoryRoleRepository,
   InMemoryUserRoleRepository,
 } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
@@ -144,7 +145,7 @@ describe('UserController real access guard (HB-02)', () => {
     const rolePermissions = new InMemoryRolePermissionRepository();
     const userRoles = new InMemoryUserRoleRepository();
     const dataScopes = new InMemoryDataScopeRepository();
-    await SeedAccessControlRbac(roles, permissions, rolePermissions);
+    await SeedAccessControlRbac(roles, permissions, rolePermissions, new InMemoryRoleCatalogRepository(roles));
 
     const adminRole = await roles.FindByCode(RoleCode.WmsAdmin);
     const operatorRole = await roles.FindByCode(RoleCode.Operator);

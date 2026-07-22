@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { IRoleRepository, ROLE_REPOSITORY } from '@modules/AccessControl/Application/Interfaces/IRoleRepository';
 import {
   IPermissionRepository,
@@ -124,11 +125,25 @@ import {
 } from '@modules/AccessControl/Application/Interfaces/IAuthorizationSnapshotResolver';
 import { AuthorizationSnapshotResolver } from '@modules/AccessControl/Infrastructure/Authorization/AuthorizationSnapshotResolver';
 import { AuthorizationSnapshotContextMiddleware } from '@modules/AccessControl/Presentation/Middleware/AuthorizationSnapshotContextMiddleware';
+import {
+  IRoleCatalogRepository,
+  ROLE_CATALOG_REPOSITORY,
+} from '@modules/AccessControl/Application/Interfaces/IRoleCatalogRepository';
+import {
+  IRoleCatalogTokenCodec,
+  ROLE_CATALOG_TOKEN_CODEC,
+} from '@modules/AccessControl/Application/Interfaces/IRoleCatalogTokenCodec';
+import { RoleCatalogRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/RoleCatalogRepository';
+import { RoleCatalogTokenCodec } from '@modules/AccessControl/Infrastructure/Crypto/RoleCatalogTokenCodec';
+import { RoleCatalogVersionOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/RoleCatalogVersionOrmEntity';
+import { DeleteRoleUseCase } from '@modules/AccessControl/Application/UseCases/DeleteRoleUseCase';
+import { RoleCatalogConfigValues } from '@shared/Config/AppConfig';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       RoleOrmEntity,
+      RoleCatalogVersionOrmEntity,
       PermissionOrmEntity,
       RolePermissionOrmEntity,
       UserRoleOrmEntity,
@@ -154,6 +169,19 @@ import { AuthorizationSnapshotContextMiddleware } from '@modules/AccessControl/P
   ],
   providers: [
     { provide: ROLE_REPOSITORY, useClass: RoleRepository },
+    {
+      provide: ROLE_CATALOG_REPOSITORY,
+      useFactory: (dataSource: DataSource) => new RoleCatalogRepository(dataSource),
+      inject: [DataSource],
+    },
+    {
+      provide: ROLE_CATALOG_TOKEN_CODEC,
+      useFactory: (config: ConfigService) =>
+        new RoleCatalogTokenCodec(
+          config.get<RoleCatalogConfigValues>('RoleCatalog') ?? { ActiveKid: '', Keys: {}, Valid: false },
+        ),
+      inject: [ConfigService],
+    },
     { provide: PERMISSION_REPOSITORY, useClass: PermissionRepository },
     { provide: ROLE_PERMISSION_REPOSITORY, useClass: RolePermissionRepository },
     { provide: USER_ROLE_REPOSITORY, useClass: UserRoleRepository },
@@ -247,8 +275,9 @@ import { AuthorizationSnapshotContextMiddleware } from '@modules/AccessControl/P
     },
     {
       provide: ListRolesUseCase,
-      useFactory: (roles: IRoleRepository) => new ListRolesUseCase(roles),
-      inject: [ROLE_REPOSITORY],
+      useFactory: (roles: IRoleRepository, catalog: IRoleCatalogRepository, tokenCodec: IRoleCatalogTokenCodec) =>
+        new ListRolesUseCase(roles, catalog, tokenCodec),
+      inject: [ROLE_REPOSITORY, ROLE_CATALOG_REPOSITORY, ROLE_CATALOG_TOKEN_CODEC],
     },
     {
       provide: GetRoleUseCase,
@@ -261,13 +290,21 @@ import { AuthorizationSnapshotContextMiddleware } from '@modules/AccessControl/P
     },
     {
       provide: CreateRoleUseCase,
-      useFactory: (roles: IRoleRepository, audited: AuditedTransaction) => new CreateRoleUseCase(roles, audited),
-      inject: [ROLE_REPOSITORY, AuditedTransaction],
+      useFactory: (roles: IRoleRepository, audited: AuditedTransaction, catalog: IRoleCatalogRepository) =>
+        new CreateRoleUseCase(roles, audited, catalog),
+      inject: [ROLE_REPOSITORY, AuditedTransaction, ROLE_CATALOG_REPOSITORY],
     },
     {
       provide: UpdateRoleUseCase,
-      useFactory: (roles: IRoleRepository, audited: AuditedTransaction) => new UpdateRoleUseCase(roles, audited),
-      inject: [ROLE_REPOSITORY, AuditedTransaction],
+      useFactory: (roles: IRoleRepository, audited: AuditedTransaction, catalog: IRoleCatalogRepository) =>
+        new UpdateRoleUseCase(roles, audited, catalog),
+      inject: [ROLE_REPOSITORY, AuditedTransaction, ROLE_CATALOG_REPOSITORY],
+    },
+    {
+      provide: DeleteRoleUseCase,
+      useFactory: (catalog: IRoleCatalogRepository, audited: AuditedTransaction) =>
+        new DeleteRoleUseCase(catalog, audited),
+      inject: [ROLE_CATALOG_REPOSITORY, AuditedTransaction],
     },
     {
       provide: SetRolePermissionsUseCase,
@@ -466,6 +503,7 @@ import { AuthorizationSnapshotContextMiddleware } from '@modules/AccessControl/P
   ],
   exports: [
     ROLE_REPOSITORY,
+    DeleteRoleUseCase,
     PERMISSION_REPOSITORY,
     ROLE_PERMISSION_REPOSITORY,
     USER_ROLE_REPOSITORY,
@@ -473,6 +511,8 @@ import { AuthorizationSnapshotContextMiddleware } from '@modules/AccessControl/P
     PERMISSION_CHECKER,
     ScopeExtractor,
     PermissionGuard,
+    AUTHORIZATION_SNAPSHOT_RESOLVER,
+    AuthorizationSnapshotContext,
     REASON_CODE_CATALOG,
     REASON_CODE_REPOSITORY,
     AUDIT_WRITER,

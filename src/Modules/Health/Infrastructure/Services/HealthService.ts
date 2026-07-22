@@ -4,6 +4,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import Redis from 'ioredis';
 import { DataSource } from 'typeorm';
 import { HealthCheckResult, IHealthService, ReadyReport } from '@modules/Health/Application/Interfaces/IHealthService';
+import { RoleCatalogConfigValues } from '@shared/Config/AppConfig';
 
 @Injectable()
 export class HealthService implements IHealthService {
@@ -22,6 +23,52 @@ export class HealthService implements IHealthService {
         try {
           await this.dataSource.query('SELECT 1');
           return { Status: 'up' };
+        } catch (error) {
+          return { Status: 'down', Details: String((error as Error)?.message ?? error) };
+        }
+      },
+      role_catalog: async () => {
+        const signing = this.configService.get<RoleCatalogConfigValues>('RoleCatalog');
+        const activeSecret = signing?.Keys?.[signing.ActiveKid ?? ''];
+        if (
+          signing?.Valid === false ||
+          !signing?.ActiveKid ||
+          !activeSecret ||
+          Buffer.byteLength(activeSecret, 'utf8') < 32
+        ) {
+          return { Status: 'down', Details: 'role catalog signing configuration unavailable' };
+        }
+        try {
+          const rows = (await this.dataSource.query(
+            `SELECT "id" AS "Id", "version"::text AS "Version" FROM "role_catalog_versions"`,
+          )) as Array<{ Id: number; Version: string }>;
+          if (rows.length !== 1 || rows[0]?.Id !== 1 || !/^(0|[1-9][0-9]*)$/.test(rows[0]?.Version ?? '')) {
+            return { Status: 'down', Details: 'role catalog singleton missing or corrupt' };
+          }
+          const constraints = (await this.dataSource.query(
+            `SELECT "conname" AS "Name", pg_get_constraintdef("oid") AS "Definition"
+               FROM pg_constraint
+              WHERE "conrelid" = 'role_catalog_versions'::regclass
+                AND "conname" IN (
+                  'PK_role_catalog_versions',
+                  'CHK_role_catalog_versions_singleton',
+                  'CHK_role_catalog_versions_nonnegative'
+                )`,
+          )) as Array<{ Name: string; Definition: string }>;
+          const definitions = new Map(
+            (Array.isArray(constraints) ? constraints : []).map((row) => [
+              row.Name,
+              String(row.Definition).toLowerCase().replace(/\s+/g, ''),
+            ]),
+          );
+          if (
+            definitions.get('PK_role_catalog_versions') !== 'primarykey(id)' ||
+            definitions.get('CHK_role_catalog_versions_singleton') !== 'check((id=1))' ||
+            definitions.get('CHK_role_catalog_versions_nonnegative') !== 'check((version>=0))'
+          ) {
+            return { Status: 'down', Details: 'role catalog singleton schema is corrupt' };
+          }
+          return { Status: 'up', Details: { Version: rows[0].Version } };
         } catch (error) {
           return { Status: 'down', Details: String((error as Error)?.message ?? error) };
         }

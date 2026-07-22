@@ -1,3 +1,26 @@
+x-api-environment: &api-environment
+  NODE_ENV: production
+  PORT: 3000
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_USERNAME: root
+  DB_PASSWORD: root
+  DB_DATABASE: backend_seed
+  JWT_SECRET: change_me
+  JWT_EXPIRATION: "15m"
+  JWT_REFRESH_SECRET: change_me_refresh
+  JWT_REFRESH_EXPIRATION: "7d"
+  ROLE_CATALOG_SIGNING_ACTIVE_KID: "v1"
+  ROLE_CATALOG_SIGNING_KEYS: '{"v1":"change_me_catalog_secret_at_least_32_bytes"}'
+  REDIS_URL: "redis://redis:6379"
+  REDIS_KEY_PREFIX: "appseed:"
+  THROTTLE_TTL_MS: 60000
+  THROTTLE_LIMIT: 60
+  UPLOAD_DIR: uploads
+  UPLOAD_MAX_FILE_SIZE: 5242880
+  SEED_ADMIN_EMAIL: admin@example.com
+  SEED_ADMIN_PASSWORD: change_me
+
 services:
   postgres:
     image: postgres:17
@@ -9,37 +32,34 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d backend_seed"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
 
+  catalog-setup:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: *api-environment
+    command: ["sh", "-c", "yarn migration:run:compiled && yarn seed:run:compiled"]
+    restart: "no"
+
   api:
     build: .
     depends_on:
-      - postgres
-      - redis
-    environment:
-      NODE_ENV: development
-      PORT: 3000
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USERNAME: root
-      DB_PASSWORD: root
-      DB_DATABASE: backend_seed
-      JWT_SECRET: change_me
-      JWT_EXPIRATION: "15m"
-      JWT_REFRESH_SECRET: change_me_refresh
-      JWT_REFRESH_EXPIRATION: "7d"
-      REDIS_URL: "redis://redis:6379"
-      REDIS_KEY_PREFIX: "appseed:"
-      THROTTLE_TTL_MS: 60000
-      THROTTLE_LIMIT: 60
-      UPLOAD_DIR: uploads
-      UPLOAD_MAX_FILE_SIZE: 5242880
-      SEED_ADMIN_EMAIL: admin@example.com
-      SEED_ADMIN_PASSWORD: change_me
+      catalog-setup:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    environment: *api-environment
     ports:
       - "3000:3000"
     volumes:

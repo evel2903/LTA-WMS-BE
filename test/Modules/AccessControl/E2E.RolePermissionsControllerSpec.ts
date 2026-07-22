@@ -35,6 +35,7 @@ import { SetRolePermissionsUseCase } from '@modules/AccessControl/Application/Us
 import { ResetRolePermissionsUseCase } from '@modules/AccessControl/Application/UseCases/ResetRolePermissionsUseCase';
 import {
   InMemoryRoleRepository,
+  InMemoryRoleCatalogRepository,
   InMemoryPermissionRepository,
   InMemoryRolePermissionRepository,
   InMemoryUserRoleRepository,
@@ -304,7 +305,7 @@ describe('Permission enforcement E2E (RoleController.SetPermissions/ResetPermiss
     const rolePermissions = new InMemoryRolePermissionRepository();
     const userRoles = new InMemoryUserRoleRepository();
     const dataScopes = new InMemoryDataScopeRepository();
-    await SeedAccessControlRbac(roles, permissions, rolePermissions);
+    await SeedAccessControlRbac(roles, permissions, rolePermissions, new InMemoryRoleCatalogRepository(roles));
 
     const adminRole = await roles.FindByCode(RoleCode.WmsAdmin);
     const operatorRole = await roles.FindByCode(RoleCode.Operator);

@@ -1,4 +1,9 @@
-import { BusinessRuleException, ConflictException, NotFoundException } from '@common/Exceptions/AppException';
+import {
+  BusinessRuleException,
+  CatalogVersionUnavailableException,
+  ConflictException,
+  NotFoundException,
+} from '@common/Exceptions/AppException';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import {
@@ -11,6 +16,7 @@ import { UpdateRoleDto, RoleDto } from '@modules/AccessControl/Application/DTOs/
 import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/IRoleRepository';
 import { RoleDtoMapper } from '@modules/AccessControl/Application/Mappers/RoleDtoMapper';
 import { NextRoleUpdatedAt } from '@modules/AccessControl/Application/Services/RoleMetadataVersion';
+import { IRoleCatalogRepository } from '@modules/AccessControl/Application/Interfaces/IRoleCatalogRepository';
 
 /**
  * PATCH: `role_name`/`description` may change on ANY role (including system roles).
@@ -18,18 +24,20 @@ import { NextRoleUpdatedAt } from '@modules/AccessControl/Application/Services/R
  * (contract §3 AC2). `role_code` is never re-keyable here (not part of the DTO).
  */
 export class UpdateRoleUseCase {
-  // auditedTransaction is optional only so fixture-setup tests can construct the use case
-  // bare; the module always wires it.
   constructor(
     private readonly roleRepository: IRoleRepository,
-    private readonly auditedTransaction?: AuditedTransaction,
+    private readonly auditedTransaction: AuditedTransaction,
+    private readonly catalogRepository: IRoleCatalogRepository,
   ) {}
 
   public async Execute(request: UpdateRoleDto, context: AuditContext = SystemAuditContext): Promise<RoleDto> {
     if (!this.auditedTransaction) {
       throw new BusinessRuleException('Role metadata updates require an audited transaction');
     }
-    return this.auditedTransaction.Run(async (manager) => {
+    if (!this.catalogRepository) throw new CatalogVersionUnavailableException();
+    const auditedTransaction = this.auditedTransaction;
+    const catalogRepository = this.catalogRepository;
+    return auditedTransaction.Run(async (manager) => {
       const locked = await this.roleRepository.FindByIdForUpdate(request.Id, manager);
       if (!locked) throw new NotFoundException('Role not found');
 
@@ -61,6 +69,7 @@ export class UpdateRoleUseCase {
         nextRoleName !== locked.RoleName ||
         (nextDescription ?? '') !== (locked.Description ?? '') ||
         nextStatus !== locked.Status;
+      const identityChanged = nextRoleName !== locked.RoleName || nextStatus !== locked.Status;
 
       if (!changed) {
         return { result: RoleDtoMapper.ToDto(locked), entry: [] };
@@ -74,6 +83,7 @@ export class UpdateRoleUseCase {
       locked.UpdatedBy = request.ActorUserId ?? locked.UpdatedBy;
 
       const updated = await this.roleRepository.Update(locked, manager);
+      if (identityChanged) await catalogRepository.Bump(manager);
       const entry = MergeAuditContext(context, {
         Action: ActionCode.Update,
         ObjectType: ObjectType.Role,

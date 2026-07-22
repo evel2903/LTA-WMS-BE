@@ -11,6 +11,7 @@ import { SeedAccessControlRbac } from '@modules/AccessControl/Application/Servic
 import { PermissionChecker } from '@modules/AccessControl/Application/Services/PermissionChecker';
 import {
   InMemoryRoleRepository,
+  InMemoryRoleCatalogRepository,
   InMemoryPermissionRepository,
   InMemoryRolePermissionRepository,
   InMemoryUserRoleRepository,
@@ -23,7 +24,7 @@ const buildWorld = async () => {
   const rolePermissions = new InMemoryRolePermissionRepository();
   const userRoles = new InMemoryUserRoleRepository();
   const dataScopes = new InMemoryDataScopeRepository();
-  await SeedAccessControlRbac(roles, permissions, rolePermissions);
+  await SeedAccessControlRbac(roles, permissions, rolePermissions, new InMemoryRoleCatalogRepository(roles));
   const checker = new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes, roles);
 
   const assign = async (userId: string, code: RoleCode) => {

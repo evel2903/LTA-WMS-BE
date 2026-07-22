@@ -34,6 +34,7 @@ import {
   InMemoryPermissionRepository,
   InMemoryReasonCodeRepository,
   InMemoryRolePermissionRepository,
+  InMemoryRoleCatalogRepository,
   InMemoryRoleRepository,
   InMemoryUserRoleRepository,
   StubAuditedTransaction,
@@ -124,7 +125,7 @@ async function seedAccessControlWorld(): Promise<AccessControlWorld> {
   const userRoles = new InMemoryUserRoleRepository();
   const dataScopes = new InMemoryDataScopeRepository();
 
-  await SeedAccessControlRbac(roles, permissions, rolePermissions);
+  await SeedAccessControlRbac(roles, permissions, rolePermissions, new InMemoryRoleCatalogRepository(roles));
   const adminRole = await roles.FindByCode(RoleCode.WmsAdmin);
   if (!adminRole) {
     throw new Error('WMS admin role was not seeded');

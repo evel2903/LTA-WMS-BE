@@ -12,6 +12,8 @@ export type AppEnv = {
   JwtExpiration: string;
   JwtRefreshSecret: string;
   JwtRefreshExpiration: string;
+  RoleCatalogSigningActiveKid?: string;
+  RoleCatalogSigningKeys?: string;
 };
 
 type EnvSource = Record<string, string | undefined>;
@@ -54,6 +56,8 @@ export const GetEnv = (source: EnvSource = process.env): AppEnv => {
     JwtExpiration: GetRequired('JWT_EXPIRATION', source.JWT_EXPIRATION),
     JwtRefreshSecret: GetRequired('JWT_REFRESH_SECRET', source.JWT_REFRESH_SECRET),
     JwtRefreshExpiration: source.JWT_REFRESH_EXPIRATION?.trim() || '7d',
+    RoleCatalogSigningActiveKid: source.ROLE_CATALOG_SIGNING_ACTIVE_KID?.trim() || undefined,
+    RoleCatalogSigningKeys: source.ROLE_CATALOG_SIGNING_KEYS?.trim() || undefined,
   };
 };
 

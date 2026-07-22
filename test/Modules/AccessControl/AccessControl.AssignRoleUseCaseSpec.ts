@@ -9,6 +9,7 @@ import { AssignRoleToUserUseCase } from '@modules/AccessControl/Application/UseC
 import { RemoveRoleFromUserUseCase } from '@modules/AccessControl/Application/UseCases/RemoveRoleFromUserUseCase';
 import {
   InMemoryRoleRepository,
+  InMemoryRoleCatalogRepository,
   InMemoryPermissionRepository,
   InMemoryRolePermissionRepository,
   InMemoryUserRoleRepository,
@@ -16,7 +17,12 @@ import {
 
 const buildWorld = async () => {
   const roles = new InMemoryRoleRepository();
-  await SeedAccessControlRbac(roles, new InMemoryPermissionRepository(), new InMemoryRolePermissionRepository());
+  await SeedAccessControlRbac(
+    roles,
+    new InMemoryPermissionRepository(),
+    new InMemoryRolePermissionRepository(),
+    new InMemoryRoleCatalogRepository(roles),
+  );
   const userRoles = new InMemoryUserRoleRepository();
   return {
     roles,

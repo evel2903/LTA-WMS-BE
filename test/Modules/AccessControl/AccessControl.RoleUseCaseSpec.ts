@@ -5,6 +5,7 @@ import { CreateRoleUseCase } from '@modules/AccessControl/Application/UseCases/C
 import { UpdateRoleUseCase } from '@modules/AccessControl/Application/UseCases/UpdateRoleUseCase';
 import {
   InMemoryRoleRepository,
+  InMemoryRoleCatalogRepository,
   StubAuditedTransaction,
 } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
@@ -31,14 +32,23 @@ const seedRole = async (
 const updateWorld = () => {
   const repo = new InMemoryRoleRepository();
   const audited = new StubAuditedTransaction();
-  const useCase = new UpdateRoleUseCase(repo, audited as never);
+  const useCase = new UpdateRoleUseCase(repo, audited as never, new InMemoryRoleCatalogRepository(repo));
   return { repo, audited, useCase };
+};
+
+const createWorld = () => {
+  const repo = new InMemoryRoleRepository();
+  const audited = new StubAuditedTransaction();
+  return {
+    repo,
+    useCase: new CreateRoleUseCase(repo, audited as never, new InMemoryRoleCatalogRepository(repo)),
+  };
 };
 
 describe('CreateRoleUseCase / UpdateRoleUseCase', () => {
   it('creates a custom role as Active, non-system, uppercased', async () => {
-    const repo = new InMemoryRoleRepository();
-    const dto = await new CreateRoleUseCase(repo).Execute({ RoleCode: 'inventory_lead', RoleName: 'Inventory Lead' });
+    const { useCase } = createWorld();
+    const dto = await useCase.Execute({ RoleCode: 'inventory_lead', RoleName: 'Inventory Lead' });
 
     expect(dto.RoleCode).toBe('INVENTORY_LEAD');
     expect(dto.IsSystem).toBe(false);
@@ -46,15 +56,14 @@ describe('CreateRoleUseCase / UpdateRoleUseCase', () => {
   });
 
   it('rejects a role_code that does not match the format regex', async () => {
-    const repo = new InMemoryRoleRepository();
-    await expect(
-      new CreateRoleUseCase(repo).Execute({ RoleCode: '1BAD-CODE', RoleName: 'Bad' }),
-    ).rejects.toBeInstanceOf(BusinessRuleException);
+    const { useCase } = createWorld();
+    await expect(useCase.Execute({ RoleCode: '1BAD-CODE', RoleName: 'Bad' })).rejects.toBeInstanceOf(
+      BusinessRuleException,
+    );
   });
 
   it('rejects a duplicate role_code with ConflictException', async () => {
-    const repo = new InMemoryRoleRepository();
-    const useCase = new CreateRoleUseCase(repo);
+    const { useCase } = createWorld();
     await useCase.Execute({ RoleCode: 'DUP_ROLE', RoleName: 'A' });
     await expect(useCase.Execute({ RoleCode: 'dup_role', RoleName: 'B' })).rejects.toBeInstanceOf(ConflictException);
   });
