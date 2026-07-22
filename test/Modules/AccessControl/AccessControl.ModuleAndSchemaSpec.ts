@@ -15,6 +15,10 @@ import { CreateAccessControlRbacSchema1781630000000 } from '@shared/Database/Mig
 import { REQUIRE_PERMISSION_KEY } from '@modules/AccessControl/Presentation/Decorators/RequirePermission';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import { AUTHORIZATION_SNAPSHOT_RESOLVER } from '@modules/AccessControl/Application/Interfaces/IAuthorizationSnapshotResolver';
+import { AuthorizationSnapshotContext } from '@modules/AccessControl/Application/Services/AuthorizationSnapshotContext';
+import { AuthorizationSnapshotContextMiddleware } from '@modules/AccessControl/Presentation/Middleware/AuthorizationSnapshotContextMiddleware';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 
 const captureMigrationSql = async (direction: 'up' | 'down'): Promise<string> => {
   const migration = new CreateAccessControlRbacSchema1781630000000();
@@ -54,6 +58,26 @@ describe('AccessControl module and schema registration', () => {
     expect(names).toEqual(
       expect.arrayContaining([RoleController.name, PermissionController.name, UserRoleController.name]),
     );
+  });
+
+  it('registers the request snapshot context, resolver adapter, middleware and mandatory audited guard dependency', () => {
+    const providers = (Reflect.getMetadata('providers', AccessControlModule) as unknown[]) ?? [];
+    expect(providers).toEqual(
+      expect.arrayContaining([
+        AuthorizationSnapshotContext,
+        AuthorizationSnapshotContextMiddleware,
+        AuditedTransaction,
+        expect.objectContaining({ provide: AUTHORIZATION_SNAPSHOT_RESOLVER }),
+      ]),
+    );
+  });
+
+  it('registers the request snapshot middleware on every HTTP route', () => {
+    const forRoutes = jest.fn();
+    const apply = jest.fn(() => ({ forRoutes }));
+    new AccessControlModule().configure({ apply } as never);
+    expect(apply).toHaveBeenCalledWith(AuthorizationSnapshotContextMiddleware);
+    expect(forRoutes).toHaveBeenCalledWith('*');
   });
 
   it('requires UserAssignment permission on the user-role mutation endpoints (C2 PermissionGuard)', () => {

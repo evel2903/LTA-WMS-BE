@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm';
+import { ActorSnapshotStatus } from '@modules/AccessControl/Domain/Enums/ActorSnapshotStatus';
 
 /** Append-only (DB trigger blocks UPDATE/DELETE). No @UpdateDateColumn by design. */
 @Entity({ name: 'audit_logs' })
@@ -16,8 +17,11 @@ export class AuditLogOrmEntity {
   @Column({ name: 'actor_user_id', type: 'char', length: 36, nullable: true })
   public ActorUserId!: string | null;
 
-  @Column({ name: 'actor_role_codes', type: 'jsonb', default: () => "'[]'" })
-  public ActorRoleCodes!: string[];
+  @Column({ name: 'actor_role_codes', type: 'jsonb', nullable: true })
+  public ActorRoleCodes!: string[] | null;
+
+  @Column({ name: 'actor_snapshot_status', type: 'varchar', length: 30 })
+  public ActorSnapshotStatus!: ActorSnapshotStatus;
 
   @Column({ name: 'actor_type', type: 'varchar', length: 20 })
   public ActorType!: string;

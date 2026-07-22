@@ -6,6 +6,7 @@ import { ActorType } from '@modules/AccessControl/Domain/Enums/ActorType';
 import { AuditEntry } from '@modules/AccessControl/Application/DTOs/AuditEntry';
 import { AuditWriter } from '@modules/AccessControl/Infrastructure/Audit/AuditWriter';
 import { AuditLogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/AuditLogOrmEntity';
+import { ActorSnapshotStatus } from '@modules/AccessControl/Domain/Enums/ActorSnapshotStatus';
 
 /**
  * Live Postgres integration: transactional audit (rollback/commit) + DB-trigger
@@ -22,6 +23,7 @@ describe('AuditLog transactional + immutability (live Postgres)', () => {
   const entry = (correlationId: string): AuditEntry => ({
     ActorUserId: actorId,
     ActorRoleCodes: ['WMS_ADMIN'],
+    ActorSnapshotStatus: ActorSnapshotStatus.Resolved,
     ActorType: ActorType.User,
     Action: ActionCode.Create,
     ObjectType: ObjectType.Warehouse,
@@ -73,6 +75,8 @@ describe('AuditLog transactional + immutability (live Postgres)', () => {
     expect(rows[0].Action).toBe(ActionCode.Create);
     expect(rows[0].ObjectId).toBe('wh-audit-test');
     expect(rows[0].ActorUserId).toBe(actorId);
+    expect(rows[0].ActorRoleCodes).toEqual(['WMS_ADMIN']);
+    expect(rows[0].ActorSnapshotStatus).toBe(ActorSnapshotStatus.Resolved);
     expect(rows[0].AfterJson).toEqual({ Name: 'WH' });
     expect(rows[0].ReasonCodeId).toBe(reasonId);
     expect(rows[0].OccurredAt).toBeInstanceOf(Date);

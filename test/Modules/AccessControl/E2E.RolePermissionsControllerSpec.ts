@@ -17,6 +17,10 @@ import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
 import { RoleStatus } from '@modules/AccessControl/Domain/Enums/RoleStatus';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import { AUTHORIZATION_SNAPSHOT_RESOLVER } from '@modules/AccessControl/Application/Interfaces/IAuthorizationSnapshotResolver';
+import { AuthorizationSnapshotContext } from '@modules/AccessControl/Application/Services/AuthorizationSnapshotContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { ActorSnapshotStatus } from '@modules/AccessControl/Domain/Enums/ActorSnapshotStatus';
 import { UserRoleEntity } from '@modules/AccessControl/Domain/Entities/UserRoleEntity';
 import {
   REQUIRE_PERMISSION_KEY,
@@ -126,7 +130,10 @@ describe('E2E RoleController permissions endpoints (no DB)', () => {
         ExpectedUpdatedAt: metadataToken,
         RoleName: 'Custom Role',
       }),
-      expect.anything(),
+      expect.objectContaining({
+        ActorRoleCodes: ['WMS_ADMIN'],
+        ActorSnapshotStatus: ActorSnapshotStatus.Resolved,
+      }),
     );
     expect(res.body).toEqual({ Success: true, Data: roleResponse(successor) });
   });
@@ -309,6 +316,20 @@ describe('Permission enforcement E2E (RoleController.SetPermissions/ResetPermiss
     );
 
     const checker = new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes, roles);
+    const resolver = {
+      Resolve: jest.fn(async (userId: string) => ({
+        UserId: userId,
+        ActiveRoles:
+          userId === 'admin'
+            ? [{ Id: adminRole!.Id, RoleCode: RoleCode.WmsAdmin }]
+            : [{ Id: operatorRole!.Id, RoleCode: RoleCode.Operator }],
+        Permissions: userId === 'admin' ? [{ Action: ActionCode.Update, ObjectType: ObjectType.Role }] : [],
+        DataScopes: [],
+      })),
+    };
+    const audited = {
+      Run: jest.fn(async (work: (manager: unknown) => Promise<{ result: unknown }>) => (await work({})).result),
+    };
 
     const moduleRef = await Test.createTestingModule({
       controllers: [RoleController],
@@ -322,6 +343,9 @@ describe('Permission enforcement E2E (RoleController.SetPermissions/ResetPermiss
         ScopeExtractor,
         PermissionGuard,
         { provide: PERMISSION_CHECKER, useValue: checker },
+        { provide: AUTHORIZATION_SNAPSHOT_RESOLVER, useValue: resolver },
+        AuthorizationSnapshotContext,
+        { provide: AuditedTransaction, useValue: audited },
         { provide: LoggingService, useValue: { LogError: jest.fn() } },
       ],
     })

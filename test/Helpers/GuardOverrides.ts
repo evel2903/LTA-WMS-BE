@@ -2,6 +2,7 @@ import { ExecutionContext } from '@nestjs/common';
 import { TestingModuleBuilder } from '@nestjs/testing';
 import { JwtAuthGuard } from '@modules/Authentication/Presentation/Guards/JwtAuthGuard';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
+import { AuthorizationSnapshot } from '@modules/AccessControl/Application/DTOs/AuthorizationSnapshot';
 
 /**
  * Test helper: neutralizes the C2 auth/permission guards for controller E2E specs that
@@ -15,8 +16,17 @@ export const overrideAccessGuards = (builder: TestingModuleBuilder, userId = 'te
     .overrideGuard(JwtAuthGuard)
     .useValue({
       canActivate: (context: ExecutionContext) => {
-        const request = context.switchToHttp().getRequest<{ user?: unknown }>();
+        const request = context.switchToHttp().getRequest<{
+          user?: unknown;
+          AuthorizationSnapshot?: AuthorizationSnapshot;
+        }>();
         request.user = { UserId: userId, Role: 'Admin' };
+        request.AuthorizationSnapshot = {
+          UserId: userId,
+          ActiveRoles: [{ Id: 'test-role', RoleCode: 'WMS_ADMIN' }],
+          Permissions: [],
+          DataScopes: [],
+        };
         return true;
       },
     })

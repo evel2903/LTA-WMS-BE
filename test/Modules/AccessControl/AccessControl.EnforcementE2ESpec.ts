@@ -16,6 +16,11 @@ import { PermissionChecker } from '@modules/AccessControl/Application/Services/P
 import { PERMISSION_CHECKER } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
 import { ScopeExtractor } from '@modules/AccessControl/Presentation/Services/ScopeExtractor';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
+import { AUTHORIZATION_SNAPSHOT_RESOLVER } from '@modules/AccessControl/Application/Interfaces/IAuthorizationSnapshotResolver';
+import { AuthorizationSnapshotContext } from '@modules/AccessControl/Application/Services/AuthorizationSnapshotContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
+import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ZoneController } from '@modules/MasterData/Presentation/Controllers/ZoneController';
 import { CreateZoneUseCase } from '@modules/MasterData/Application/UseCases/CreateZoneUseCase';
 import { GetZoneByIdUseCase } from '@modules/MasterData/Application/UseCases/GetZoneByIdUseCase';
@@ -79,6 +84,31 @@ describe('Permission enforcement E2E (ZoneController, real guard)', () => {
     );
 
     const checker = new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes, roles);
+    const resolver = {
+      Resolve: jest.fn(async (userId: string) => ({
+        UserId: userId,
+        ActiveRoles:
+          userId === 'admin'
+            ? [{ Id: adminRole!.Id, RoleCode: RoleCode.WmsAdmin }]
+            : [{ Id: operatorRole!.Id, RoleCode: RoleCode.Operator }],
+        Permissions: userId === 'admin' ? [{ Action: ActionCode.Create, ObjectType: ObjectType.Zone }] : [],
+        DataScopes:
+          userId === 'admin'
+            ? [
+                {
+                  PrincipalType: PrincipalType.Role,
+                  PrincipalId: adminRole!.Id,
+                  ScopeType: DataScopeType.Warehouse,
+                  ScopeValueId: 'W1',
+                  IncludeAll: false,
+                },
+              ]
+            : [],
+      })),
+    };
+    const audited = {
+      Run: jest.fn(async (work: (manager: unknown) => Promise<{ result: unknown }>) => (await work({})).result),
+    };
 
     const moduleRef = await Test.createTestingModule({
       controllers: [ZoneController],
@@ -90,6 +120,9 @@ describe('Permission enforcement E2E (ZoneController, real guard)', () => {
         ScopeExtractor,
         PermissionGuard,
         { provide: PERMISSION_CHECKER, useValue: checker },
+        { provide: AUTHORIZATION_SNAPSHOT_RESOLVER, useValue: resolver },
+        AuthorizationSnapshotContext,
+        { provide: AuditedTransaction, useValue: audited },
         { provide: LoggingService, useValue: { LogError: jest.fn() } },
       ],
     })

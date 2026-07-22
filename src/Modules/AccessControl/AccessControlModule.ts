@@ -1,5 +1,6 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { IRoleRepository, ROLE_REPOSITORY } from '@modules/AccessControl/Application/Interfaces/IRoleRepository';
 import {
   IPermissionRepository,
@@ -116,6 +117,13 @@ import { SubmitExceptionForApprovalUseCase } from '@modules/AccessControl/Applic
 import { ResolveExceptionUseCase } from '@modules/AccessControl/Application/UseCases/ResolveExceptionUseCase';
 import { CloseExceptionUseCase } from '@modules/AccessControl/Application/UseCases/CloseExceptionUseCase';
 import { ExceptionCaseController } from '@modules/AccessControl/Presentation/Controllers/ExceptionCaseController';
+import { AuthorizationSnapshotContext } from '@modules/AccessControl/Application/Services/AuthorizationSnapshotContext';
+import {
+  AUTHORIZATION_SNAPSHOT_RESOLVER,
+  IAuthorizationSnapshotResolver,
+} from '@modules/AccessControl/Application/Interfaces/IAuthorizationSnapshotResolver';
+import { AuthorizationSnapshotResolver } from '@modules/AccessControl/Infrastructure/Authorization/AuthorizationSnapshotResolver';
+import { AuthorizationSnapshotContextMiddleware } from '@modules/AccessControl/Presentation/Middleware/AuthorizationSnapshotContextMiddleware';
 
 @Module({
   imports: [
@@ -154,6 +162,13 @@ import { ExceptionCaseController } from '@modules/AccessControl/Presentation/Con
     { provide: AUDIT_LOG_REPOSITORY, useClass: AuditLogRepository },
     { provide: AUDIT_WRITER, useClass: AuditWriter },
     AuditedTransaction,
+    AuthorizationSnapshotContext,
+    AuthorizationSnapshotContextMiddleware,
+    {
+      provide: AUTHORIZATION_SNAPSHOT_RESOLVER,
+      useFactory: (dataSource: DataSource) => new AuthorizationSnapshotResolver(dataSource),
+      inject: [DataSource],
+    },
     {
       provide: QueryAuditLogsUseCase,
       useFactory: (auditLogs: IAuditLogRepository) => new QueryAuditLogsUseCase(auditLogs),
@@ -208,13 +223,26 @@ import { ExceptionCaseController } from '@modules/AccessControl/Presentation/Con
         permissions: IPermissionRepository,
         dataScopes: IDataScopeRepository,
         roles: IRoleRepository,
-      ) => new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes, roles),
+        requestContext: AuthorizationSnapshotContext,
+        snapshotResolver: IAuthorizationSnapshotResolver,
+      ) =>
+        new PermissionChecker(
+          userRoles,
+          rolePermissions,
+          permissions,
+          dataScopes,
+          roles,
+          requestContext,
+          snapshotResolver,
+        ),
       inject: [
         USER_ROLE_REPOSITORY,
         ROLE_PERMISSION_REPOSITORY,
         PERMISSION_REPOSITORY,
         DATA_SCOPE_REPOSITORY,
         ROLE_REPOSITORY,
+        AuthorizationSnapshotContext,
+        AUTHORIZATION_SNAPSHOT_RESOLVER,
       ],
     },
     {
@@ -459,4 +487,8 @@ import { ExceptionCaseController } from '@modules/AccessControl/Presentation/Con
     EXCEPTION_CASE_REPOSITORY,
   ],
 })
-export class AccessControlModule {}
+export class AccessControlModule implements NestModule {
+  public configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(AuthorizationSnapshotContextMiddleware).forRoutes('*');
+  }
+}

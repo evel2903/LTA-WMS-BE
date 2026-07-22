@@ -4,6 +4,7 @@ import {
 } from '@modules/AccessControl/Application/DTOs/PermissionCheckContext';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
+import { AuthorizationSnapshot } from '@modules/AccessControl/Application/DTOs/AuthorizationSnapshot';
 
 export const PERMISSION_CHECKER = Symbol('IPermissionChecker');
 
@@ -20,14 +21,17 @@ export interface PermissionDataScopeDecision extends PermissionDecision {
  * where invariants need re-checking, by use cases (architecture 6.4).
  */
 export interface IPermissionChecker {
-  Check(context: PermissionCheckContext): Promise<PermissionDecision>;
+  Check(context: PermissionCheckContext, snapshot?: AuthorizationSnapshot): Promise<PermissionDecision>;
   /**
    * Resolves list-query scope once so repositories can paginate and count inside the database.
    * Optional for legacy/custom checkers; production PermissionChecker implements it.
    */
-  ResolveDataScope?(context: {
-    UserId: string;
-    Action: ActionCode;
-    ObjectType: ObjectType;
-  }): Promise<PermissionDataScopeDecision>;
+  ResolveDataScope?(
+    context: {
+      UserId: string;
+      Action: ActionCode;
+      ObjectType: ObjectType;
+    },
+    snapshot?: AuthorizationSnapshot,
+  ): Promise<PermissionDataScopeDecision>;
 }

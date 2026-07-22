@@ -2,6 +2,7 @@ import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { ActorType } from '@modules/AccessControl/Domain/Enums/ActorType';
 import { AuditResult } from '@modules/AccessControl/Domain/Enums/AuditResult';
+import { ActorSnapshotStatus } from '@modules/AccessControl/Domain/Enums/ActorSnapshotStatus';
 
 /**
  * An append-only audit record (architecture 6.5). Written inside the command's
@@ -11,7 +12,8 @@ export class AuditLogEntity {
   public readonly Id: string;
   public readonly OccurredAt: Date;
   public readonly ActorUserId: string | null;
-  public readonly ActorRoleCodes: string[];
+  public readonly ActorRoleCodes: string[] | null;
+  public readonly ActorSnapshotStatus: ActorSnapshotStatus;
   public readonly ActorType: ActorType;
   public readonly Action: ActionCode;
   public readonly ObjectType: ObjectType;
@@ -37,7 +39,8 @@ export class AuditLogEntity {
     Id: string;
     OccurredAt: Date;
     ActorUserId?: string | null;
-    ActorRoleCodes?: string[];
+    ActorRoleCodes?: string[] | null;
+    ActorSnapshotStatus?: ActorSnapshotStatus;
     ActorType: ActorType;
     Action: ActionCode;
     ObjectType: ObjectType;
@@ -62,7 +65,15 @@ export class AuditLogEntity {
     this.Id = params.Id;
     this.OccurredAt = params.OccurredAt;
     this.ActorUserId = params.ActorUserId ?? null;
-    this.ActorRoleCodes = params.ActorRoleCodes ?? [];
+    if (params.ActorSnapshotStatus !== undefined && params.ActorRoleCodes === undefined) {
+      throw new Error('Audit actor snapshot provenance requires explicit role codes');
+    }
+    this.ActorRoleCodes = params.ActorRoleCodes === undefined ? [] : params.ActorRoleCodes;
+    this.ActorSnapshotStatus = params.ActorSnapshotStatus ?? ActorSnapshotStatus.LegacyUnverified;
+    const unresolved = this.ActorSnapshotStatus === ActorSnapshotStatus.Unresolved;
+    if (unresolved !== (this.ActorRoleCodes === null)) {
+      throw new Error('Audit actor snapshot provenance is inconsistent');
+    }
     this.ActorType = params.ActorType;
     this.Action = params.Action;
     this.ObjectType = params.ObjectType;
