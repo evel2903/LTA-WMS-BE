@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import { BusinessRuleException } from '@common/Exceptions/AppException';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { RoleStatus } from '@modules/AccessControl/Domain/Enums/RoleStatus';
@@ -13,12 +12,12 @@ import { AuditedTransaction } from '@modules/AccessControl/Application/Services/
 import { CreateRoleDto, RoleDto } from '@modules/AccessControl/Application/DTOs/RoleDto';
 import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/IRoleRepository';
 import { RoleDtoMapper } from '@modules/AccessControl/Application/Mappers/RoleDtoMapper';
-
-const ROLE_CODE_PATTERN = /^[A-Z][A-Z0-9_]{1,49}$/;
+import { CanonicalizeRoleCode } from '@modules/AccessControl/Application/Utils/CanonicalizeRoleCode';
 
 /**
- * Creates a custom (non-system) role, always Active. `role_code` is normalized
- * uppercase before the format check (contract §3) so callers may submit lower/mixed case.
+ * Creates a custom (non-system) role, always Active. `role_code` is canonicalized via the
+ * shared RH-CODE-01 policy (trim -> ASCII validate -> uppercase) so callers may submit
+ * lower/mixed case while Unicode expansion/confusables are rejected before persist.
  */
 export class CreateRoleUseCase {
   // auditedTransaction is optional only so fixture-setup tests can construct the use case
@@ -29,10 +28,7 @@ export class CreateRoleUseCase {
   ) {}
 
   public async Execute(request: CreateRoleDto, context: AuditContext = SystemAuditContext): Promise<RoleDto> {
-    const roleCode = request.RoleCode.trim().toUpperCase();
-    if (!ROLE_CODE_PATTERN.test(roleCode)) {
-      throw new BusinessRuleException('RoleCode must match ^[A-Z][A-Z0-9_]{1,49}$');
-    }
+    const roleCode = CanonicalizeRoleCode(request.RoleCode);
 
     const now = new Date();
     const role = new RoleEntity({

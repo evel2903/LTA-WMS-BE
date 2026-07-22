@@ -10,6 +10,7 @@ import {
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/IRoleRepository';
 import { IUserRoleRepository } from '@modules/AccessControl/Application/Interfaces/IUserRoleRepository';
+import { CanonicalizeRoleCode } from '@modules/AccessControl/Application/Utils/CanonicalizeRoleCode';
 
 export class RemoveRoleFromUserUseCase {
   // auditedTransaction is optional only so fixture-setup tests can construct the use case
@@ -24,7 +25,7 @@ export class RemoveRoleFromUserUseCase {
     input: { UserId: string; RoleCode: string },
     context: AuditContext = SystemAuditContext,
   ): Promise<{ Removed: boolean }> {
-    const role = await this.roleRepository.FindByCode(input.RoleCode);
+    const role = await this.roleRepository.FindByCode(CanonicalizeRoleCode(input.RoleCode));
     if (!role) throw new NotFoundException('Role not found');
 
     const existing = await this.userRoleRepository.FindByUserAndRole(input.UserId, role.Id);
