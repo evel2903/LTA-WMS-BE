@@ -18,6 +18,7 @@ import {
   ValidateReasonResult,
 } from '@modules/AccessControl/Application/Interfaces/IReasonCodeCatalog';
 import { RoleRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/RoleRepository';
+import { RoleCatalogRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/RoleCatalogRepository';
 import { RolePermissionRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/RolePermissionRepository';
 import { PermissionRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/PermissionRepository';
 import { AuditWriter } from '@modules/AccessControl/Infrastructure/Audit/AuditWriter';
@@ -99,7 +100,7 @@ describeConcurrency('RA-02 role-permissions concurrency (real Postgres, gated)',
       reasonCatalog,
       auditedTransaction,
     );
-    updateUseCase = new UpdateRoleUseCase(roleRepository, auditedTransaction);
+    updateUseCase = new UpdateRoleUseCase(roleRepository, auditedTransaction, new RoleCatalogRepository(AppDataSource));
   });
 
   afterAll(async () => {

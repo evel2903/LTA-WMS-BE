@@ -14,6 +14,7 @@ import { ControlExceptionCatalog } from '@modules/AccessControl/Application/Serv
 import { SeedReasonCodeCatalog } from '@modules/AccessControl/Application/Services/ReasonCodeCatalogSeed';
 import { SeedControlExceptionCatalog } from '@modules/AccessControl/Application/Services/ControlExceptionCatalogSeed';
 import { SeedAccessControlRbac } from '@modules/AccessControl/Application/Services/AccessControlRbacSeed';
+import { InMemoryRoleCatalogRepository } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 import { ApproverDirectory } from '@modules/AccessControl/Application/Services/ApproverDirectory';
 import { ReasonCodeRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/ReasonCodeRepository';
 import { ControlExceptionCatalogRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/ControlExceptionCatalogRepository';
@@ -100,7 +101,7 @@ describe('C9 exception lifecycle (live Postgres)', () => {
 
     // Seed the catalogs the use cases consume (idempotent): RBAC (so a valid approver exists),
     // reason codes (incl. RC-EXC-RESOLVE) and the control-exception catalog (CTRL-EX-*).
-    await SeedAccessControlRbac(roleRepo, permRepo, rolePermRepo);
+    await SeedAccessControlRbac(roleRepo, permRepo, rolePermRepo, new InMemoryRoleCatalogRepository(roleRepo));
     await SeedReasonCodeCatalog(reasonRepo);
     await SeedControlExceptionCatalog(controlRepo);
 

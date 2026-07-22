@@ -20,6 +20,7 @@ import { PermissionRepository } from '@modules/AccessControl/Infrastructure/Pers
 import { RolePermissionRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/RolePermissionRepository';
 import { UserRoleRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/UserRoleRepository';
 import { RoleOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/RoleOrmEntity';
+import { RoleCatalogRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/RoleCatalogRepository';
 import { PermissionOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/PermissionOrmEntity';
 import { RolePermissionOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/RolePermissionOrmEntity';
 import { UserRoleOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/UserRoleOrmEntity';
@@ -99,10 +100,11 @@ async function Seed() {
 
     // Idempotent RBAC seed: 6 core roles, permission catalog and role->permission matrix.
     const roleRepository = new RoleRepository(dataSource.getRepository(RoleOrmEntity));
+    const roleCatalogRepository = new RoleCatalogRepository(dataSource);
     const permissionRepository = new PermissionRepository(dataSource.getRepository(PermissionOrmEntity));
     const rolePermissionRepository = new RolePermissionRepository(dataSource.getRepository(RolePermissionOrmEntity));
     const userRoleRepository = new UserRoleRepository(dataSource.getRepository(UserRoleOrmEntity));
-    await SeedAccessControlRbac(roleRepository, permissionRepository, rolePermissionRepository);
+    await SeedAccessControlRbac(roleRepository, permissionRepository, rolePermissionRepository, roleCatalogRepository);
     console.log('Seed: RBAC roles/permissions/matrix ensured');
 
     // Idempotent legacy bridge: map existing users.role -> user_roles (Admin->WMS_ADMIN, User->OPERATOR).

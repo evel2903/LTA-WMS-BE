@@ -28,6 +28,7 @@ import {
 import { IApprovalRequestRepository } from '@modules/AccessControl/Application/Interfaces/IApprovalRequestRepository';
 import {
   InMemoryRoleRepository,
+  InMemoryRoleCatalogRepository,
   InMemoryPermissionRepository,
   InMemoryRolePermissionRepository,
   InMemoryUserRoleRepository,
@@ -56,7 +57,7 @@ const buildCheckerWorld = async () => {
   const rolePermissions = new InMemoryRolePermissionRepository();
   const userRoles = new InMemoryUserRoleRepository();
   const dataScopes = new InMemoryDataScopeRepository();
-  await SeedAccessControlRbac(roles, permissions, rolePermissions);
+  await SeedAccessControlRbac(roles, permissions, rolePermissions, new InMemoryRoleCatalogRepository(roles));
   const checker = new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes, roles);
 
   const assign = async (userId: string, code: RoleCode) => {

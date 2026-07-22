@@ -17,6 +17,7 @@ import { AuditLogOrmEntity } from '@modules/AccessControl/Infrastructure/Persist
 import { PermissionChecker } from '@modules/AccessControl/Application/Services/PermissionChecker';
 import { ReasonCodeCatalog } from '@modules/AccessControl/Application/Services/ReasonCodeCatalog';
 import { SeedAccessControlRbac } from '@modules/AccessControl/Application/Services/AccessControlRbacSeed';
+import { InMemoryRoleCatalogRepository } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 import { RoleRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/RoleRepository';
 import { PermissionRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/PermissionRepository';
 import { RolePermissionRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/RolePermissionRepository';
@@ -166,7 +167,12 @@ describe('C7 override control (live Postgres)', () => {
     reasonCatalog = new ReasonCodeCatalog(reasonRepository);
 
     // Seed the RBAC matrix (idempotent) so WMS_ADMIN grants (Override, OverrideLog).
-    await SeedAccessControlRbac(roleRepository, permissionRepository, rolePermissionRepository);
+    await SeedAccessControlRbac(
+      roleRepository,
+      permissionRepository,
+      rolePermissionRepository,
+      new InMemoryRoleCatalogRepository(roleRepository),
+    );
 
     // Real user so user_roles FK is satisfied.
     const userRepo = dataSource.getRepository(UserOrmEntity);

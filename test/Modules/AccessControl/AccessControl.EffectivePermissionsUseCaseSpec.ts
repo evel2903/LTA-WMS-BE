@@ -10,6 +10,7 @@ import { GetUserEffectivePermissionsUseCase } from '@modules/AccessControl/Appli
 import { AssignRoleToUserUseCase } from '@modules/AccessControl/Application/UseCases/AssignRoleToUserUseCase';
 import {
   InMemoryRoleRepository,
+  InMemoryRoleCatalogRepository,
   InMemoryPermissionRepository,
   InMemoryRolePermissionRepository,
   InMemoryUserRoleRepository,
@@ -20,7 +21,7 @@ const buildSeededWorld = async () => {
   const permissions = new InMemoryPermissionRepository();
   const rolePermissions = new InMemoryRolePermissionRepository();
   const userRoles = new InMemoryUserRoleRepository();
-  await SeedAccessControlRbac(roles, permissions, rolePermissions);
+  await SeedAccessControlRbac(roles, permissions, rolePermissions, new InMemoryRoleCatalogRepository(roles));
   const effective = new GetUserEffectivePermissionsUseCase(userRoles, roles, rolePermissions, permissions);
   return { roles, permissions, rolePermissions, userRoles, effective };
 };

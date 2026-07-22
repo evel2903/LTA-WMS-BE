@@ -28,6 +28,7 @@ import { ListZonesUseCase } from '@modules/MasterData/Application/UseCases/ListZ
 import { UpdateZoneUseCase } from '@modules/MasterData/Application/UseCases/UpdateZoneUseCase';
 import {
   InMemoryRoleRepository,
+  InMemoryRoleCatalogRepository,
   InMemoryPermissionRepository,
   InMemoryRolePermissionRepository,
   InMemoryUserRoleRepository,
@@ -59,7 +60,7 @@ describe('Permission enforcement E2E (ZoneController, real guard)', () => {
     const rolePermissions = new InMemoryRolePermissionRepository();
     const userRoles = new InMemoryUserRoleRepository();
     const dataScopes = new InMemoryDataScopeRepository();
-    await SeedAccessControlRbac(roles, permissions, rolePermissions);
+    await SeedAccessControlRbac(roles, permissions, rolePermissions, new InMemoryRoleCatalogRepository(roles));
 
     const adminRole = await roles.FindByCode(RoleCode.WmsAdmin);
     const operatorRole = await roles.FindByCode(RoleCode.Operator);

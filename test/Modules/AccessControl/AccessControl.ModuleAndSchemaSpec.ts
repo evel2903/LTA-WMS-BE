@@ -8,6 +8,7 @@ import { UserRoleOrmEntity } from '@modules/AccessControl/Infrastructure/Persist
 import { GroupOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/GroupOrmEntity';
 import { GroupMemberOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/GroupMemberOrmEntity';
 import { DataScopeOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/DataScopeOrmEntity';
+import { RoleCatalogVersionOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/RoleCatalogVersionOrmEntity';
 import { RoleController } from '@modules/AccessControl/Presentation/Controllers/RoleController';
 import { PermissionController } from '@modules/AccessControl/Presentation/Controllers/PermissionController';
 import { UserRoleController } from '@modules/AccessControl/Presentation/Controllers/UserRoleController';
@@ -19,6 +20,9 @@ import { AUTHORIZATION_SNAPSHOT_RESOLVER } from '@modules/AccessControl/Applicat
 import { AuthorizationSnapshotContext } from '@modules/AccessControl/Application/Services/AuthorizationSnapshotContext';
 import { AuthorizationSnapshotContextMiddleware } from '@modules/AccessControl/Presentation/Middleware/AuthorizationSnapshotContextMiddleware';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { AutoMigration1784740000987 } from '@shared/Database/Migrations/1784740000987-AutoMigration';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 const captureMigrationSql = async (direction: 'up' | 'down'): Promise<string> => {
   const migration = new CreateAccessControlRbacSchema1781630000000();
@@ -32,13 +36,20 @@ const captureMigrationSql = async (direction: 'up' | 'down'): Promise<string> =>
   return queries.join('\n').toLowerCase();
 };
 
+const captureRoleCatalogMigrationSql = async (direction: 'up' | 'down'): Promise<string> => {
+  const migration = new AutoMigration1784740000987();
+  const queries: string[] = [];
+  await migration[direction]({ query: async (sql: string) => void queries.push(sql) } as never);
+  return queries.join('\n').toLowerCase();
+};
+
 describe('AccessControl module and schema registration', () => {
   it('registers AccessControlModule in AppModule', () => {
     const imports = Reflect.getMetadata('imports', AppModule) as unknown[];
     expect(imports).toEqual(expect.arrayContaining([AccessControlModule]));
   });
 
-  it('registers all seven RBAC ORM entities in TypeOrmDataSource', () => {
+  it('registers all RBAC ORM entities including the role-catalog singleton in TypeOrmDataSource', () => {
     expect(TypeOrmDataSource.options.entities).toEqual(
       expect.arrayContaining([
         RoleOrmEntity,
@@ -48,6 +59,7 @@ describe('AccessControl module and schema registration', () => {
         GroupOrmEntity,
         GroupMemberOrmEntity,
         DataScopeOrmEntity,
+        RoleCatalogVersionOrmEntity,
       ]),
     );
   });
@@ -69,6 +81,13 @@ describe('AccessControl module and schema registration', () => {
         AuditedTransaction,
         expect.objectContaining({ provide: AUTHORIZATION_SNAPSHOT_RESOLVER }),
       ]),
+    );
+  });
+
+  it('exports every request-snapshot dependency needed when PermissionGuard is consumed by another module', () => {
+    const exports = (Reflect.getMetadata('exports', AccessControlModule) as unknown[]) ?? [];
+    expect(exports).toEqual(
+      expect.arrayContaining([AUTHORIZATION_SNAPSHOT_RESOLVER, AuthorizationSnapshotContext, AuditedTransaction]),
     );
   });
 
@@ -155,5 +174,34 @@ describe('AccessControl module and schema registration', () => {
       expect(sql).toContain(`drop table "${table}"`);
     }
     expect(sql).not.toContain('drop table "users"');
+  });
+
+  it('RH-05 migration repairs singleton constraints and protects every current role reference', async () => {
+    const sql = await captureRoleCatalogMigrationSql('up');
+    expect(sql).toContain('check ("id" = 1)');
+    expect(sql).toContain('check ("version" >= 0)');
+    expect(sql).toContain('primary key ("id")');
+    expect(sql).toContain('fk_exception_cases_assigned_role_id_roles_id');
+    expect(sql).toContain('on delete restrict');
+    expect(sql).toContain('trg_data_scopes_role_reference');
+    expect(sql).toContain('for key share');
+    expect(sql).toContain('left join "roles"');
+
+    const down = await captureRoleCatalogMigrationSql('down');
+    expect(down).not.toContain('on delete cascade');
+    expect(down).toContain('drop trigger if exists "trg_data_scopes_role_reference"');
+    expect(down).toContain('drop function if exists "enforce_data_scope_role_reference"');
+  });
+
+  it('docker startup gates API traffic on a compiled one-shot migration and seed stage', () => {
+    const compose = readFileSync(join(process.cwd(), 'docker-compose.yml'), 'utf8');
+    const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    expect(packageJson.scripts['migration:run:compiled']).toContain('dist/Shared/Database/TypeOrmDataSource.js');
+    expect(packageJson.scripts['seed:run:compiled']).toContain('dist/Shared/Database/Seed/Seed.js');
+    expect(compose).toContain('catalog-setup:');
+    expect(compose).toContain('condition: service_completed_successfully');
+    expect(compose).toContain('yarn migration:run:compiled && yarn seed:run:compiled');
   });
 });

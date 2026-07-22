@@ -10,6 +10,7 @@ import { ListPermissionsUseCase } from '@modules/AccessControl/Application/UseCa
 import { GetUserEffectivePermissionsUseCase } from '@modules/AccessControl/Application/UseCases/GetUserEffectivePermissionsUseCase';
 import {
   InMemoryRoleRepository,
+  InMemoryRoleCatalogRepository,
   InMemoryPermissionRepository,
   InMemoryRolePermissionRepository,
   InMemoryUserRoleRepository,
@@ -26,7 +27,7 @@ describe('RBAC C1 end-to-end fixture', () => {
     const rolePermissions = new InMemoryRolePermissionRepository();
     const userRoles = new InMemoryUserRoleRepository();
 
-    await SeedAccessControlRbac(roles, permissions, rolePermissions);
+    await SeedAccessControlRbac(roles, permissions, rolePermissions, new InMemoryRoleCatalogRepository(roles));
     await BridgeLegacyUserRoles(
       [
         { Id: 'legacy-admin', Role: LegacyRole.Admin },

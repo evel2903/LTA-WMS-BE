@@ -43,3 +43,27 @@ export class BusinessRuleException extends AppException {
     super(message, HttpStatus.BAD_REQUEST, ErrorCode.BusinessRule, details);
   }
 }
+
+export class ValidationAppException extends AppException {
+  constructor(message = 'Validation failed', details?: unknown) {
+    super(message, HttpStatus.BAD_REQUEST, ErrorCode.Validation, details);
+  }
+}
+
+export class CatalogVersionUnavailableException extends AppException {
+  constructor(message = 'Role catalog version is unavailable', details?: unknown) {
+    super(message, HttpStatus.SERVICE_UNAVAILABLE, ErrorCode.CatalogVersionUnavailable, details);
+  }
+}
+
+export class CatalogVersionExhaustedException extends AppException {
+  constructor(message = 'Role catalog version is exhausted', details?: unknown) {
+    super(message, HttpStatus.SERVICE_UNAVAILABLE, ErrorCode.CatalogVersionExhausted, details);
+  }
+}
+
+export class CatalogMetadataRangeException extends AppException {
+  constructor(message = 'Role catalog metadata is outside the supported range', details?: unknown) {
+    super(message, HttpStatus.SERVICE_UNAVAILABLE, ErrorCode.CatalogMetadataRange, details);
+  }
+}

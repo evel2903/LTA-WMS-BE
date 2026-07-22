@@ -4,7 +4,14 @@ import { CorrelationIdMiddleware } from '@common/Middleware/CorrelationIdMiddlew
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ValidateProcessEnv } from '@shared/Config/Env/Env';
 import { ConfigService } from '@nestjs/config';
-import { AppConfig, DatabaseAppConfig, EmailAppConfig, JwtAppConfig, RedisAppConfig } from '@shared/Config/AppConfig';
+import {
+  AppConfig,
+  DatabaseAppConfig,
+  EmailAppConfig,
+  JwtAppConfig,
+  RedisAppConfig,
+  RoleCatalogAppConfig,
+} from '@shared/Config/AppConfig';
 import { CreateDatabaseConfig } from '@shared/Database/Config/DatabaseConfig';
 import { AppController } from '@app/AppController';
 import { UserModule } from '@modules/Users/UserModule';
@@ -36,7 +43,7 @@ import { ShippingModule } from '@modules/Shipping/ShippingModule';
     ConfigModule.forRoot({
       isGlobal: true,
       validate: ValidateProcessEnv,
-      load: [AppConfig, DatabaseAppConfig, JwtAppConfig, RedisAppConfig, EmailAppConfig],
+      load: [AppConfig, DatabaseAppConfig, JwtAppConfig, RedisAppConfig, EmailAppConfig, RoleCatalogAppConfig],
     }),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],

@@ -8,9 +8,11 @@ import { RemoveRoleFromUserUseCase } from '@modules/AccessControl/Application/Us
 import { SeedAccessControlRbac } from '@modules/AccessControl/Application/Services/AccessControlRbacSeed';
 import {
   InMemoryRoleRepository,
+  InMemoryRoleCatalogRepository,
   InMemoryPermissionRepository,
   InMemoryRolePermissionRepository,
   InMemoryUserRoleRepository,
+  StubAuditedTransaction,
 } from '@test/TestDoubles/AccessControl/AccessControlTestDoubles';
 
 // RH-03 (RH-CODE-01): one canonical roleCode policy on every create/get/assign/remove boundary.
@@ -50,12 +52,16 @@ describe('roleCode canonical consistency across boundaries', () => {
     const roles = new InMemoryRoleRepository();
     const perms = new InMemoryPermissionRepository();
     const rolePerms = new InMemoryRolePermissionRepository();
-    await SeedAccessControlRbac(roles, perms, rolePerms);
+    await SeedAccessControlRbac(roles, perms, rolePerms, new InMemoryRoleCatalogRepository(roles));
     const userRoles = new InMemoryUserRoleRepository();
     return {
       roles,
       userRoles,
-      create: new CreateRoleUseCase(roles),
+      create: new CreateRoleUseCase(
+        roles,
+        new StubAuditedTransaction() as never,
+        new InMemoryRoleCatalogRepository(roles),
+      ),
       get: new GetRoleUseCase(roles, rolePerms, perms),
       assign: new AssignRoleToUserUseCase(roles, userRoles),
       remove: new RemoveRoleFromUserUseCase(roles, userRoles),

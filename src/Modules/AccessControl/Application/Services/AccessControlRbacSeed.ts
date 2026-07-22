@@ -11,6 +11,8 @@ import {
   PERMISSION_CATALOG,
   ROLE_PERMISSION_GRANTS,
 } from '@modules/AccessControl/Application/Services/AccessControlCatalog';
+import { IRoleCatalogRepository } from '@modules/AccessControl/Application/Interfaces/IRoleCatalogRepository';
+import { CatalogVersionUnavailableException } from '@common/Exceptions/AppException';
 
 /**
  * Idempotent RBAC seed: six core roles, the permission catalog and the
@@ -21,25 +23,24 @@ export async function SeedAccessControlRbac(
   roleRepository: IRoleRepository,
   permissionRepository: IPermissionRepository,
   rolePermissionRepository: IRolePermissionRepository,
+  catalogRepository: IRoleCatalogRepository,
 ): Promise<void> {
+  if (!catalogRepository) throw new CatalogVersionUnavailableException();
   for (const entry of ROLE_CATALOG) {
-    const existing = await roleRepository.FindByCode(entry.Code);
-    if (existing) continue;
     const now = new Date();
-    await roleRepository.Create(
-      new RoleEntity({
-        Id: randomUUID(),
-        RoleCode: entry.Code,
-        RoleName: entry.Name,
-        Description: entry.Description,
-        IsSystem: true,
-        Status: RoleStatus.Active,
-        CreatedAt: now,
-        UpdatedAt: now,
-        CreatedBy: 'SEED',
-        UpdatedBy: null,
-      }),
-    );
+    const role = new RoleEntity({
+      Id: randomUUID(),
+      RoleCode: entry.Code,
+      RoleName: entry.Name,
+      Description: entry.Description,
+      IsSystem: true,
+      Status: RoleStatus.Active,
+      CreatedAt: now,
+      UpdatedAt: now,
+      CreatedBy: 'SEED',
+      UpdatedBy: null,
+    });
+    await catalogRepository.CreateIfAbsentAndBump(role);
   }
 
   for (const entry of PERMISSION_CATALOG) {

@@ -5,6 +5,7 @@ import { MapLegacyRole, BridgeLegacyUserRoles } from '@modules/AccessControl/App
 import { SeedAccessControlRbac } from '@modules/AccessControl/Application/Services/AccessControlRbacSeed';
 import {
   InMemoryRoleRepository,
+  InMemoryRoleCatalogRepository,
   InMemoryPermissionRepository,
   InMemoryRolePermissionRepository,
   InMemoryUserRoleRepository,
@@ -12,7 +13,12 @@ import {
 
 const seedRoles = async () => {
   const roles = new InMemoryRoleRepository();
-  await SeedAccessControlRbac(roles, new InMemoryPermissionRepository(), new InMemoryRolePermissionRepository());
+  await SeedAccessControlRbac(
+    roles,
+    new InMemoryPermissionRepository(),
+    new InMemoryRolePermissionRepository(),
+    new InMemoryRoleCatalogRepository(roles),
+  );
   return roles;
 };
 

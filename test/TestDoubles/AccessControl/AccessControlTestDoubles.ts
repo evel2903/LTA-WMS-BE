@@ -5,6 +5,10 @@ import { PermissionEntity } from '@modules/AccessControl/Domain/Entities/Permiss
 import { RolePermissionEntity } from '@modules/AccessControl/Domain/Entities/RolePermissionEntity';
 import { UserRoleEntity } from '@modules/AccessControl/Domain/Entities/UserRoleEntity';
 import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/IRoleRepository';
+import type {
+  IRoleCatalogRepository,
+  RoleCatalogSnapshot,
+} from '@modules/AccessControl/Application/Interfaces/IRoleCatalogRepository';
 import {
   IPermissionRepository,
   PermissionListFilter,
@@ -77,6 +81,33 @@ export class InMemoryRoleRepository implements IRoleRepository {
   public async List(skip: number, take: number): Promise<{ Items: RoleEntity[]; TotalItems: number }> {
     const items = [...this.roles.values()];
     return { Items: items.slice(skip, skip + take), TotalItems: items.length };
+  }
+}
+
+export class InMemoryRoleCatalogRepository implements IRoleCatalogRepository {
+  public Version = 0n;
+
+  constructor(private readonly roles: IRoleRepository) {}
+
+  public async ReadPage(page: number, pageSize: number): Promise<RoleCatalogSnapshot> {
+    const result = await this.roles.List((page - 1) * pageSize, pageSize);
+    return { Version: this.Version.toString(), Items: result.Items, TotalItems: result.TotalItems };
+  }
+
+  public async Bump(): Promise<string> {
+    this.Version += 1n;
+    return this.Version.toString();
+  }
+
+  public async CreateIfAbsentAndBump(role: RoleEntity): Promise<boolean> {
+    if (await this.roles.FindByCode(role.RoleCode)) return false;
+    await this.roles.Create(role);
+    this.Version += 1n;
+    return true;
+  }
+
+  public async DeleteUnassigned(): Promise<null> {
+    return null;
   }
 }
 
