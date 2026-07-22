@@ -6,6 +6,7 @@ import { AuditResult } from '@modules/AccessControl/Domain/Enums/AuditResult';
 import { AuditLogEntity } from '@modules/AccessControl/Domain/Entities/AuditLogEntity';
 import { AuditEntry } from '@modules/AccessControl/Application/DTOs/AuditEntry';
 import { AuditLogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/AuditLogOrmEntity';
+import { ActorSnapshotStatus } from '@modules/AccessControl/Domain/Enums/ActorSnapshotStatus';
 
 export class AuditLogOrmMapper {
   /** Build a new ORM row from an append entry. Id is generated; occurred_at is DB-defaulted. */
@@ -13,7 +14,12 @@ export class AuditLogOrmMapper {
     const orm = new AuditLogOrmEntity();
     orm.Id = randomUUID();
     orm.ActorUserId = entry.ActorUserId ?? null;
-    orm.ActorRoleCodes = entry.ActorRoleCodes ?? [];
+    if (entry.ActorSnapshotStatus !== undefined && entry.ActorRoleCodes === undefined) {
+      throw new Error('Audit actor snapshot provenance requires explicit role codes');
+    }
+    orm.ActorRoleCodes = entry.ActorRoleCodes === undefined ? [] : entry.ActorRoleCodes;
+    orm.ActorSnapshotStatus = entry.ActorSnapshotStatus ?? ActorSnapshotStatus.LegacyUnverified;
+    this.AssertProvenance(orm.ActorRoleCodes, orm.ActorSnapshotStatus);
     orm.ActorType = entry.ActorType;
     orm.Action = entry.Action;
     orm.ObjectType = entry.ObjectType;
@@ -42,7 +48,8 @@ export class AuditLogOrmMapper {
       Id: entity.Id,
       OccurredAt: entity.OccurredAt,
       ActorUserId: entity.ActorUserId,
-      ActorRoleCodes: entity.ActorRoleCodes ?? [],
+      ActorRoleCodes: entity.ActorRoleCodes,
+      ActorSnapshotStatus: entity.ActorSnapshotStatus,
       ActorType: entity.ActorType as ActorType,
       Action: entity.Action as ActionCode,
       ObjectType: entity.ObjectType as ObjectType,
@@ -64,5 +71,12 @@ export class AuditLogOrmMapper {
       UserAgent: entity.UserAgent,
       Result: entity.Result as AuditResult,
     });
+  }
+
+  private static AssertProvenance(codes: string[] | null, status: ActorSnapshotStatus): void {
+    const unresolved = status === ActorSnapshotStatus.Unresolved;
+    if (unresolved !== (codes === null)) {
+      throw new Error('Audit actor snapshot provenance is inconsistent');
+    }
   }
 }

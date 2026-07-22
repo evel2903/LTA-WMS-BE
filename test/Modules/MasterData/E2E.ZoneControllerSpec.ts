@@ -10,6 +10,7 @@ import { GetZoneByIdUseCase } from '@modules/MasterData/Application/UseCases/Get
 import { ListZonesUseCase } from '@modules/MasterData/Application/UseCases/ListZonesUseCase';
 import { UpdateZoneUseCase } from '@modules/MasterData/Application/UseCases/UpdateZoneUseCase';
 import { MasterDataStatus } from '@modules/MasterData/Domain/Enums/MasterDataStatus';
+import { AuthorizationSnapshot } from '@modules/AccessControl/Application/DTOs/AuthorizationSnapshot';
 
 describe('E2E ZoneController (no DB)', () => {
   let app: INestApplication;
@@ -31,8 +32,19 @@ describe('E2E ZoneController (no DB)', () => {
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({
-        canActivate: (context: { switchToHttp: () => { getRequest: () => { user?: unknown } } }) => {
-          context.switchToHttp().getRequest().user = { UserId: 'test-admin', Role: 'Admin' };
+        canActivate: (context: {
+          switchToHttp: () => {
+            getRequest: () => { user?: unknown; AuthorizationSnapshot?: AuthorizationSnapshot };
+          };
+        }) => {
+          const request = context.switchToHttp().getRequest();
+          request.user = { UserId: 'test-admin', Role: 'Admin' };
+          request.AuthorizationSnapshot = {
+            UserId: 'test-admin',
+            ActiveRoles: [{ Id: 'test-role', RoleCode: 'WMS_ADMIN' }],
+            Permissions: [],
+            DataScopes: [],
+          };
           return true;
         },
       })

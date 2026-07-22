@@ -153,6 +153,8 @@ describe('DemoDataCcScreenCoverageSeed', () => {
         .mockResolvedValueOnce([
           {
             ActorUserId: 'admin-user-id',
+            ActorRoleCodes: ['WMS_ADMIN'],
+            ActorSnapshotStatus: 'legacy_unverified',
             Action: 'Override',
             ObjectType: 'InboundPlan',
             ObjectId: 'LTA-DEMO-WT01-INB',

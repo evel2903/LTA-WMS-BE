@@ -16,6 +16,12 @@ import { IRoleRepository } from '@modules/AccessControl/Application/Interfaces/I
 import { IRolePermissionRepository } from '@modules/AccessControl/Application/Interfaces/IRolePermissionRepository';
 import { IPermissionRepository } from '@modules/AccessControl/Application/Interfaces/IPermissionRepository';
 import { IDataScopeRepository, PrincipalRef } from '@modules/AccessControl/Application/Interfaces/IDataScopeRepository';
+import {
+  AuthorizationSnapshot,
+  AuthorizationSnapshotDataScope,
+} from '@modules/AccessControl/Application/DTOs/AuthorizationSnapshot';
+import { AuthorizationSnapshotContext } from '@modules/AccessControl/Application/Services/AuthorizationSnapshotContext';
+import { IAuthorizationSnapshotResolver } from '@modules/AccessControl/Application/Interfaces/IAuthorizationSnapshotResolver';
 
 const SEGREGATED_ACTIONS = new Set<ActionCode>([ActionCode.Approve, ActionCode.Override]);
 
@@ -33,9 +39,17 @@ export class PermissionChecker implements IPermissionChecker {
     private readonly permissionRepository: IPermissionRepository,
     private readonly dataScopeRepository: IDataScopeRepository,
     private readonly roleRepository: IRoleRepository,
+    private readonly requestContext?: AuthorizationSnapshotContext,
+    private readonly snapshotResolver?: IAuthorizationSnapshotResolver,
   ) {}
 
-  public async Check(context: PermissionCheckContext): Promise<PermissionDecision> {
+  public async Check(context: PermissionCheckContext, snapshot?: AuthorizationSnapshot): Promise<PermissionDecision> {
+    const currentSnapshot = await this.SnapshotFor(context.UserId, snapshot);
+    if (currentSnapshot) return this.CheckSnapshot(context, currentSnapshot);
+    return await this.CheckRepositories(context);
+  }
+
+  private async CheckRepositories(context: PermissionCheckContext): Promise<PermissionDecision> {
     const userRoles = await this.userRoleRepository.FindByUserId(context.UserId);
     const roleIds = userRoles.map((ur) => ur.RoleId);
     if (roleIds.length === 0) {
@@ -84,17 +98,29 @@ export class PermissionChecker implements IPermissionChecker {
     return { Allowed: true };
   }
 
-  public async ResolveDataScope(context: {
-    UserId: string;
-    Action: ActionCode;
-    ObjectType: PermissionCheckContext['ObjectType'];
-  }): Promise<PermissionDataScopeDecision> {
-    const permission = await this.Check(context);
+  public async ResolveDataScope(
+    context: {
+      UserId: string;
+      Action: ActionCode;
+      ObjectType: PermissionCheckContext['ObjectType'];
+    },
+    snapshot?: AuthorizationSnapshot,
+  ): Promise<PermissionDataScopeDecision> {
+    const currentSnapshot = await this.SnapshotFor(context.UserId, snapshot);
+    const permission = await this.Check(context, currentSnapshot);
     if (!permission.Allowed) {
       return {
         ...permission,
         WarehouseIds: [],
         OwnerIds: [],
+      };
+    }
+
+    if (currentSnapshot) {
+      return {
+        Allowed: true,
+        WarehouseIds: this.ResolveAxis(currentSnapshot.DataScopes, DataScopeType.Warehouse),
+        OwnerIds: this.ResolveAxis(currentSnapshot.DataScopes, DataScopeType.Owner),
       };
     }
 
@@ -124,7 +150,7 @@ export class PermissionChecker implements IPermissionChecker {
   }
 
   private ResolveAxis(
-    scopes: Awaited<ReturnType<IDataScopeRepository['FindByPrincipals']>>,
+    scopes: Array<Pick<AuthorizationSnapshotDataScope, 'ScopeType' | 'ScopeValueId' | 'IncludeAll'>>,
     type: DataScopeType,
   ): string[] | null {
     const axisScopes = scopes.filter((scope) => scope.ScopeType === type);
@@ -136,5 +162,43 @@ export class PermissionChecker implements IPermissionChecker {
           .filter((scopeValueId): scopeValueId is string => scopeValueId !== null),
       ),
     ];
+  }
+
+  private async SnapshotFor(
+    userId: string,
+    explicit?: AuthorizationSnapshot,
+  ): Promise<AuthorizationSnapshot | undefined> {
+    if (explicit?.UserId === userId) return explicit;
+    const resolved = this.requestContext?.Get(userId);
+    if (resolved) return resolved;
+    if (this.requestContext?.IsActor(userId) && this.snapshotResolver) {
+      return await this.requestContext.Resolve(userId, () => this.snapshotResolver!.Resolve(userId));
+    }
+    return undefined;
+  }
+
+  private CheckSnapshot(context: PermissionCheckContext, snapshot: AuthorizationSnapshot): PermissionDecision {
+    if (snapshot.ActiveRoles.length === 0) return { Allowed: false, Reason: 'PERMISSION_DENIED' };
+    const hasPermission = snapshot.Permissions.some(
+      (permission) => permission.Action === context.Action && permission.ObjectType === context.ObjectType,
+    );
+    if (!hasPermission) return { Allowed: false, Reason: 'PERMISSION_DENIED' };
+
+    if (
+      SEGREGATED_ACTIONS.has(context.Action) &&
+      context.Scope?.RequesterUserId &&
+      context.Scope.RequesterUserId === context.UserId
+    ) {
+      return { Allowed: false, Reason: 'SELF_APPROVAL' };
+    }
+
+    for (const axis of this.RequestedAxes(context.Scope)) {
+      const inScope = snapshot.DataScopes.some(
+        (scope) => scope.ScopeType === axis.Type && (scope.IncludeAll || scope.ScopeValueId === axis.Value),
+      );
+      if (!inScope) return { Allowed: false, Reason: 'OUT_OF_SCOPE' };
+    }
+
+    return { Allowed: true };
   }
 }

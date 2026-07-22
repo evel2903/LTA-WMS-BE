@@ -702,14 +702,14 @@ const InsertAuditLogOnce = async (manager: EntityManager, context: ScreenCoverag
   await manager.query(
     `
       INSERT INTO audit_logs (
-        id, occurred_at, actor_user_id, actor_role_codes, actor_type, action,
+        id, occurred_at, actor_user_id, actor_role_codes, actor_snapshot_status, actor_type, action,
         object_type, object_id, object_code, before_json, after_json,
         reason_code_id, reason_note, evidence_refs, reference_type, reference_id,
         warehouse_id, owner_id, scope_json, correlation_id, request_id, ip_address,
         user_agent, result
       )
       VALUES (
-        $1, $2, $3, $4::jsonb, $5, $6,
+        $1, $2, $3, $4::jsonb, 'legacy_unverified', $5, $6,
         $7, $8, $9, $10::jsonb, $11::jsonb,
         $12, $13, $14::jsonb, $15, $16,
         $17, $18, $19::jsonb, $20, $21, $22,
@@ -788,11 +788,13 @@ export const AssertDemoDataCcScreenCoverageCurrentAppendOnlyRows = async (manage
       }>
     | undefined;
   const auditRows = (await manager.query(
-    `SELECT actor_user_id AS "ActorUserId", action AS "Action", object_type AS "ObjectType", object_id AS "ObjectId", object_code AS "ObjectCode", before_json AS "BeforeJson", after_json AS "AfterJson", reference_type AS "ReferenceType", reference_id AS "ReferenceId", warehouse_id AS "WarehouseId", owner_id AS "OwnerId", scope_json AS "ScopeJson", correlation_id AS "CorrelationId", request_id AS "RequestId", user_agent AS "UserAgent", evidence_refs AS "EvidenceRefs", result AS "Result" FROM audit_logs WHERE id = $1`,
+    `SELECT actor_user_id AS "ActorUserId", actor_role_codes AS "ActorRoleCodes", actor_snapshot_status AS "ActorSnapshotStatus", action AS "Action", object_type AS "ObjectType", object_id AS "ObjectId", object_code AS "ObjectCode", before_json AS "BeforeJson", after_json AS "AfterJson", reference_type AS "ReferenceType", reference_id AS "ReferenceId", warehouse_id AS "WarehouseId", owner_id AS "OwnerId", scope_json AS "ScopeJson", correlation_id AS "CorrelationId", request_id AS "RequestId", user_agent AS "UserAgent", evidence_refs AS "EvidenceRefs", result AS "Result" FROM audit_logs WHERE id = $1`,
     [DemoDataCcScreenCoverageAuditLogId],
   )) as
     | Array<{
         ActorUserId?: string | null;
+        ActorRoleCodes?: unknown;
+        ActorSnapshotStatus?: string | null;
         Action?: string | null;
         ObjectType?: string | null;
         ObjectId?: string | null;
@@ -836,6 +838,10 @@ export const AssertDemoDataCcScreenCoverageCurrentAppendOnlyRows = async (manage
   const auditRow = RequiredAppendOnlyRow(auditRows, 'audit_logs', DemoDataCcScreenCoverageAuditLogId);
   if (
     !auditRow.ActorUserId ||
+    auditRow.ActorSnapshotStatus !== 'legacy_unverified' ||
+    !Array.isArray(auditRow.ActorRoleCodes) ||
+    auditRow.ActorRoleCodes.length !== 1 ||
+    auditRow.ActorRoleCodes[0] !== 'WMS_ADMIN' ||
     auditRow.Action !== 'Override' ||
     auditRow.ObjectType !== 'InboundPlan' ||
     auditRow.ObjectId !== 'LTA-DEMO-WT01-INB' ||

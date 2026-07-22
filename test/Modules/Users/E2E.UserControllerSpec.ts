@@ -20,6 +20,9 @@ import { PermissionChecker } from '@modules/AccessControl/Application/Services/P
 import { PERMISSION_CHECKER } from '@modules/AccessControl/Application/Interfaces/IPermissionChecker';
 import { ScopeExtractor } from '@modules/AccessControl/Presentation/Services/ScopeExtractor';
 import { PermissionGuard } from '@modules/AccessControl/Presentation/Guards/PermissionGuard';
+import { AUTHORIZATION_SNAPSHOT_RESOLVER } from '@modules/AccessControl/Application/Interfaces/IAuthorizationSnapshotResolver';
+import { AuthorizationSnapshotContext } from '@modules/AccessControl/Application/Services/AuthorizationSnapshotContext';
+import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
 import {
   InMemoryDataScopeRepository,
   InMemoryPermissionRepository,
@@ -153,6 +156,20 @@ describe('UserController real access guard (HB-02)', () => {
     );
 
     const checker = new PermissionChecker(userRoles, rolePermissions, permissions, dataScopes, roles);
+    const resolver = {
+      Resolve: jest.fn(async (userId: string) => ({
+        UserId: userId,
+        ActiveRoles:
+          userId === 'admin'
+            ? [{ Id: adminRole!.Id, RoleCode: RoleCode.WmsAdmin }]
+            : [{ Id: operatorRole!.Id, RoleCode: RoleCode.Operator }],
+        Permissions: userId === 'admin' ? [{ Action: ActionCode.Create, ObjectType: ObjectType.UserAssignment }] : [],
+        DataScopes: [],
+      })),
+    };
+    const audited = {
+      Run: jest.fn(async (work: (manager: unknown) => Promise<{ result: unknown }>) => (await work({})).result),
+    };
     const moduleRef = await Test.createTestingModule({
       controllers: [UserController],
       providers: [
@@ -164,6 +181,9 @@ describe('UserController real access guard (HB-02)', () => {
         ScopeExtractor,
         PermissionGuard,
         { provide: PERMISSION_CHECKER, useValue: checker },
+        { provide: AUTHORIZATION_SNAPSHOT_RESOLVER, useValue: resolver },
+        AuthorizationSnapshotContext,
+        { provide: AuditedTransaction, useValue: audited },
         { provide: LoggingService, useValue: { LogError: jest.fn() } },
       ],
     })
