@@ -69,6 +69,10 @@ export class ListRolesUseCase {
         Reason: 'CATALOG_SHAPE_UNSUPPORTED',
       });
     }
+    // Page itself may be a safe integer while the SQL offset derived from it is not. Reject the
+    // unsafe metadata before opening a DB snapshot; otherwise JavaScript would round the offset
+    // and could read/sign the wrong page.
+    if (!Number.isSafeInteger((page - 1) * pageSize)) throw new CatalogMetadataRangeException();
 
     let cursor: RoleCatalogTokenPayload | null = null;
     if (page === 1 && query.CatalogToken !== undefined) {
