@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class AssignRoleRequest {
   // RH-03/RH-CODE-01: length + format are enforced by CanonicalizeRoleCode AFTER trim, so no
@@ -6,4 +6,15 @@ export class AssignRoleRequest {
   @IsString()
   @IsNotEmpty()
   public RoleCode!: string;
+
+  // RH-04 dual-protocol: when both are present the request applies a registered intent ticket;
+  // when absent the compatibility adapter auto-registers a synthetic RunId. Version format is
+  // validated in the use case (canonical decimal string / BigInt).
+  @IsOptional()
+  @IsString()
+  public RunId?: string;
+
+  @IsOptional()
+  @IsString()
+  public IntentVersion?: string;
 }
