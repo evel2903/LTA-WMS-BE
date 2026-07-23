@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
+import { DataSource } from 'typeorm';
 import { Role as LegacyRole } from '@common/Constants/Role';
+import { IAssignmentLedgerRepository } from '@modules/AccessControl/Application/Interfaces/IAssignmentLedgerRepository';
 import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
 import { RoleStatus } from '@modules/AccessControl/Domain/Enums/RoleStatus';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
@@ -22,7 +24,18 @@ const buildSeededWorld = async () => {
   const rolePermissions = new InMemoryRolePermissionRepository();
   const userRoles = new InMemoryUserRoleRepository();
   await SeedAccessControlRbac(roles, permissions, rolePermissions, new InMemoryRoleCatalogRepository(roles));
-  const effective = new GetUserEffectivePermissionsUseCase(userRoles, roles, rolePermissions, permissions);
+  // RH-04: the use case now also reports the per-user EffectiveVersion; these unit tests don't
+  // exercise the ledger, so a stub source ('0') satisfies the dependency without a DB.
+  const dataSource = { transaction: async (cb: (m: unknown) => unknown) => cb({}) } as unknown as DataSource;
+  const ledger = { ReadEffectiveVersionShared: async () => '0' } as unknown as IAssignmentLedgerRepository;
+  const effective = new GetUserEffectivePermissionsUseCase(
+    userRoles,
+    roles,
+    rolePermissions,
+    permissions,
+    dataSource,
+    ledger,
+  );
   return { roles, permissions, rolePermissions, userRoles, effective };
 };
 

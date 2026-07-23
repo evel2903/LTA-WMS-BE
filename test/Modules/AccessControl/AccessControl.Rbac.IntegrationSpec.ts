@@ -1,5 +1,7 @@
+import { DataSource } from 'typeorm';
 import { Role as LegacyRole } from '@common/Constants/Role';
 import { RoleCode } from '@modules/AccessControl/Domain/Enums/RoleCode';
+import { IAssignmentLedgerRepository } from '@modules/AccessControl/Application/Interfaces/IAssignmentLedgerRepository';
 import { ActionCode } from '@modules/AccessControl/Domain/Enums/ActionCode';
 import { ObjectType } from '@modules/AccessControl/Domain/Enums/ObjectType';
 import { SeedAccessControlRbac } from '@modules/AccessControl/Application/Services/AccessControlRbacSeed';
@@ -48,8 +50,18 @@ describe('RBAC C1 end-to-end fixture', () => {
     const readPermissions = await new ListPermissionsUseCase(permissions).Execute({ Action: ActionCode.Read });
     expect(readPermissions.Items.every((p) => p.Action === ActionCode.Read)).toBe(true);
 
-    // Effective permissions for the bridged users.
-    const effective = new GetUserEffectivePermissionsUseCase(userRoles, roles, rolePermissions, permissions);
+    // Effective permissions for the bridged users. RH-04 adds an EffectiveVersion read; this DB-less
+    // fixture stubs it ('0') — the assertions below cover roles/permissions, not the version.
+    const dataSource = { transaction: async (cb: (m: unknown) => unknown) => cb({}) } as unknown as DataSource;
+    const ledger = { ReadEffectiveVersionShared: async () => '0' } as unknown as IAssignmentLedgerRepository;
+    const effective = new GetUserEffectivePermissionsUseCase(
+      userRoles,
+      roles,
+      rolePermissions,
+      permissions,
+      dataSource,
+      ledger,
+    );
 
     const admin = await effective.Execute('legacy-admin');
     expect(admin.Roles).toEqual([RoleCode.WmsAdmin]);

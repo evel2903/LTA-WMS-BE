@@ -32,6 +32,9 @@ import { RoleCatalogVersionOrmEntity } from '@modules/AccessControl/Infrastructu
 import { PermissionOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/PermissionOrmEntity';
 import { RolePermissionOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/RolePermissionOrmEntity';
 import { UserRoleOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/UserRoleOrmEntity';
+import { UserEffectiveVersionOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/UserEffectiveVersionOrmEntity';
+import { UserRoleAssignmentHeadOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/UserRoleAssignmentHeadOrmEntity';
+import { UserRoleAssignmentIntentOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/UserRoleAssignmentIntentOrmEntity';
 import { GroupOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/GroupOrmEntity';
 import { GroupMemberOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/GroupMemberOrmEntity';
 import { DataScopeOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/DataScopeOrmEntity';
@@ -123,6 +126,9 @@ export default new DataSource({
     PermissionOrmEntity,
     RolePermissionOrmEntity,
     UserRoleOrmEntity,
+    UserEffectiveVersionOrmEntity,
+    UserRoleAssignmentHeadOrmEntity,
+    UserRoleAssignmentIntentOrmEntity,
     GroupOrmEntity,
     GroupMemberOrmEntity,
     DataScopeOrmEntity,

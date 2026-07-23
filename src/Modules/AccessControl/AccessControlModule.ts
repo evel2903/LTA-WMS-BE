@@ -71,6 +71,15 @@ import {
 } from '@modules/AccessControl/Application/Interfaces/IAuditLogRepository';
 import { AuditWriter } from '@modules/AccessControl/Infrastructure/Audit/AuditWriter';
 import { AuditedTransaction } from '@modules/AccessControl/Application/Services/AuditedTransaction';
+import { AssignmentLedgerRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/AssignmentLedgerRepository';
+import {
+  ASSIGNMENT_LEDGER_REPOSITORY,
+  IAssignmentLedgerRepository,
+} from '@modules/AccessControl/Application/Interfaces/IAssignmentLedgerRepository';
+import { RegisterAssignmentIntentUseCase } from '@modules/AccessControl/Application/UseCases/RegisterAssignmentIntentUseCase';
+import { GetAssignmentIntentUseCase } from '@modules/AccessControl/Application/UseCases/GetAssignmentIntentUseCase';
+import { ApplyAssignmentIntentUseCase } from '@modules/AccessControl/Application/UseCases/ApplyAssignmentIntentUseCase';
+import { AssignmentCompatibilityAdapter } from '@modules/AccessControl/Application/Services/AssignmentCompatibilityAdapter';
 import { AuditLogRepository } from '@modules/AccessControl/Infrastructure/Persistence/Repositories/AuditLogRepository';
 import { AuditLogOrmEntity } from '@modules/AccessControl/Infrastructure/Persistence/Entities/AuditLogOrmEntity';
 import { QueryAuditLogsUseCase } from '@modules/AccessControl/Application/UseCases/QueryAuditLogsUseCase';
@@ -352,8 +361,17 @@ import { RoleCatalogConfigValues } from '@shared/Config/AppConfig';
         roles: IRoleRepository,
         rolePermissions: IRolePermissionRepository,
         permissions: IPermissionRepository,
-      ) => new GetUserEffectivePermissionsUseCase(userRoles, roles, rolePermissions, permissions),
-      inject: [USER_ROLE_REPOSITORY, ROLE_REPOSITORY, ROLE_PERMISSION_REPOSITORY, PERMISSION_REPOSITORY],
+        dataSource: DataSource,
+        ledger: IAssignmentLedgerRepository,
+      ) => new GetUserEffectivePermissionsUseCase(userRoles, roles, rolePermissions, permissions, dataSource, ledger),
+      inject: [
+        USER_ROLE_REPOSITORY,
+        ROLE_REPOSITORY,
+        ROLE_PERMISSION_REPOSITORY,
+        PERMISSION_REPOSITORY,
+        DataSource,
+        ASSIGNMENT_LEDGER_REPOSITORY,
+      ],
     },
     {
       provide: AssignRoleToUserUseCase,
@@ -366,6 +384,32 @@ import { RoleCatalogConfigValues } from '@shared/Config/AppConfig';
       useFactory: (roles: IRoleRepository, userRoles: IUserRoleRepository, audited: AuditedTransaction) =>
         new RemoveRoleFromUserUseCase(roles, userRoles, audited),
       inject: [ROLE_REPOSITORY, USER_ROLE_REPOSITORY, AuditedTransaction],
+    },
+    // RH-04 (RH-ASG-01 / D3) assignment intent ticket protocol.
+    { provide: ASSIGNMENT_LEDGER_REPOSITORY, useClass: AssignmentLedgerRepository },
+    {
+      provide: RegisterAssignmentIntentUseCase,
+      useFactory: (dataSource: DataSource, ledger: IAssignmentLedgerRepository) =>
+        new RegisterAssignmentIntentUseCase(dataSource, ledger),
+      inject: [DataSource, ASSIGNMENT_LEDGER_REPOSITORY],
+    },
+    {
+      provide: GetAssignmentIntentUseCase,
+      useFactory: (dataSource: DataSource, ledger: IAssignmentLedgerRepository) =>
+        new GetAssignmentIntentUseCase(dataSource, ledger),
+      inject: [DataSource, ASSIGNMENT_LEDGER_REPOSITORY],
+    },
+    {
+      provide: ApplyAssignmentIntentUseCase,
+      useFactory: (ledger: IAssignmentLedgerRepository, audited: AuditedTransaction) =>
+        new ApplyAssignmentIntentUseCase(ledger, audited),
+      inject: [ASSIGNMENT_LEDGER_REPOSITORY, AuditedTransaction],
+    },
+    {
+      provide: AssignmentCompatibilityAdapter,
+      useFactory: (register: RegisterAssignmentIntentUseCase, apply: ApplyAssignmentIntentUseCase) =>
+        new AssignmentCompatibilityAdapter(register, apply),
+      inject: [RegisterAssignmentIntentUseCase, ApplyAssignmentIntentUseCase],
     },
     {
       provide: ListUserDataScopesUseCase,
